@@ -185,10 +185,10 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle rechtsgebieden</SelectItem>
-                <SelectItem value="Civiel">Civiel recht</SelectItem>
-                <SelectItem value="Straf">Strafrecht</SelectItem>
-                <SelectItem value="Bestuurs">Bestuursrecht</SelectItem>
-                <SelectItem value="Europees">Europees recht</SelectItem>
+                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#civielRecht">Civiel recht</SelectItem>
+                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#strafRecht">Strafrecht</SelectItem>
+                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#bestuursRecht">Bestuursrecht</SelectItem>
+                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#EuropeesRecht">Europees recht</SelectItem>
               </SelectContent>
             </Select>
           </div>
