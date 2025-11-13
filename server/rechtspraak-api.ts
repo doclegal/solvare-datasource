@@ -49,6 +49,10 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   
   const url = `${RECHTSPRAAK_BASE_URL}/zoeken?${params.toString()}`;
   
+  // Log the request for debugging
+  console.log('[Rechtspraak API] Request URL:', url);
+  console.log('[Rechtspraak API] Filters:', filters);
+  
   try {
     const response = await axios.get(url, {
       headers: {
@@ -58,6 +62,10 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
     });
 
     const data = parser.parse(response.data) as RechtspraakSearchResponse;
+    
+    console.log('[Rechtspraak API] Response status:', response.status);
+    console.log('[Rechtspraak API] Total results:', data.feed?.['opensearch:totalResults'] || 0);
+    console.log('[Rechtspraak API] Entries count:', Array.isArray(data.feed?.entry) ? data.feed.entry.length : (data.feed?.entry ? 1 : 0));
     
     if (!data.feed) {
       return { records: [], totalResults: 0 };
