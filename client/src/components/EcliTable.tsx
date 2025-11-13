@@ -43,18 +43,18 @@ export default function EcliTable({
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>ECLI Results</CardTitle>
+            <CardTitle>ECLI Resultaten</CardTitle>
             <CardDescription>
               {records.length > 0 
-                ? `Showing ${startIndex}-${endIndex} of ${records.length} fetched decisions${totalResults > records.length ? ` (${totalResults} total available)` : ''}`
-                : "No decisions fetched yet"
+                ? `${startIndex}-${endIndex} van ${records.length} opgehaalde uitspraken${totalResults > records.length ? ` (${totalResults} totaal beschikbaar)` : ''}`
+                : "Nog geen uitspraken opgehaald"
               }
             </CardDescription>
           </div>
           {records.length > 0 && (
             <Button variant="outline" size="sm" onClick={onClear} data-testid="button-clear-ecli">
               <Trash2 className="mr-2 h-4 w-4" />
-              Clear List
+              Lijst Wissen
             </Button>
           )}
         </div>
@@ -62,7 +62,7 @@ export default function EcliTable({
       <CardContent>
         {records.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p>Use the filter section above to fetch court decisions</p>
+            <p>Gebruik de filters hierboven om uitspraken op te halen</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -71,9 +71,9 @@ export default function EcliTable({
                 <TableHeader className="sticky top-0 bg-card z-10">
                   <TableRow>
                     <TableHead className="w-[280px]">ECLI</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="w-[200px]">Court</TableHead>
-                    <TableHead className="w-[120px]">Date</TableHead>
+                    <TableHead>Titel</TableHead>
+                    <TableHead className="w-[200px]">Instantie</TableHead>
+                    <TableHead className="w-[120px]">Datum</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -98,11 +98,11 @@ export default function EcliTable({
                 data-testid="button-previous"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
-                Previous
+                Vorige
               </Button>
               
               <Badge variant="secondary" data-testid="text-page-info">
-                Page {currentPage}
+                Pagina {currentPage}
               </Badge>
 
               <Button
@@ -112,7 +112,7 @@ export default function EcliTable({
                 disabled={isLoading}
                 data-testid="button-load-more"
               >
-                {isLoading ? "Loading..." : "Load More"}
+                {isLoading ? "Laden..." : "Meer Laden"}
               </Button>
 
               <Button
@@ -122,7 +122,7 @@ export default function EcliTable({
                 disabled={isLoading}
                 data-testid="button-next"
               >
-                Next
+                Volgende
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             </div>

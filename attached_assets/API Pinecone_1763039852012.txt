@@ -1,0 +1,786 @@
+# API reference
+
+Pinecone's APIs let you interact programmatically with your Pinecone account.
+
+<Note>
+  [SDK versions](/reference/pinecone-sdks#sdk-versions) are pinned to specific API versions.
+</Note>
+
+## Database
+
+Use the Database API to store and query records in [Pinecone Database](/guides/get-started/quickstart).
+
+The following Pinecone SDKs support the Database API:
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python" href="/reference/python-sdk" />
+
+  <Card title="Node.js SDK" icon="node-js" href="/reference/node-sdk" />
+
+  <Card title="Java SDK" icon="java" href="/reference/java-sdk" />
+
+  <Card title="Go SDK" icon="golang" href="/reference/go-sdk" />
+
+  <Card title=".NET SDK" icon="microsoft" href="/reference/dotnet-sdk" />
+
+  <Card title="Rust SDK" icon="rust" href="/reference/rust-sdk" />
+</CardGroup>
+
+## Inference
+
+Use the Inference API to generate vector embeddings and rerank results using [embedding models](/guides/index-data/create-an-index#embedding-models) and [reranking models](/guides/search/rerank-results#reranking-models) hosted on Pinecone's infrastructure.
+
+There are two ways to use the Inference API:
+
+* As a standalone service, through the [Rerank documents](/reference/api/latest/inference/rerank) and [Generate vectors](/reference/api/latest/inference/generate-embeddings) endpoints.
+* As an integrated part of database operations, through the [Create an index with integrated embedding](/reference/api/latest/control-plane/create_for_model), [Upsert text](/reference/api/latest/data-plane/upsert_records), and [Search with text](/reference/api/latest/data-plane/search_records) endpoints.
+
+The following Pinecone SDKs support using the Inference API:
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python" href="/reference/python-sdk" />
+
+  <Card title="Node.js SDK" icon="node-js" href="/reference/node-sdk" />
+
+  <Card title="Java SDK" icon="java" href="/reference/java-sdk" />
+
+  <Card title="Go SDK" icon="golang" href="/reference/go-sdk" />
+
+  <Card title=".NET SDK" icon="microsoft" href="/reference/dotnet-sdk" />
+</CardGroup>
+
+# API reference
+
+Pinecone's APIs let you interact programmatically with your Pinecone account.
+
+<Note>
+  [SDK versions](/reference/pinecone-sdks#sdk-versions) are pinned to specific API versions.
+</Note>
+
+## Database
+
+Use the Database API to store and query records in [Pinecone Database](/guides/get-started/quickstart).
+
+The following Pinecone SDKs support the Database API:
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python" href="/reference/python-sdk" />
+
+  <Card title="Node.js SDK" icon="node-js" href="/reference/node-sdk" />
+
+  <Card title="Java SDK" icon="java" href="/reference/java-sdk" />
+
+  <Card title="Go SDK" icon="golang" href="/reference/go-sdk" />
+
+  <Card title=".NET SDK" icon="microsoft" href="/reference/dotnet-sdk" />
+
+  <Card title="Rust SDK" icon="rust" href="/reference/rust-sdk" />
+</CardGroup>
+
+## Inference
+
+Use the Inference API to generate vector embeddings and rerank results using [embedding models](/guides/index-data/create-an-index#embedding-models) and [reranking models](/guides/search/rerank-results#reranking-models) hosted on Pinecone's infrastructure.
+
+There are two ways to use the Inference API:
+
+* As a standalone service, through the [Rerank documents](/reference/api/latest/inference/rerank) and [Generate vectors](/reference/api/latest/inference/generate-embeddings) endpoints.
+* As an integrated part of database operations, through the [Create an index with integrated embedding](/reference/api/latest/control-plane/create_for_model), [Upsert text](/reference/api/latest/data-plane/upsert_records), and [Search with text](/reference/api/latest/data-plane/search_records) endpoints.
+
+The following Pinecone SDKs support using the Inference API:
+
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python" href="/reference/python-sdk" />
+
+  <Card title="Node.js SDK" icon="node-js" href="/reference/node-sdk" />
+
+  <Card title="Java SDK" icon="java" href="/reference/java-sdk" />
+
+  <Card title="Go SDK" icon="golang" href="/reference/go-sdk" />
+
+  <Card title=".NET SDK" icon="microsoft" href="/reference/dotnet-sdk" />
+</CardGroup>
+
+# API versioning
+
+Pinecone's APIs are versioned to ensure that your applications continue to work as expected as the platform evolves. Versions are named by release date in the format `YYYY-MM`, for example, `2025-04`.
+
+## Release schedule
+
+On a quarterly basis, Pinecone releases a new **stable** API version as well as a **release candidate** of the next stable version.
+
+* **Stable:** Each stable version remains unchanged and supported for a minimum of 12 months. Since stable versions are released every 3 months, this means you have at least 9 months to test and migrate your app to the newest stable version before support for the previous version is removed.
+
+* **Release candidate:** The release candidate gives you insight into the upcoming changes in the next stable version. It is available for approximately 3 months before the release of the stable version and can include new features, improvements, and [breaking changes](#breaking-changes).
+
+Below is an example of Pinecone's release schedule:
+
+<img className="block max-w-full dark:hidden" noZoom src="https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=be4366853edee83e003c3863e31fa1ce" data-og-width="2120" width="2120" data-og-height="960" height="960" data-path="images/api-versioning.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?w=280&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=66d593bf5bc7c842b28392daebb93c4a 280w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?w=560&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=c241a0f2c0e6e3ec3b1415e10a8516c8 560w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?w=840&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=0b88fe499a3c01dbd424ee943e9ab0c9 840w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?w=1100&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=fcdffc7f6d2b907681018e42cdbe0920 1100w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?w=1650&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=bc180b4a9a96edc502c5b49470ca3881 1650w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning.png?w=2500&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=70bbd09f29afc200f6c9111495cd5f05 2500w" />
+
+<img className="hidden max-w-full dark:block" noZoom src="https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=47a32d4f515a118a7500a0e2aec3beed" data-og-width="2120" width="2120" data-og-height="960" height="960" data-path="images/api-versioning-dark.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?w=280&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=deb21035b92a663a67b5cfe9420d999d 280w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?w=560&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=8519ab97f6f889abeaab6105ea681e31 560w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?w=840&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=dd4ef1e1e99cb42da31c83a7cd0d5e5d 840w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?w=1100&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=927c7d86e73e85f417c832a96e98fdbb 1100w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?w=1650&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=eb0c5f538f0b3422c475280f09476a62 1650w, https://mintcdn.com/pinecone/9qvQp5nU6duJvusQ/images/api-versioning-dark.png?w=2500&fit=max&auto=format&n=9qvQp5nU6duJvusQ&q=85&s=eacb669a6469064133034bdc1e30add1 2500w" />
+
+## Specify an API version
+
+<Warning>
+  When using the API directly, it is important to specify an API version in your requests. If you don't, requests default to the oldest supported stable version. Once support for that version ends, your requests will default to the next oldest stable version, which could include breaking changes that require you to update your integration.
+</Warning>
+
+To specify an API version, set the `X-Pinecone-API-Version` header to the version name.
+
+For example, based on the version support diagram above, if it is currently July 2024 and you want to use the latest stable version to describe an index, you would set `"X-Pinecone-API-Version: 2024-07"`:
+
+```shell curl theme={null}
+PINECONE_API_KEY="YOUR_API_KEY"
+
+curl -i -X GET "https://api.pinecone.io/indexes/movie-recommendations" \
+    -H "Api-Key: $PINECONE_API_KEY" \
+    -H "X-Pinecone-API-Version: 2024-07"
+```
+
+If you want to use the release candidate of the next stable version instead, you would set `"X-Pinecone-API-Version: 2024-10"`:
+
+```shell curl theme={null}
+PINECONE_API_KEY="YOUR_API_KEY"
+
+curl -i -X GET "https://api.pinecone.io/indexes/movie-recommendations" \
+    -H "Api-Key: $PINECONE_API_KEY" \
+    -H "X-Pinecone-API-Version: 2024-10"
+```
+
+## SDK versions
+
+Official [Pinecone SDKs](/reference/pinecone-sdks) provide convenient access to Pinecone APIs. SDK versions are pinned to specific API versions. When a new API version is released, a new version of the SDK is also released.
+
+For the mapping between SDK and API versions, see [SDK versions](/reference/pinecone-sdks#sdk-versions).
+
+## Breaking changes
+
+Breaking changes are changes that can potentially break your integration with a Pinecone API. Breaking changes include:
+
+* Removing an entire operation
+* Removing or renaming a parameter
+* Removing or renaming a response field
+* Adding a new required parameter
+* Making a previously optional parameter required
+* Changing the type of a parameter or response field
+* Removing enum values
+* Adding a new validation rule to an existing parameter
+* Changing authentication or authorization requirements
+
+## Non-breaking changes
+
+Non-breaking changes are additive and should not break your integration. Additive changes include:
+
+* Adding an operation
+* Adding an optional parameter
+* Adding an optional request header
+* Adding a response field
+* Adding a response header
+* Adding enum values
+
+## Get updates
+
+To ensure you always know about upcoming API changes, follow the [Release notes](/release-notes/).
+
+# Pinecone Database limits
+
+This page describes different types of limits for Pinecone Database.
+
+## Rate limits
+
+Rate limits help protect your applications from misuse and maintain the health of our shared serverless infrastructure. These limits are designed to support typical production workloads while ensuring reliable performance for all users.
+
+**Most rate limits can be adjusted upon request.** If you need higher limits to scale your application, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket) with details about your use case. Pinecone is committed to supporting your growth and can often accommodate higher throughput requirements.
+
+Rate limits vary based on [pricing plan](https://www.pinecone.io/pricing/) and apply to [serverless indexes](/guides/index-data/indexing-overview) only.
+
+| Metric                                                                                                        | Starter plan   | Standard plan  | Enterprise plan |
+| :------------------------------------------------------------------------------------------------------------ | :------------- | :------------- | :-------------- |
+| [Read units per month per project](#read-units-per-month-per-project)                                         | 1,000,000      | Unlimited      | Unlimited       |
+| [Write units per month per project](#write-units-per-month-per-project)                                       | 2,000,000      | Unlimited      | Unlimited       |
+| [Upsert size per second per namespace](#upsert-size-per-second-per-namespace)                                 | 50 MB          | 50 MB          | 50 MB           |
+| [Query read units per second per index](#query-read-units-per-second-per-index)                               | 2,000          | 2,000          | 2,000           |
+| [Update records per second per namespace](#update-records-per-second-per-namespace)                           | 100            | 100            | 100             |
+| [Update by metadata requests per second per namespace](#update-by-metadata-requests-per-second-per-namespace) | 5              | 5              | 5               |
+| [Update by metadata requests per second per index](#update-by-metadata-requests-per-second-per-index)         | 500            | 500            | 500             |
+| [Fetch requests per second per index](#fetch-requests-per-second-per-index)                                   | 100            | 100            | 100             |
+| [List requests per second per index](#list-requests-per-second-per-index)                                     | 200            | 200            | 200             |
+| [Describe index stats requests per second per index](#describe-index-stats-requests-per-second-per-index)     | 100            | 100            | 100             |
+| [Delete records per second per namespace](#delete-records-per-second-per-namespace)                           | 5,000          | 5,000          | 5,000           |
+| [Delete records per second per index](#delete-records-per-second-per-index)                                   | 5,000          | 5,000          | 5,000           |
+| [Delete by metadata requests per second per namespace](#delete-by-metadata-requests-per-second-per-namespace) | 5              | 5              | 5               |
+| [Delete by metadata requests per second per index](#delete-by-metadata-requests-per-second-per-index)         | 500            | 500            | 500             |
+| [Embedding tokens per minute per model](#embedding-tokens-per-minute-per-model)                               | Model-specific | Model-specific | Model-specific  |
+| [Embedding tokens per month per model](#embedding-tokens-per-month-per-model)                                 | 5,000,000      | Unlimited      | Unlimited       |
+| [Rerank requests per minute per model](#rerank-requests-per-minute-per-model)                                 | Model-specific | Model-specific | Model-specific  |
+| [Rerank requests per month per model](#rerank-requests-per-month-per-model)                                   | 500            | Model-specific | Model-specific  |
+
+### Read units per month per project
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 1,000,000    | Unlimited     | Unlimited       |
+
+[Read units](/guides/manage-cost/understanding-cost#read-units) measure the compute, I/O, and network resources used by [fetch](/guides/manage-data/fetch-data), [query](/guides/search/search-overview), and [list](/guides/manage-data/list-record-ids) requests to serverless indexes. When you reach the monthly read unit limit for a project, fetch, query, and list requests to serverless indexes in the project will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached your read unit limit for the current month limit. 
+To continue reading data, upgrade your plan. 
+```
+
+To continue reading from serverless indexes in the project, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+To check how close you are to the monthly read unit limit for a project, do the following:
+
+1. Open the [Pinecone console](https://app.pinecone.io/organizations/-/projects).
+2. Select the project.
+3. Select any index in the project.
+4. Look under **Starter Usage**.
+
+### Write units per month per project
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 2,000,000    | Unlimited     | Unlimited       |
+
+[Write units](/guides/manage-cost/understanding-cost#write-units) measure the storage and compute resources used by [upsert](/guides/index-data/upsert-data), [update](/guides/manage-data/update-data), and [delete](/guides/manage-data/delete-data) requests to serverless indexes. When you reach the monthly write unit limit for a project, upsert, update, and delete requests to serverless indexes in the project will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached your write unit limit for the current month. 
+To continue writing data, upgrade your plan.
+```
+
+To continue writing data to serverless indexes in the project, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+To check how close you are to the monthly read unit limit for a project, do the following:
+
+1. Open the [Pinecone console](https://app.pinecone.io/organizations/-/projects).
+2. Select the project.
+3. Select any index in the project.
+4. Look under **Starter Usage**.
+
+### Upsert size per second per namespace
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 50 MB        | 50 MB         | 50 MB           |
+
+When you reach the per second [upsert](/guides/index-data/upsert-data) size for a namespace in an index, additional upserts will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max upsert size limit per second for index <index name>. 
+Pace your upserts or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Query read units per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 2,000        | 2,000         | 2,000           |
+
+Pinecone measures [query](/guides/search/search-overview) usage in [read units](/guides/manage-cost/understanding-cost#read-units). When you reach the per second limit for queries across all namespaces in an index, additional queries will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max query read units per second for index <index name>. 
+Pace your queries or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+To check how many read units a query consumes, [check the query response](/guides/manage-cost/monitor-usage-and-costs#read-units).
+
+### Update records per second per namespace
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 100          | 100           | 100             |
+
+When you reach the per second [update](/guides/manage-data/update-data) limit for a namespace in an index, additional updates will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max update records per second for namespace <namespace name>. 
+Pace your update requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Update by metadata requests per second per namespace
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 5            | 5             | 5               |
+
+When you reach the per second [update by metadata](/guides/manage-data/update-data#update-metadata-across-multiple-records) request limit for a namespace in an index, additional update by metadata requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max update by metadata requests per second for namespace <namespace name>. Pace your update by metadata requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Update by metadata requests per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 500          | 500           | 500             |
+
+When you reach the per second [update by metadata](/guides/manage-data/update-data#update-metadata-across-multiple-records) request limit across all namespaces in an index, additional update by metadata requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max update by metadata requests per second for index <index name>. Pace your update by metadata requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Fetch requests per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 100          | 100           | 100             |
+
+When you reach the per second [fetch](/guides/manage-data/fetch-data) limit across all namespaces in an index, additional fetch requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max fetch requests per second for index <index name>.
+Pace your fetch requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### List requests per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 200          | 200           | 200             |
+
+When you reach the per second [list](/guides/manage-data/list-record-ids) limit across all namespaces in an index, additional list requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max list requests per second for index <index name>.
+Pace your list requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Describe index stats requests per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 100          | 100           | 100             |
+
+When you reach the per second [describe index stats](/reference/api/2024-10/data-plane/describeindexstats) limit across all namespaces in an index, additional list requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max describe_index_stats requests per second for index <index>. 
+Pace your describe_index_stats requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Delete records per second per namespace
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 5000         | 5000          | 5000            |
+
+When you reach the per second [delete](/guides/manage-data/delete-data) limit for a namespace in an index, additional deletes will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max delete records per second for namespace <namespace name>. 
+Pace your delete requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Delete records per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 5000         | 5000          | 5000            |
+
+When you reach the per second [delete](/guides/manage-data/delete-data) limit across all namespaces in an index, additional deletes will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max delete records per second for index <index name>. 
+Pace your delete requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Delete by metadata requests per second per namespace
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 5            | 5             | 5               |
+
+When you reach the per second [delete by metadata](/guides/manage-data/delete-data#delete-records-by-metadata) request limit for a namespace in an index, additional delete by metadata requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max delete by metadata requests per second for namespace <namespace name>. Pace your delete by metadata requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Delete by metadata requests per second per index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 500          | 500           | 500             |
+
+When you reach the per second [delete by metadata](/guides/manage-data/delete-data#delete-records-by-metadata) request limit across all namespaces in an index, additional delete by metadata requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max delete by metadata requests per second for index <index name>. Pace your delete by metadata requests or contact Pinecone Support (https://app.pinecone.io/organizations/-/settings/support/ticket) to request a higher limit.
+```
+
+To handle this limit, [implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic). If you need a higher limit for your use case, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Embedding tokens per minute per model
+
+| Embedding model              | Input type | Starter plan | Standard plan | Enterprise plan |
+| :--------------------------- | :--------- | :----------- | :------------ | :-------------- |
+| `llama-text-embed-v2`        | Passage    | 250,000      | 1,000,000     | 1,000,000       |
+|                              | Query      | 50,000       | 250,000       | 250,000         |
+| `multilingual-e5-large`      | Passage    | 250,000      | 1,000,000     | 1,000,000       |
+|                              | Query      | 50,000       | 250,000       | 250,000         |
+| `pinecone-sparse-english-v0` | Passage    | 250,000      | 3,000,000     | 3,000,000       |
+|                              | Query      | 250,000      | 3,000,000     | 3,000,000       |
+
+When you reach the per minute token limit for an [embedding model](/guides/index-data/create-an-index#embedding-models) hosted by Pinecone, additional embeddings will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max embedding tokens per minute (<limit>) model '<model name>'' and input type '<passage|query>' for the current project. 
+To increase this limit, upgrade your plan.
+```
+
+To increase this limit, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan). Otherwise, you can handle this limit by [implementing retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic).
+
+### Embedding tokens per month per model
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 5,000,000    | Unlimited     | Unlimited       |
+
+When you reach the monthly token limit for an [embedding model](/guides/index-data/create-an-index#embedding-models) hosted by Pinecone, additional embeddings will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the embedding token limit (<limit>) for model <model name> for the current month. 
+To continue using this model, upgrade your plan.
+```
+
+To increase this limit, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan) or [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Rerank requests per minute per model
+
+| Reranking model      | Starter plan  | Standard plan | Enterprise plan |
+| :------------------- | :------------ | :------------ | :-------------- |
+| `cohere-rerank-3.5`  | Not available | 300           | 300             |
+| `bge-reranker-v2-m3` | 60            | 60            | 60              |
+| `pinecone-rerank-v0` | 60            | 60            | 60              |
+
+When you reach the per minute request limit for a [reranking model](/guides/search/rerank-results#reranking-models) hosted by Pinecone, additional reranking requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the max rerank requests per minute (<limit>) for model '<model name>' for the current project. 
+To increase this limit, upgrade your plan.
+```
+
+To increase this limit, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+### Rerank requests per month per model
+
+| Reranking model      | Starter plan  | Standard plan | Enterprise plan |
+| :------------------- | :------------ | :------------ | :-------------- |
+| `cohere-rerank-3.5`  | Not available | Unlimited     | Unlimited       |
+| `bge-reranker-v2-m3` | 500           | Unlimited     | Unlimited       |
+| `pinecone-rerank-v0` | 500           | Unlimited     | Unlimited       |
+
+When you reach the monthly request limit for a [reranking model](/guides/search/rerank-results#reranking-models) hosted by Pinecone, additional reranking requests will fail and return a `429 - TOO_MANY_REQUESTS` status with the following error:
+
+```
+Request failed. You've reached the rerank request limit (<limit>) for model <model name> for the current month. 
+To continue using this model, upgrade your plan.
+```
+
+To increase this limit, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan) or [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+## Object limits
+
+Object limits are restrictions on the number or size of objects in Pinecone. Object limits vary based on [pricing plan](https://www.pinecone.io/pricing/).
+
+| Metric                                                                         | Starter plan | Standard plan | Enterprise plan |
+| :----------------------------------------------------------------------------- | :----------- | :------------ | :-------------- |
+| [Projects per organization](#projects-per-organization)                        | 1            | 20            | 100             |
+| [Serverless indexes per project](#serverless-indexes-per-project) <sup>1</sup> | 5            | 20            | 200             |
+| [Serverless index storage per project](#serverless-index-storage-per-project)  | 2 GB         | N/A           | N/A             |
+| [Namespaces per serverless index](#namespaces-per-serverless-index)            | 100          | 100,000       | 100,000         |
+| [Serverless backups per project](#serveless-backups-per-project)               | N/A          | 500           | 1000            |
+| [Namespaces per serverless backup](#namespaces-per-serverless-backup)          | N/A          | 2000          | 2000            |
+| [Collections per project](#collections-per-project)                            | 100          | N/A           | N/A             |
+
+<sup>1 On the Starter plan, all serverless must be in the `us-east-1` region of AWS.</sup><br />
+
+### Projects per organization
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 1            | 20            | 100             |
+
+When you reach this quota for an organization, trying to [create projects](/guides/projects/create-a-project) will fail and return a `403 - QUOTA_EXCEEDED` status with the following error:
+
+```
+Request failed. You've reached the max projects allowed in organization <org name>. 
+To add more projects, upgrade your plan.
+```
+
+To increase this quota, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan) or [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+
+### Serverless indexes per project
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 5            | 20            | 200             |
+
+When you reach this quota for a project, trying to [create serverless indexes](/guides/index-data/create-an-index#create-a-serverless-index) in the project will fail and return a `403 - QUOTA_EXCEEDED` status with the following error:
+
+```
+Request failed. You've reached the max serverless indexes allowed in project <project>. 
+Use namespaces to partition your data into logical groups, or upgrade your plan to add more serverless indexes.
+```
+
+To stay under this quota, consider using [namespaces](/guides/index-data/create-an-index#namespaces) instead of creating multiple indexes. Namespaces let you partition your data into logical groups within a single index. This approach not only helps you stay within index limits, but can also improve query performance and lower costs by limiting searches to relevant data subsets.
+
+To increase this quota, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+### Serverless index storage per project
+
+<Note>This limit applies to organizations on the Starter plan only.</Note>
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 2 GB         | N/A           | N/A             |
+
+When you've reached this quota for a project, updates and upserts into serverless indexes will fail and return a `403 - QUOTA_EXCEEDED` status with the following error:
+
+```
+Request failed. You've reached the max storage allowed for project <project name>. 
+To update or upsert new data, delete records or upgrade your plan.
+```
+
+To continue writing data into your serverless indexes, [delete records](/guides/manage-data/delete-data) to bring your project under the limit or [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+### Namespaces per serverless index
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 100          | 100,000       | 100,000         |
+
+When you reach this quota for a serverless index, trying to [upsert records into a new namespace](/guides/index-data/upsert-data) in the index will fail and return a `403 - QUOTA_EXCEEDED` status with the following error:
+
+```
+Request failed. You've reached the max namespaces allowed in serverless index <index name>. 
+To add more namespaces, upgrade your plan.
+```
+
+To increase this quota, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+<Note>
+  While the Standard and Enterprise plans support up to [100,000 namespaces per index](/reference/api/database-limits#namespaces-per-serverless-index), Pinecone can accommodate million-scale namespaces and beyond for specific use cases. If your application requires more than 100,000 namespaces, [contact Support](https://app.pinecone.io/organizations/-/settings/support/ticket).
+</Note>
+
+### Serverless backups per project
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| N/A          | 500           | 1000            |
+
+When you reach this quota for a project, trying to [create serverless backups](/guides/manage-data/back-up-an-index) in the project will fail and return a `403 - QUOTA_EXCEEDED` status with the following error:
+
+```
+Backup failed to create. Quota for number of backups per index exceeded.
+```
+
+### Namespaces per serverless backup
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| N/A          | 2000          | 2000            |
+
+When you reach this quota for a backup, trying to [create serverless backups](/guides/manage-data/back-up-an-index) will fail and return a `403 - QUOTA_EXCEEDED` status.
+
+### Collections per project
+
+| Starter plan | Standard plan | Enterprise plan |
+| ------------ | ------------- | --------------- |
+| 100          | N/A           | N/A             |
+
+When you reach this quota for a project, trying to [create collections](/guides/manage-data/back-up-an-index) in the project will fail and return a `403 - QUOTA_EXCEEDED` status with the following error:
+
+```
+Request failed. You've reached the max collections allowed in project <project name>. 
+To add more collections, upgrade your plan.
+```
+
+To increase this quota, [upgrade your plan](/guides/organizations/manage-billing/upgrade-billing-plan).
+
+## Operation limits
+
+Operation limits are restrictions on the size, number, or other characteristics of operations in Pinecone. Operation limits are fixed and do not vary based on pricing plan.
+
+### Upsert limits
+
+| Metric                                                             | Limit                                                         |
+| :----------------------------------------------------------------- | :------------------------------------------------------------ |
+| Max [batch size](/guides/index-data/upsert-data#upsert-in-batches) | 2 MB or 1000 records with vectors <br /> 96 records with text |
+| Max metadata size per record                                       | 40 KB                                                         |
+| Max length for a record ID                                         | 512 characters                                                |
+| Max dimensionality for dense vectors                               | 20,000                                                        |
+| Max non-zero values for sparse vectors                             | 2048                                                          |
+| Max dimensionality for sparse vectors                              | 4.2 billion                                                   |
+
+### Import limits
+
+<Note>
+  If your import exceeds these limits, you'll get an `Exceeds system limit` error. Pinecone can help unblock these imports quickly. [Contact Pinecone support](https://app.pinecone.io/organizations/-/settings/support/ticket) for assistance.
+</Note>
+
+| Metric                    | Limit   |
+| :------------------------ | :------ |
+| Max namespaces per import | 10,000  |
+| Max size per namespace    | 500 GB  |
+| Max files per import      | 100,000 |
+| Max size per file         | 10 GB   |
+
+### Query limits
+
+| Metric            | Limit  |
+| :---------------- | :----- |
+| Max `top_k` value | 10,000 |
+| Max result size   | 4MB    |
+
+The query result size is affected by the dimension of the dense vectors and whether or not dense vector values and metadata are included in the result.
+
+<Tip>
+  If a query fails due to exceeding the 4MB result size limit, choose a lower `top_k` value, or use `include_metadata=False` or `include_values=False` to exclude metadata or values from the result.
+</Tip>
+
+### Fetch limits
+
+| Metric                           | Limit |
+| :------------------------------- | :---- |
+| Max record IDs per fetch request | 1,000 |
+
+### Delete limits
+
+| Metric                            | Limit |
+| :-------------------------------- | :---- |
+| Max record IDs per delete request | 1,000 |
+
+## Identifier limits
+
+An identifier is a string of characters (up to 255 characters in length) used to identify "named" [objects in Pinecone](/guides/get-started/concepts). The following Pinecone objects use strings as identifiers:
+
+| Object                                                    | Field       | Max # characters | Allowed characters           |
+| --------------------------------------------------------- | ----------- | ---------------- | ---------------------------- |
+| [Organization](/guides/get-started/concepts#organization) | `name`      | 512              | UTF-8 except `\0`            |
+| [Project](/guides/get-started/concepts#project)           | `name`      | 512              | UTF-8 except `\0`            |
+| [Index](/guides/get-started/concepts#index)               | `name`      | 45               | `A-Z`, `a-z`, `0-9`, and `-` |
+| [Namespace](/guides/get-started/concepts#namespace)       | `namespace` | 512              | ASCII except `\0`            |
+| [Record](/guides/get-started/concepts#record)             | `id`        | 512              | ASCII except `\0`            |
+# Known limitations
+
+This page describes known limitations and feature restrictions in Pinecone.
+
+## General
+
+* [Upserts](/guides/index-data/upsert-data)
+  * Pinecone is eventually consistent, so there can be a slight delay before upserted records are available to query.
+
+    After upserting records, use the [`describe_index_stats`](/reference/api/2024-10/data-plane/describeindexstats) operation to check if the current vector count matches the number of records you expect, although this method may not work for pod-based indexes with multiple replicas.
+  * Only indexes using the [dotproduct distance metric](/guides/index-data/indexing-overview#dotproduct) support querying sparse-dense vectors.
+
+    Upserting, updating, and fetching sparse-dense vectors in indexes with a different distance metric will succeed, but querying will return an error.
+  * Indexes created before February 22, 2023 do not support sparse vectors.
+* [Metadata](/guides/index-data/upsert-data#upsert-with-metadata-filters)
+  * Null metadata values aren't supported. Instead of setting a key to `null`, remove the key from the metadata payload.
+  * Nested JSON objects are not supported.
+
+## Serverless indexes
+
+Serverless indexes do not support the following features:
+
+* [Filtering index statistics by metadata](/reference/api/2024-10/data-plane/describeindexstats)
+* [Private endpoints](/guides/production/connect-to-aws-privatelink)
+
+  * This feature is available on AWS only.
+# Errors
+
+Pinecone uses conventional HTTP response codes to indicate the success or failure of an API request. In general, codes in the `2xx` range indicate success, codes in the `4xx` range indicate an error that failed given the information provided, and codes in the `5xx` range indicate an error with Pinecone's servers.
+
+For guidance on handling errors in production, see [Error handling](/guides/production/error-handling).
+
+## 200 - OK
+
+The request succeeded.
+
+## 201 - CREATED
+
+The request succeeded and a new resource was created.
+
+## 202 - NO CONTENT
+
+The request succeeded, but there is no content to return.
+
+## 400 - INVALID ARGUMENT
+
+The request failed due to an invalid argument.
+
+## 401 - UNAUTHENTICATED
+
+The request failed due to a missing or invalid [API key](/guides/projects/understanding-projects#api-keys).
+
+## 402 - PAYMENT REQUIRED
+
+The request failed due to delinquent payment.
+
+## 403 - FORBIDDEN
+
+The request failed due to an exceeded [quota](/reference/api/database-limits#object-limits) or [index deletion protection](/guides/manage-data/manage-indexes#configure-deletion-protection).
+
+## 404 - NOT FOUND
+
+The request failed because the resource was not found.
+
+## 409 - ALREADY EXISTS
+
+The request failed because the resource already exists.
+
+## 412 - FAILED PRECONDITIONS
+
+The request failed due to preconditions not being met. |
+
+## 422 - UNPROCESSABLE ENTITY
+
+The request failed because the server was unable to process the contained instructions.
+
+## 429 - TOO MANY REQUESTS
+
+The request was [rate-limited](/reference/api/database-limits#rate-limits). [Implement retry logic with exponential backoff](/guides/production/error-handling#handle-rate-limits-429) to handle this error.
+
+## 500 - UNKNOWN
+
+An internal server error occurred. [Implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic) to handle transient errors.
+
+## 502 - BAD GATEWAY
+
+The API gateway received an invalid response from a backend service. This is typically a temporary error. [Implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic) to handle transient errors.
+
+## 503 - UNAVAILABLE
+
+The server is currently unavailable. [Implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic) to handle transient errors.
+
+## 504 - GATEWAY TIMEOUT
+
+The API gateway did not receive a timely response from the backend server. This can occur due to slow requests or backend processing delays. [Implement retry logic with exponential backoff](/guides/production/error-handling#implement-retry-logic) to handle transient errors.
+

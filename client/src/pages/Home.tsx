@@ -4,6 +4,8 @@ import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import EcliTable, { type EcliRecord } from "@/components/EcliTable";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
 import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Home() {
   // State management
@@ -11,161 +13,211 @@ export default function Home() {
   const [preparedRecords, setPreparedRecords] = useState<PreparedRecord[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [currentOffset, setCurrentOffset] = useState(0);
   const [isFetchingEcli, setIsFetchingEcli] = useState(false);
   const [isFetchingContent, setIsFetchingContent] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
+  const { toast } = useToast();
 
-  // TODO: Remove mock functionality - Replace with actual API calls
-  const handleFetchDecisions = (filters: FilterParams) => {
-    console.log('Fetching decisions with filters:', filters);
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString('nl-NL');
+    setExportLogs(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+
+  const handleFetchDecisions = async (filters: FilterParams) => {
     setIsFetchingEcli(true);
     
-    // Mock API call
-    setTimeout(() => {
-      const mockData: EcliRecord[] = [
+    try {
+      const response = await apiRequest(
+        'POST',
+        '/api/rechtspraak/search',
         {
-          ecli: "ECLI:NL:HR:2024:123",
-          title: "Hoger beroep tegen vonnis inzake arbeidsovereenkomst",
-          court: "Hoge Raad",
-          decisionDate: "2024-01-15"
-        },
-        {
-          ecli: "ECLI:NL:RBDHA:2024:456",
-          title: "Beslissing op bezwaar WOB-verzoek",
-          court: "Rechtbank Den Haag",
-          decisionDate: "2024-01-12"
-        },
-        {
-          ecli: "ECLI:NL:GHARL:2024:789",
-          title: "Hoger beroep strafzaak witwassen",
-          court: "Gerechtshof Arnhem-Leeuwarden",
-          decisionDate: "2024-01-10"
-        },
-        {
-          ecli: "ECLI:NL:RBAMS:2024:321",
-          title: "Veroordeling inzake belastingfraude",
-          court: "Rechtbank Amsterdam",
-          decisionDate: "2024-01-08"
-        },
-        {
-          ecli: "ECLI:NL:RBROT:2024:654",
-          title: "Bestuursrechtelijke procedure milieuwet",
-          court: "Rechtbank Rotterdam",
-          decisionDate: "2024-01-05"
-        },
-      ];
+          ...filters,
+          from: currentOffset,
+        }
+      );
+
+      const data = await response.json();
       
-      setEcliRecords(prev => [...prev, ...mockData]);
-      setTotalResults(156);
-      setCurrentPage(1);
+      setEcliRecords(prev => [...prev, ...data.records]);
+      setTotalResults(data.totalResults);
+      setCurrentPage(prev => prev + 1);
+      
+      toast({
+        title: "Uitspraken opgehaald",
+        description: `${data.records.length} uitspraken toegevoegd. Totaal: ${data.totalResults} beschikbaar.`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij ophalen",
+        description: error.message || "Kon uitspraken niet ophalen",
+      });
+    } finally {
       setIsFetchingEcli(false);
-    }, 1000);
+    }
   };
 
   const handleResetFilters = () => {
-    console.log('Resetting filters');
+    setEcliRecords([]);
+    setPreparedRecords([]);
+    setCurrentPage(1);
+    setTotalResults(0);
+    setCurrentOffset(0);
   };
 
-  const handleLoadMore = () => {
-    console.log('Loading more decisions');
-    setIsFetchingEcli(true);
-    
-    // Mock loading more
-    setTimeout(() => {
-      const moreMockData: EcliRecord[] = [
-        {
-          ecli: "ECLI:NL:GHSGR:2024:987",
-          title: "Hoger beroep civiele zaak contractbreuk",
-          court: "Gerechtshof 's-Gravenhage",
-          decisionDate: "2024-01-03"
-        },
-      ];
-      setEcliRecords(prev => [...prev, ...moreMockData]);
-      setIsFetchingEcli(false);
-    }, 1000);
+  const handleLoadMore = async () => {
+    // This would need to store the last filter state to reuse
+    toast({
+      title: "Meer laden",
+      description: "Gebruik de 'Volgende' knop om door pagina's te bladeren",
+    });
   };
 
   const handlePrevious = () => {
-    console.log('Previous page');
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
   };
 
   const handleNext = () => {
-    console.log('Next page');
     setCurrentPage(currentPage + 1);
   };
 
   const handleClearEcli = () => {
-    console.log('Clearing ECLI list');
     setEcliRecords([]);
+    setPreparedRecords([]);
     setCurrentPage(1);
     setTotalResults(0);
+    setCurrentOffset(0);
   };
 
-  const handleFetchContent = () => {
-    console.log('Fetching full content for ECLI records');
+  const handleFetchContent = async () => {
     setIsFetchingContent(true);
 
-    // Mock API call to fetch full content
-    setTimeout(() => {
-      const mockPrepared: PreparedRecord[] = ecliRecords.map(record => ({
-        ...record,
-        legalArea: ["Civiel recht", "Arbeidsrecht"],
-        procedureType: "Hoger beroep",
-        sourceUrl: `https://uitspraken.rechtspraak.nl/details?id=${record.ecli}`,
-        fullText: `De ${record.court} heeft op ${record.decisionDate} recht gedaan in de zaak betreffende ${record.title}. Na afweging van alle feiten en omstandigheden, en gelet op de toepasselijke wetgeving, komt het hof tot de volgende overwegingen en beslissingen... [volledige tekst van de uitspraak met alle overwegingen en rechtsgronden]`
-      }));
+    try {
+      const eclis = ecliRecords.map(r => r.ecli);
       
-      setPreparedRecords(mockPrepared);
+      const response = await apiRequest(
+        'POST',
+        '/api/rechtspraak/content',
+        { eclis }
+      );
+
+      const data = await response.json();
+      
+      setPreparedRecords(data.records);
+      
+      toast({
+        title: "Inhoud opgehaald",
+        description: `${data.successful} van ${data.total} uitspraken succesvol verwerkt.`,
+      });
+      
+      if (data.failed > 0) {
+        toast({
+          variant: "destructive",
+          title: "Enkele fouten",
+          description: `${data.failed} uitspraken konden niet worden opgehaald.`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij ophalen inhoud",
+        description: error.message || "Kon volledige inhoud niet ophalen",
+      });
+    } finally {
       setIsFetchingContent(false);
-    }, 2000);
+    }
   };
 
   const handleClearRecords = () => {
-    console.log('Clearing prepared records');
     setPreparedRecords([]);
+    setExportLogs([]);
   };
 
-  const handleExport = (config: ExportConfig) => {
-    console.log('Exporting to Pinecone with config:', config);
+  const handleExport = async (config: ExportConfig) => {
     setIsExporting(true);
     setExportLogs([]);
-
-    // Mock export process
-    const logs: string[] = [];
-    const addLog = (message: string) => {
-      const timestamp = new Date().toLocaleString('nl-NL');
-      logs.push(`[${timestamp}] ${message}`);
-      setExportLogs([...logs]);
-    };
-
-    addLog('Starting export to Pinecone...');
+    
+    addLog('Export naar Pinecone gestart...');
     addLog(`Index host: ${config.indexHost}`);
-    addLog(`Namespace: ${config.namespace || '(default)'}`);
-    
-    const totalBatches = Math.ceil(preparedRecords.length / config.batchSize);
-    
-    let currentBatch = 0;
-    const interval = setInterval(() => {
-      currentBatch++;
-      const start = (currentBatch - 1) * config.batchSize + 1;
-      const end = Math.min(currentBatch * config.batchSize, preparedRecords.length);
-      
-      addLog(`Batch ${currentBatch}/${totalBatches}: Uploading records ${start}-${end}...`);
-      
-      setTimeout(() => {
-        addLog(`Batch ${currentBatch}/${totalBatches}: ✓ Successfully uploaded ${end - start + 1} records`);
+    addLog(`Namespace: ${config.namespace || '(standaard)'}`);
+    addLog(`Batchgrootte: ${config.batchSize}`);
+    addLog(`Totaal records: ${preparedRecords.length}`);
+
+    try {
+      const response = await fetch('/api/pinecone/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          indexHost: config.indexHost,
+          namespace: config.namespace,
+          batchSize: config.batchSize,
+          records: preparedRecords,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Export mislukt');
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Kan response niet lezen');
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
         
-        if (currentBatch >= totalBatches) {
-          clearInterval(interval);
-          addLog(`✓ Export complete! Total records uploaded: ${preparedRecords.length}`);
-          setIsExporting(false);
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            
+            if (data.type === 'progress') {
+              addLog(`Batch verwerkt: ${data.processedRecords}/${data.totalRecords} records (${data.successCount} succesvol, ${data.errorCount} fouten)`);
+            } else if (data.type === 'complete') {
+              addLog(`✓ Export voltooid! ${data.successCount} records succesvol geüpload.`);
+              
+              toast({
+                title: "Export voltooid",
+                description: `${data.successCount} van ${data.totalRecords} records succesvol naar Pinecone verstuurd.`,
+              });
+              
+              if (data.errorCount > 0) {
+                toast({
+                  variant: "destructive",
+                  title: "Enkele fouten",
+                  description: `${data.errorCount} records konden niet worden geüpload.`,
+                });
+              }
+            } else if (data.type === 'error') {
+              addLog(`✗ Fout: ${data.error}`);
+              throw new Error(data.error);
+            }
+          }
         }
-      }, 500);
-    }, 1500);
+      }
+    } catch (error: any) {
+      addLog(`✗ Export mislukt: ${error.message}`);
+      toast({
+        variant: "destructive",
+        title: "Export mislukt",
+        description: error.message || "Kon niet exporteren naar Pinecone",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (

@@ -43,16 +43,16 @@ export default function PineconeExport({
       <CardHeader>
         <CardTitle>Pinecone Export</CardTitle>
         <CardDescription>
-          Send prepared records to your Pinecone vector database
-          {recordCount > 0 && ` • ${recordCount} records ready`}
+          Verstuur voorbereide records naar je Pinecone vector database
+          {recordCount > 0 && ` • ${recordCount} records klaar`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription>
-            Make sure to set <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> in your Replit Secrets before exporting.
-            The API key is required to authenticate with Pinecone.
+            Zorg ervoor dat je <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> in je Replit Secrets hebt ingesteld voordat je exporteert.
+            De API-sleutel is vereist om te authenticeren met Pinecone.
           </AlertDescription>
         </Alert>
 
@@ -62,33 +62,33 @@ export default function PineconeExport({
             <Input
               id="index-host"
               type="text"
-              placeholder="e.g., my-index-abc123.svc.apw5-4e34-81fa.pinecone.io"
+              placeholder="bijv., my-index-abc123.svc.apw5-4e34-81fa.pinecone.io"
               value={indexHost}
               onChange={(e) => setIndexHost(e.target.value)}
               data-testid="input-index-host"
             />
             <p className="text-xs text-muted-foreground">
-              Find this in your Pinecone console under Index → Connect
+              Te vinden in je Pinecone console onder Index → Connect
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="namespace">Namespace (optional)</Label>
+            <Label htmlFor="namespace">Namespace (optioneel)</Label>
             <Input
               id="namespace"
               type="text"
-              placeholder="e.g., rechtspraak-decisions"
+              placeholder="bijv., rechtspraak-uitspraken"
               value={namespace}
               onChange={(e) => setNamespace(e.target.value)}
               data-testid="input-namespace"
             />
             <p className="text-xs text-muted-foreground">
-              Use namespaces to organize vectors within your index
+              Gebruik namespaces om vectors binnen je index te organiseren
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="batch-size">Batch Size</Label>
+            <Label htmlFor="batch-size">Batchgrootte</Label>
             <Input
               id="batch-size"
               type="number"
@@ -100,7 +100,7 @@ export default function PineconeExport({
               data-testid="input-export-batch-size"
             />
             <p className="text-xs text-muted-foreground">
-              Number of records to send per batch (recommended: 100-500)
+              Aantal records per batch (aanbevolen: 100-500)
             </p>
           </div>
         </div>
@@ -112,12 +112,12 @@ export default function PineconeExport({
           data-testid="button-export"
         >
           <Upload className="mr-2 h-4 w-4" />
-          {isExporting ? "Exporting..." : `Send ${recordCount} Records to Pinecone`}
+          {isExporting ? "Bezig met exporteren..." : `${recordCount} Records naar Pinecone Versturen`}
         </Button>
 
         {exportLogs.length > 0 && (
           <div className="space-y-2">
-            <Label>Export Progress</Label>
+            <Label>Export Voortgang</Label>
             <ScrollArea className="h-64 rounded-md border bg-muted p-4">
               <div className="font-mono text-xs space-y-1">
                 {exportLogs.map((log, idx) => (

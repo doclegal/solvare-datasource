@@ -56,16 +56,16 @@ export default function RecordPreparation({
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>Record Preparation</CardTitle>
+            <CardTitle>Records Voorbereiden</CardTitle>
             <CardDescription>
-              Fetch full content and prepare structured records for Pinecone
-              {ecliCount > 0 && ` • ${ecliCount} ECLI codes available`}
+              Haal volledige inhoud op en bereid gestructureerde records voor Pinecone voor
+              {ecliCount > 0 && ` • ${ecliCount} ECLI-codes beschikbaar`}
             </CardDescription>
           </div>
           {preparedRecords.length > 0 && (
             <Button variant="outline" size="sm" onClick={onClear} data-testid="button-clear-records">
               <Trash2 className="mr-2 h-4 w-4" />
-              Clear Records
+              Records Wissen
             </Button>
           )}
         </div>
@@ -79,18 +79,18 @@ export default function RecordPreparation({
           data-testid="button-fetch-content"
         >
           <FileText className="mr-2 h-4 w-4" />
-          {isLoading ? "Fetching Content..." : `Fetch Full Content (${ecliCount} decisions)`}
+          {isLoading ? "Inhoud Ophalen..." : `Volledige Inhoud Ophalen (${ecliCount} uitspraken)`}
         </Button>
 
         {preparedRecords.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p>No records prepared yet. Fetch ECLI decisions first, then click "Fetch Full Content"</p>
+            <p>Nog geen records voorbereid. Haal eerst ECLI-uitspraken op en klik dan op "Volledige Inhoud Ophalen"</p>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">
-                {preparedRecords.length} records prepared
+                {preparedRecords.length} records voorbereid
               </p>
             </div>
             
@@ -113,13 +113,13 @@ export default function RecordPreparation({
                   </AccordionTrigger>
                   <AccordionContent className="space-y-3 pt-3">
                     <div>
-                      <p className="text-sm font-medium mb-1">Title</p>
+                      <p className="text-sm font-medium mb-1">Titel</p>
                       <p className="text-sm text-muted-foreground">{record.title}</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm font-medium mb-1">Legal Area</p>
+                        <p className="text-sm font-medium mb-1">Rechtsgebied</p>
                         <div className="flex flex-wrap gap-1">
                           {record.legalArea.map((area) => (
                             <Badge key={area} variant="secondary" className="text-xs">
@@ -129,13 +129,13 @@ export default function RecordPreparation({
                         </div>
                       </div>
                       <div>
-                        <p className="text-sm font-medium mb-1">Procedure Type</p>
+                        <p className="text-sm font-medium mb-1">Proceduresoort</p>
                         <p className="text-sm text-muted-foreground">{record.procedureType}</p>
                       </div>
                     </div>
 
                     <div>
-                      <p className="text-sm font-medium mb-1">Source</p>
+                      <p className="text-sm font-medium mb-1">Bron</p>
                       <a 
                         href={record.sourceUrl} 
                         target="_blank" 
@@ -148,7 +148,7 @@ export default function RecordPreparation({
                     </div>
 
                     <div>
-                      <p className="text-sm font-medium mb-1">Full Text Preview</p>
+                      <p className="text-sm font-medium mb-1">Voorvertoning Volledige Tekst</p>
                       <div className="bg-muted p-3 rounded-md">
                         <p className="text-sm font-mono whitespace-pre-wrap">
                           {truncateText(record.fullText, record.ecli)}
@@ -160,12 +160,12 @@ export default function RecordPreparation({
                             className="mt-2 p-0 h-auto"
                             onClick={() => toggleExpanded(record.ecli)}
                           >
-                            {expandedText.has(record.ecli) ? "Show less" : "Show more"}
+                            {expandedText.has(record.ecli) ? "Minder tonen" : "Meer tonen"}
                           </Button>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {record.fullText.length} characters
+                        {record.fullText.length} tekens
                       </p>
                     </div>
                   </AccordionContent>

@@ -66,13 +66,13 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Rechtspraak Filter & Fetch</CardTitle>
-        <CardDescription>Configure filters and fetch court decisions from the Open Data API</CardDescription>
+        <CardTitle>Rechtspraak Filters & Ophalen</CardTitle>
+        <CardDescription>Stel filters in en haal uitspraken op van de Open Data API</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="batch-size">Results per fetch</Label>
+            <Label htmlFor="batch-size">Aantal resultaten per keer</Label>
             <Input
               id="batch-size"
               type="number"
@@ -88,7 +88,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="date-from">Decision date from</Label>
+            <Label htmlFor="date-from">Uitspraakdatum vanaf</Label>
             <Input
               id="date-from"
               type="date"
@@ -98,7 +98,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="date-to">Decision date to</Label>
+            <Label htmlFor="date-to">Uitspraakdatum tot</Label>
             <Input
               id="date-to"
               type="date"
@@ -111,7 +111,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="modified-from">Modified from</Label>
+            <Label htmlFor="modified-from">Gewijzigd vanaf</Label>
             <Input
               id="modified-from"
               type="datetime-local"
@@ -121,7 +121,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="modified-to">Modified to</Label>
+            <Label htmlFor="modified-to">Gewijzigd tot</Label>
             <Input
               id="modified-to"
               type="datetime-local"
@@ -134,13 +134,13 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-2">
-            <Label htmlFor="document-type">Document type</Label>
+            <Label htmlFor="document-type">Documenttype</Label>
             <Select value={documentType} onValueChange={setDocumentType}>
               <SelectTrigger id="document-type" data-testid="select-document-type">
-                <SelectValue placeholder="Select type" />
+                <SelectValue placeholder="Selecteer type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="all">Alle types</SelectItem>
                 <SelectItem value="Uitspraak">Uitspraak</SelectItem>
                 <SelectItem value="Conclusie">Conclusie</SelectItem>
               </SelectContent>
@@ -148,13 +148,13 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="court">Court / Instance</Label>
+            <Label htmlFor="court">Instantie</Label>
             <Select value={court} onValueChange={setCourt}>
               <SelectTrigger id="court" data-testid="select-court">
-                <SelectValue placeholder="Select court" />
+                <SelectValue placeholder="Selecteer instantie" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All courts</SelectItem>
+                <SelectItem value="all">Alle instanties</SelectItem>
                 <SelectItem value="RBDHA">Rechtbank Den Haag</SelectItem>
                 <SelectItem value="RBAMS">Rechtbank Amsterdam</SelectItem>
                 <SelectItem value="RBROT">Rechtbank Rotterdam</SelectItem>
@@ -166,13 +166,13 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="legal-area">Legal area</Label>
+            <Label htmlFor="legal-area">Rechtsgebied</Label>
             <Select value={legalArea} onValueChange={setLegalArea}>
               <SelectTrigger id="legal-area" data-testid="select-legal-area">
-                <SelectValue placeholder="Select area" />
+                <SelectValue placeholder="Selecteer rechtsgebied" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All areas</SelectItem>
+                <SelectItem value="all">Alle rechtsgebieden</SelectItem>
                 <SelectItem value="Civiel">Civiel recht</SelectItem>
                 <SelectItem value="Straf">Strafrecht</SelectItem>
                 <SelectItem value="Bestuurs">Bestuursrecht</SelectItem>
@@ -190,18 +190,18 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
             data-testid="checkbox-full-docs"
           />
           <Label htmlFor="full-docs" className="text-sm font-normal cursor-pointer">
-            Only decisions with full documents available
+            Alleen uitspraken met volledige documenten beschikbaar
           </Label>
         </div>
 
         <div className="flex gap-3 pt-2">
           <Button onClick={handleFetch} disabled={isLoading} className="flex-1 md:flex-initial" data-testid="button-fetch">
             <Search className="mr-2 h-4 w-4" />
-            {isLoading ? "Fetching..." : "Fetch Decisions"}
+            {isLoading ? "Bezig met ophalen..." : "Uitspraken Ophalen"}
           </Button>
           <Button variant="outline" onClick={handleReset} disabled={isLoading} data-testid="button-reset">
             <RotateCcw className="mr-2 h-4 w-4" />
-            Reset Filters
+            Filters Resetten
           </Button>
         </div>
       </CardContent>
