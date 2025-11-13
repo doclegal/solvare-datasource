@@ -17,8 +17,6 @@ export interface FilterParams {
   batchSize: number;
   dateFrom: string;
   dateTo: string;
-  modifiedFrom: string;
-  modifiedTo: string;
   documentType: string;
   court: string;
   legalArea: string;
@@ -29,8 +27,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const [batchSize, setBatchSize] = useState("50");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [modifiedFrom, setModifiedFrom] = useState("");
-  const [modifiedTo, setModifiedTo] = useState("");
   const [documentType, setDocumentType] = useState("");
   const [court, setCourt] = useState("");
   const [legalArea, setLegalArea] = useState("");
@@ -41,8 +37,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
       batchSize: parseInt(batchSize) || 50,
       dateFrom,
       dateTo,
-      modifiedFrom,
-      modifiedTo,
       documentType,
       court,
       legalArea,
@@ -54,8 +48,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     setBatchSize("50");
     setDateFrom("");
     setDateTo("");
-    setModifiedFrom("");
-    setModifiedTo("");
     setDocumentType("");
     setCourt("");
     setLegalArea("");
@@ -105,29 +97,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               data-testid="input-date-to"
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="modified-from">Gewijzigd vanaf</Label>
-            <Input
-              id="modified-from"
-              type="datetime-local"
-              value={modifiedFrom}
-              onChange={(e) => setModifiedFrom(e.target.value)}
-              data-testid="input-modified-from"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="modified-to">Gewijzigd tot</Label>
-            <Input
-              id="modified-to"
-              type="datetime-local"
-              value={modifiedTo}
-              onChange={(e) => setModifiedTo(e.target.value)}
-              data-testid="input-modified-to"
             />
           </div>
         </div>

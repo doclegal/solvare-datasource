@@ -29,8 +29,6 @@ export const searchFiltersSchema = z.object({
   batchSize: z.number().default(50),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
-  modifiedFrom: z.string().optional(),
-  modifiedTo: z.string().optional(),
   documentType: z.string().optional(),
   court: z.string().optional(),
   legalArea: z.string().optional(),
