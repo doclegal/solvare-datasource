@@ -30,12 +30,6 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   if (filters.dateTo) {
     params.append('date', `${filters.dateTo}`);
   }
-  if (filters.modifiedFrom) {
-    params.append('modified', filters.modifiedFrom);
-  }
-  if (filters.modifiedTo) {
-    params.append('modified', filters.modifiedTo);
-  }
   if (filters.documentType && filters.documentType !== 'all') {
     params.append('type', filters.documentType);
   }
