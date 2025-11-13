@@ -167,8 +167,9 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
         : [rdf['dcterms:subject']];
       
       subjects.forEach((subject: any) => {
-        const label = subject['@_rdfs:label'] || subject['#text'] || subject;
-        if (label && typeof label === 'string') {
+        // The text value is in #text, not in @_rdfs:label attribute
+        const label = subject['#text'] || subject;
+        if (label && typeof label === 'string' && label !== 'Rechtsgebied') {
           legalArea.push(label);
         }
       });
@@ -177,7 +178,11 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
     // Extract procedure type
     let procedureType = 'Onbekend';
     if (rdf['psi:procedure']) {
-      procedureType = rdf['psi:procedure']['@_rdfs:label'] || rdf['psi:procedure']['#text'] || rdf['psi:procedure'];
+      // The text value is in #text, not in @_rdfs:label attribute
+      const procValue = rdf['psi:procedure']['#text'] || rdf['psi:procedure'];
+      if (procValue && typeof procValue === 'string') {
+        procedureType = procValue;
+      }
     }
     
     // Extract full text from uitspraak sections
