@@ -138,8 +138,11 @@ Health check endpoint.
 ### Pinecone API
 - **SDK**: `@pinecone-database/pinecone` (Node.js)
 - **Auth**: API key via environment variable `PINECONE_API_KEY`
-- **Operations**: Upsert vectors met metadata
-- **Limits**: Zie Pinecone documentatie
+- **Operations**: 
+  - Inference API voor embedding generation (model: multilingual-e5-large)
+  - Upsert vectors met embeddings en metadata
+- **Embedding Model**: multilingual-e5-large (ondersteunt Nederlands)
+- **Limits**: Zie Pinecone documentatie voor embedding tokens en upsert rates
 
 ## Environment Variables
 
@@ -162,9 +165,14 @@ npm run dev
 
 ## Data Flow
 
-1. **Zoeken**: Gebruiker stelt filters in → Frontend → Backend → Rechtspraak API → ECLI lijst
-2. **Content ophalen**: ECLI lijst → Backend → Rechtspraak content API → XML parsing → Structured records
-3. **Export**: Prepared records → Backend → Pinecone upsert (batched) → Vector database
+1. **Zoeken**: Gebruiker stelt filters in → Frontend → Backend → Rechtspraak API → ECLI lijst (met paginering)
+2. **Content ophalen**: ECLI lijst → Backend → Rechtspraak content API → XML parsing → Structured records met volledige tekst
+3. **Export**: Prepared records → Backend → Pinecone Inference API (embedding generation) → Pinecone upsert (batched) → Vector database
+
+### Paginering
+- Bij eerste zoekopdracht: `from=0`
+- Bij volgende pagina's: `from` wordt verhoogd met `batchSize`
+- Gebruiker kan steeds meer resultaten ophalen door opnieuw te zoeken
 
 ## Schema Types
 
@@ -223,4 +231,10 @@ Zie `attached_assets/` voor:
 
 ## Laatste Update
 
-13 november 2024 - Volledige implementatie met Nederlandse interface
+13 november 2024 - Volledige implementatie met:
+- Nederlandse interface (alle teksten in het Nederlands)
+- Rechtspraak Open Data API integratie met XML parsing
+- Pinecone Inference API voor automatische embedding generation
+- Werkende paginering voor grote resultatensets
+- Real-time progress feedback via SSE
+- Robuste error handling voor partial failures

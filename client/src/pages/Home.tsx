@@ -43,6 +43,8 @@ export default function Home() {
       setEcliRecords(prev => [...prev, ...data.records]);
       setTotalResults(data.totalResults);
       setCurrentPage(prev => prev + 1);
+      // Update offset for next fetch
+      setCurrentOffset(prev => prev + filters.batchSize);
       
       toast({
         title: "Uitspraken opgehaald",

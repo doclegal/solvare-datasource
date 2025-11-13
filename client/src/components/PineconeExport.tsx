@@ -50,9 +50,13 @@ export default function PineconeExport({
       <CardContent className="space-y-4">
         <Alert>
           <Info className="h-4 w-4" />
-          <AlertDescription>
-            Zorg ervoor dat je <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> in je Replit Secrets hebt ingesteld voordat je exporteert.
-            De API-sleutel is vereist om te authenticeren met Pinecone.
+          <AlertDescription className="space-y-2">
+            <p>
+              Zorg ervoor dat je <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> in je Replit Secrets hebt ingesteld voordat je exporteert.
+            </p>
+            <p className="text-xs">
+              <strong>Let op:</strong> De app gebruikt Pinecone's Inference API (model: multilingual-e5-large) om automatisch embeddings te genereren. Dit wordt meegerekend in je Pinecone usage.
+            </p>
           </AlertDescription>
         </Alert>
 

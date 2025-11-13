@@ -40,6 +40,9 @@ export async function upsertRecordsToPinecone(
   // Format: index-name-abc123.svc.region.pinecone.io
   const indexName = indexHost.split('.')[0];
   
+  // This implementation uses Pinecone's Inference API to generate embeddings
+  // using the 'multilingual-e5-large' model, which supports Dutch text well.
+  // The embeddings are then uploaded to your Pinecone index.
   const index = pc.index(indexName);
   const targetNamespace = namespace || '';
   
@@ -56,22 +59,38 @@ export async function upsertRecordsToPinecone(
     const batch = records.slice(i, i + batchSize);
     
     try {
-      // Convert records to Pinecone format
-      const vectors = batch.map(record => ({
-        id: record.ecli,
-        values: [], // Empty array - will use Pinecone's inference API
-        metadata: {
-          text: record.fullText,
-          title: record.title,
-          court: record.court,
-          decision_date: record.decisionDate,
-          legal_area: record.legalArea.join(', '),
-          procedure_type: record.procedureType,
-          source_url: record.sourceUrl,
-        },
-      }));
+      // Step 1: Generate embeddings using Pinecone's Inference API
+      const embeddingsResponse = await pc.inference.embed({
+        model: 'multilingual-e5-large',
+        inputs: batch.map(record => record.fullText),
+        parameters: { inputType: 'passage' }
+      });
       
-      // Upsert to Pinecone
+      // Step 2: Prepare vectors with embeddings and metadata
+      const vectors = batch.map((record, idx) => {
+        const embedding = embeddingsResponse.data[idx];
+        
+        // Type guard: ensure we have a dense embedding with values
+        if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
+          throw new Error(`Failed to generate dense embedding for ECLI: ${record.ecli}`);
+        }
+        
+        return {
+          id: record.ecli,
+          values: embedding.values,
+          metadata: {
+            text: record.fullText,
+            title: record.title,
+            court: record.court,
+            decision_date: record.decisionDate,
+            legal_area: record.legalArea.join(', '),
+            procedure_type: record.procedureType,
+            source_url: record.sourceUrl,
+          },
+        };
+      });
+      
+      // Step 3: Upsert vectors with embeddings to Pinecone
       await index.namespace(targetNamespace).upsert(vectors);
       
       progress.processedRecords += batch.length;
