@@ -41,7 +41,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     const searchLower = courtSearch.toLowerCase();
     return instantiesData.filter((inst: any) => 
       inst.naam.toLowerCase().includes(searchLower) ||
-      inst.afkorting.toLowerCase().includes(searchLower)
+      (inst.afkorting && inst.afkorting.toLowerCase().includes(searchLower))
     );
   }, [courtSearch]);
 
@@ -146,13 +146,24 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
                 </SelectTrigger>
                 <SelectContent className="max-h-[300px]">
                   <SelectItem value="all">Alle instanties</SelectItem>
-                  {filteredInstanties.slice(0, 100).map((inst: any) => (
-                    <SelectItem key={inst.afkorting} value={inst.afkorting}>
-                      {inst.naam} ({inst.afkorting})
-                    </SelectItem>
-                  ))}
+                  {filteredInstanties.slice(0, 100).map((inst: any, idx: number) => {
+                    // Use afkorting if available, otherwise use full identifier
+                    // The Rechtspraak API accepts both formats as creator parameter
+                    const value = (inst.afkorting && inst.afkorting.trim()) 
+                      ? inst.afkorting 
+                      : inst.identifier;
+                    const displayName = (inst.afkorting && inst.afkorting.trim())
+                      ? `${inst.naam} (${inst.afkorting})`
+                      : inst.naam;
+                    
+                    return (
+                      <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
+                        {displayName}
+                      </SelectItem>
+                    );
+                  })}
                   {filteredInstanties.length > 100 && (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="_more_results_" disabled>
                       ... en {filteredInstanties.length - 100} meer. Verfijn je zoekopdracht.
                     </SelectItem>
                   )}
