@@ -1,0 +1,273 @@
+You are building a Replit app that helps me ingest Dutch court decisions from the Open Data API of Rechtspraak.nl and prepare them to be stored as vector records in Pinecone.
+
+Please build a complete, working app in Replit with a simple, clear user interface and all necessary backend logic. Focus on what the app must do, not on explaining your own implementation details.
+
+1. Overall goal
+
+The app’s job is to:
+
+Let me pull in court decisions (“uitspraken”) from the Rechtspraak Open Data API in a controlled, repeatable way.
+
+Allow me to filter which decisions are loaded (for example by date range, legal area, court, etc.).
+
+Show me which ECLI codes have been fetched.
+
+Turn each fetched decision into a clean, structured “record” (ready for vectorization and upsert to Pinecone).
+
+Let me send those records in batches to a Pinecone index so that a separate app can later perform semantic search over all decisions.
+
+The app is only for ingestion / preparation. It does not need to implement the semantic search UI itself—that will be done by another app.
+
+2. User interface requirements
+
+Create a simple web UI with:
+
+Section: Rechtspraak filter & fetch controls
+
+A numeric input for:
+
+“Number of decisions per fetch” (this controls how many decisions to request from the Rechtspraak API in one go or per page).
+
+Filter fields that correspond to the Rechtspraak Open Data API parameters, such as:
+
+Date range for decision date (from–to).
+
+Date/time range for modified/updated date (from–to).
+
+Dropdown or text fields for:
+
+Document type (e.g. “Uitspraak” or “Conclusie”).
+
+Court / instance (instantie / creator).
+
+Legal area / subject (rechtsgebied).
+
+Any other common filter that the Rechtspraak “uitspraken/zoeken” API supports and is practical to expose.
+
+A checkbox or toggle for “only decisions that have full documents available” (equivalent to using the return=DOC behavior in the API).
+
+A Fetch decisions button (single clear button) that:
+
+Uses the specified filters and batch size.
+
+Calls the Rechtspraak search endpoint.
+
+Retrieves a page of matching decisions.
+
+Section: ECLI list
+
+After fetching, show a list or table of the ECLI codes that were returned.
+
+For each ECLI, also show basic metadata if available from the search:
+
+ECLI
+
+Title or short description / summary
+
+Court
+
+Decision date
+
+Show pagination or “Load next page” / “Fetch more” behaviour so I can continue to step through more results using the same filters without starting over.
+
+Section: Record preparation
+
+A button like “Fetch full content and prepare records”.
+
+When clicked, the app should:
+
+For each ECLI currently in the list (or for a selected subset), call the Rechtspraak content endpoint to fetch the full XML for that specific decision.
+
+Parse the result and build a structured internal representation (a “record”).
+
+Show a view of the prepared records:
+
+At least:
+
+ECLI (used as an ID)
+
+Full plain text of the judgment/decision (merged from the XML content)
+
+Title
+
+Court / instance
+
+Decision date
+
+Legal area(s)
+
+Procedure type (if available)
+
+Source URL / link to the decision on Rechtspraak.nl
+
+Optionally show a preview of the extracted text (truncated).
+
+Section: Pinecone export
+
+Inputs for:
+
+Pinecone index host or name (depending on how you choose to connect).
+
+Namespace (optional, but recommended).
+
+A numeric input for batch size when sending records to Pinecone.
+
+A button such as “Send records to Pinecone” that:
+
+Takes the prepared records.
+
+Sends them to Pinecone in batches.
+
+A simple log/output area that shows:
+
+How many records were sent.
+
+Progress of batches.
+
+Any errors encountered.
+
+3. Behavior and data flow
+
+Please implement the following logical flow, in a robust and user-friendly way:
+
+Search in Rechtspraak
+
+Use the Open Data Rechtspraak “uitspraken/zoeken” endpoint to get a list of decisions.
+
+Respect the selected filters and the requested number of results per page/batch.
+
+Support stepping through large result sets using offset/paging parameters (for example, using “from” and “max” style logic so I can continue from where the previous fetch stopped).
+
+Ensure the server is not hammered: implement reasonable pacing and user feedback.
+
+Display ECLI list
+
+After each search call, update the UI to show the newly retrieved ECLI entries.
+
+Allow accumulation of ECLIs across multiple pages (so I can fetch, for example, several pages and then process them all).
+
+Fetch full content for each ECLI
+
+For each selected ECLI:
+
+Call the Rechtspraak “content” endpoint to retrieve metadata + document.
+
+Extract the full decision text from the XML, removing markup so that we end up with readable plain text.
+
+Combine the plain text and relevant metadata into a single structured record per ECLI.
+
+Store these records internally in a list that is clearly visible in the UI.
+
+Prepare records for Pinecone
+
+Each record should be shaped in a way that is suitable for Pinecone vector storage.
+
+Use:
+
+The ECLI as a unique ID.
+
+The full text as the main text field that Pinecone will embed.
+
+A metadata object with fields like:
+
+ecli
+
+title
+
+court
+
+decision_date
+
+legal_area
+
+procedure_type
+
+source_url
+
+The app should be ready either to:
+
+Upsert raw text so Pinecone can use integrated embedding, or
+
+Upsert pre-embedded vectors if embedding is used here.
+
+The exact technical choice is up to you; the important thing is that the app sends records in a structure that Pinecone can store as semantic vector records.
+
+Send to Pinecone in batches
+
+When I click “Send records to Pinecone”, the app should:
+
+Read the Pinecone credentials from Replit Secrets (see section below).
+
+Connect to the specified Pinecone index.
+
+Send the prepared records in batches (using the batch size I entered in the UI).
+
+Handle partial failures gracefully:
+
+Log which records failed.
+
+Allow re-trying failed batches or at least make it visible what went wrong.
+
+After completion, show a summary:
+
+Total records processed.
+
+Total successfully sent.
+
+Any errors.
+
+4. Secrets and configuration in Replit
+
+The app must use Replit “Secrets” (environment variables) for sensitive data. Do not hardcode keys.
+
+Use Secrets for at least:
+
+PINECONE_API_KEY
+
+Any other Pinecone-related values that should not be public (for example, project or environment if needed).
+
+The UI should explain (in a short help text) that the user must set these values in Replit’s Secrets panel before using the Pinecone export feature.
+
+5. UX & reliability details
+
+Provide clear labels, helper text, and error messages so a non-technical user understands what is happening.
+
+Show loading states when:
+
+Fetching decisions from Rechtspraak.
+
+Fetching full content for ECLI codes.
+
+Sending records to Pinecone.
+
+Make it easy to:
+
+Reset filters.
+
+Clear the current ECLI list.
+
+Clear the prepared records list.
+
+Handle common error cases from the Rechtspraak API and Pinecone gracefully:
+
+Connection errors.
+
+Invalid parameters.
+
+Too many requests or rate limiting.
+
+6. Summary of what this app must enable
+
+After the app is built and running, I want to be able to:
+
+Choose filters and batch size.
+
+Click one button to fetch a set of Rechtspraak decisions and see their ECLI codes.
+
+Click another button to fetch full decision content and turn them into structured records.
+
+Click a final button to send those records in batches to Pinecone, using credentials stored in Replit Secrets.
+
+End up with a Pinecone index that contains all decisions as vector records, ready for semantic search from another app.
+
+Please implement the complete app in Replit according to this description.
