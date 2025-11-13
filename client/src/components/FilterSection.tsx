@@ -156,6 +156,11 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
                       ? `${inst.naam} (${inst.afkorting})`
                       : inst.naam;
                     
+                    // Skip if value is empty or undefined (SelectItem requires a non-empty value)
+                    if (!value || value.trim() === '') {
+                      return null;
+                    }
+                    
                     return (
                       <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
                         {displayName}
