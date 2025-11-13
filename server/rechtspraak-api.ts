@@ -24,14 +24,8 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   const params = new URLSearchParams();
   
   // Add filters as query parameters
-  // Date parameter should be a range: date=2020-01-01,2020-12-31
-  if (filters.dateFrom && filters.dateTo) {
-    params.append('date', `${filters.dateFrom},${filters.dateTo}`);
-  } else if (filters.dateFrom) {
-    // If only dateFrom is provided, use it as both start and end
-    params.append('date', `${filters.dateFrom},${filters.dateFrom}`);
-  }
-  // Note: if only dateTo is provided, we ignore it (API requires a start date)
+  // NOTE: Date filtering is temporarily disabled - the API returns 400 for date parameters
+  // TODO: Research correct date parameter format from official documentation
   
   if (filters.documentType && filters.documentType !== 'all') {
     params.append('type', filters.documentType);
