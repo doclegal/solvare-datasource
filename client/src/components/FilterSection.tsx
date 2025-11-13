@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, RotateCcw } from "lucide-react";
+import instantiesData from "@/data/instanties.json";
 
 interface FilterSectionProps {
   onFetch: (filters: FilterParams) => void;
@@ -29,8 +30,20 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const [dateTo, setDateTo] = useState("");
   const [documentType, setDocumentType] = useState("");
   const [court, setCourt] = useState("");
+  const [courtSearch, setCourtSearch] = useState("");
   const [legalArea, setLegalArea] = useState("");
   const [fullDocumentsOnly, setFullDocumentsOnly] = useState(false);
+
+  // Filter instanties based on search
+  const filteredInstanties = useMemo(() => {
+    if (!courtSearch) return instantiesData;
+    
+    const searchLower = courtSearch.toLowerCase();
+    return instantiesData.filter((inst: any) => 
+      inst.naam.toLowerCase().includes(searchLower) ||
+      inst.afkorting.toLowerCase().includes(searchLower)
+    );
+  }, [courtSearch]);
 
   const handleFetch = () => {
     onFetch({
@@ -50,6 +63,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     setDateTo("");
     setDocumentType("");
     setCourt("");
+    setCourtSearch("");
     setLegalArea("");
     setFullDocumentsOnly(false);
     onReset();
@@ -118,20 +132,33 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
           <div className="space-y-2">
             <Label htmlFor="court">Instantie</Label>
-            <Select value={court} onValueChange={setCourt}>
-              <SelectTrigger id="court" data-testid="select-court">
-                <SelectValue placeholder="Selecteer instantie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle instanties</SelectItem>
-                <SelectItem value="RBDHA">Rechtbank Den Haag</SelectItem>
-                <SelectItem value="RBAMS">Rechtbank Amsterdam</SelectItem>
-                <SelectItem value="RBROT">Rechtbank Rotterdam</SelectItem>
-                <SelectItem value="GHARL">Gerechtshof Arnhem-Leeuwarden</SelectItem>
-                <SelectItem value="GHSGR">Gerechtshof 's-Gravenhage</SelectItem>
-                <SelectItem value="HR">Hoge Raad</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="space-y-2">
+              <Input
+                id="court-search"
+                placeholder="Zoek instantie..."
+                value={courtSearch}
+                onChange={(e) => setCourtSearch(e.target.value)}
+                data-testid="input-court-search"
+              />
+              <Select value={court} onValueChange={setCourt}>
+                <SelectTrigger id="court" data-testid="select-court">
+                  <SelectValue placeholder="Selecteer instantie" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  <SelectItem value="all">Alle instanties</SelectItem>
+                  {filteredInstanties.slice(0, 100).map((inst: any) => (
+                    <SelectItem key={inst.afkorting} value={inst.afkorting}>
+                      {inst.naam} ({inst.afkorting})
+                    </SelectItem>
+                  ))}
+                  {filteredInstanties.length > 100 && (
+                    <SelectItem value="" disabled>
+                      ... en {filteredInstanties.length - 100} meer. Verfijn je zoekopdracht.
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
