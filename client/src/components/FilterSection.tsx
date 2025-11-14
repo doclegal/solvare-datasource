@@ -18,9 +18,7 @@ export interface FilterParams {
   batchSize: number;
   dateFrom: string;
   dateTo: string;
-  documentType: string;
   court: string;
-  legalArea: string;
   fullDocumentsOnly: boolean;
 }
 
@@ -28,31 +26,15 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const [batchSize, setBatchSize] = useState("50");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [documentType, setDocumentType] = useState("");
   const [court, setCourt] = useState("");
-  const [courtSearch, setCourtSearch] = useState("");
-  const [legalArea, setLegalArea] = useState("");
   const [fullDocumentsOnly, setFullDocumentsOnly] = useState(false);
-
-  // Filter instanties based on search
-  const filteredInstanties = useMemo(() => {
-    if (!courtSearch) return instantiesData;
-    
-    const searchLower = courtSearch.toLowerCase();
-    return instantiesData.filter((inst: any) => 
-      inst.naam.toLowerCase().includes(searchLower) ||
-      (inst.afkorting && inst.afkorting.toLowerCase().includes(searchLower))
-    );
-  }, [courtSearch]);
 
   const handleFetch = () => {
     onFetch({
       batchSize: parseInt(batchSize) || 50,
       dateFrom,
       dateTo,
-      documentType,
       court,
-      legalArea,
       fullDocumentsOnly,
     });
   };
@@ -61,10 +43,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     setBatchSize("50");
     setDateFrom("");
     setDateTo("");
-    setDocumentType("");
     setCourt("");
-    setCourtSearch("");
-    setLegalArea("");
     setFullDocumentsOnly(false);
     onReset();
   };
@@ -72,8 +51,8 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Rechtspraak Filters & Ophalen</CardTitle>
-        <CardDescription>Stel filters in en haal uitspraken op van de Open Data API</CardDescription>
+        <CardTitle>Civielrecht Uitspraken Ophalen</CardTitle>
+        <CardDescription>Haal civielrechtelijke uitspraken op van rechtbanken, gerechtshoven en Hoge Raad</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
@@ -115,83 +94,34 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label htmlFor="document-type">Documenttype</Label>
-            <Select value={documentType} onValueChange={setDocumentType}>
-              <SelectTrigger id="document-type" data-testid="select-document-type">
-                <SelectValue placeholder="Selecteer type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle types</SelectItem>
-                <SelectItem value="Uitspraak">Uitspraak</SelectItem>
-                <SelectItem value="Conclusie">Conclusie</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="court">Instantie</Label>
-            <div className="space-y-2">
-              <Input
-                id="court-search"
-                placeholder="Zoek instantie..."
-                value={courtSearch}
-                onChange={(e) => setCourtSearch(e.target.value)}
-                data-testid="input-court-search"
-              />
-              <Select value={court} onValueChange={setCourt}>
-                <SelectTrigger id="court" data-testid="select-court">
-                  <SelectValue placeholder="Selecteer instantie" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  <SelectItem value="all">Alle instanties</SelectItem>
-                  {filteredInstanties.slice(0, 100).map((inst: any, idx: number) => {
-                    // Use afkorting if available, otherwise use full identifier
-                    // The Rechtspraak API accepts both formats as creator parameter
-                    const value = (inst.afkorting && inst.afkorting.trim()) 
-                      ? inst.afkorting 
-                      : inst.identifier;
-                    const displayName = (inst.afkorting && inst.afkorting.trim())
-                      ? `${inst.naam} (${inst.afkorting})`
-                      : inst.naam;
-                    
-                    // Skip if value is empty or undefined (SelectItem requires a non-empty value)
-                    if (!value || value.trim() === '') {
-                      return null;
-                    }
-                    
-                    return (
-                      <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
-                        {displayName}
-                      </SelectItem>
-                    );
-                  })}
-                  {filteredInstanties.length > 100 && (
-                    <SelectItem value="_more_results_" disabled>
-                      ... en {filteredInstanties.length - 100} meer. Verfijn je zoekopdracht.
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="legal-area">Rechtsgebied</Label>
-            <Select value={legalArea} onValueChange={setLegalArea}>
-              <SelectTrigger id="legal-area" data-testid="select-legal-area">
-                <SelectValue placeholder="Selecteer rechtsgebied" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alle rechtsgebieden</SelectItem>
-                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#civielRecht">Civiel recht</SelectItem>
-                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#strafRecht">Strafrecht</SelectItem>
-                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#bestuursRecht">Bestuursrecht</SelectItem>
-                <SelectItem value="http://psi.rechtspraak.nl/rechtsgebied#EuropeesRecht">Europees recht</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="court">Instantie</Label>
+          <Select value={court} onValueChange={setCourt}>
+            <SelectTrigger id="court" data-testid="select-court">
+              <SelectValue placeholder="Selecteer instantie" />
+            </SelectTrigger>
+            <SelectContent className="max-h-[300px]">
+              <SelectItem value="all">Alle instanties</SelectItem>
+              {instantiesData.map((inst: any, idx: number) => {
+                const value = (inst.afkorting && inst.afkorting.trim()) 
+                  ? inst.afkorting 
+                  : inst.identifier;
+                const displayName = (inst.afkorting && inst.afkorting.trim())
+                  ? `${inst.naam} (${inst.afkorting})`
+                  : inst.naam;
+                
+                if (!value || value.trim() === '') {
+                  return null;
+                }
+                
+                return (
+                  <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
+                    {displayName}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center space-x-2">
