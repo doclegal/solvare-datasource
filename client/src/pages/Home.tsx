@@ -90,18 +90,21 @@ export default function Home() {
         return [...prev, ...newRecords];
       });
       
+      // Build toast message with filtering info
+      let description = `${contentData.successful} civiele uitspraken succesvol verwerkt.`;
+      if (contentData.filtered && contentData.filtered > 0) {
+        description += ` ${contentData.filtered} niet-civiele ${contentData.filtered === 1 ? 'uitspraak' : 'uitspraken'} uitgefilterd.`;
+      }
+      if (contentData.failed > 0) {
+        description += ` ${contentData.failed} ${contentData.failed === 1 ? 'fout' : 'fouten'}.`;
+      }
+      description += ` ${searchData.totalResults} totaal beschikbaar.`;
+      
       toast({
         title: "Uitspraken opgehaald",
-        description: `${contentData.successful} van ${searchData.records.length} uitspraken succesvol verwerkt. ${searchData.totalResults} totaal beschikbaar.`,
+        description,
+        variant: contentData.failed > 0 ? "destructive" : "default",
       });
-      
-      if (contentData.failed > 0) {
-        toast({
-          variant: "destructive",
-          title: "Enkele fouten",
-          description: `${contentData.failed} uitspraken konden niet worden opgehaald.`,
-        });
-      }
     } catch (error: any) {
       toast({
         variant: "destructive",

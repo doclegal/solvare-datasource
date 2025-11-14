@@ -181,6 +181,150 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   }
 }
 
+/**
+ * Normalize URI for comparison (lowercase, remove trailing slash, fragment, query)
+ */
+function normalizeUri(uri: string): string {
+  return uri
+    .toLowerCase()
+    .replace(/[#?].*$/, '') // Remove fragment and query
+    .replace(/\/$/, '');     // Remove trailing slash
+}
+
+/**
+ * Normalize label for comparison (lowercase, split on semicolons, trim)
+ */
+function normalizeLabel(label: string): string[] {
+  return label
+    .toLowerCase()
+    .split(/[;,]/)  // Split on semicolon or comma
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+/**
+ * Known civil law URI's from civil-subcategories.json
+ */
+const CIVIL_LAW_URIS = new Set(
+  civilSubcategories.map(cat => normalizeUri(cat.value))
+);
+
+/**
+ * Known civil law labels (keywords that indicate civil law)
+ * More specific than just "civiel" to avoid false positives
+ */
+const CIVIL_LAW_LABELS = new Set([
+  'civiel recht',
+  'civielrecht',
+  'arbeidsrecht',
+  'huurrecht',
+  'goederenrecht',
+  'verbintenissenrecht',
+  'personen- en familierecht',
+  'insolventierecht',
+  'ondernemingsrecht',
+  'intellectueel eigendomsrecht',
+  'intellectueel eigendom',
+  'europees civiel recht',
+]);
+
+/**
+ * Check if legal area contains civil law
+ * Returns { isCivil, subjects } where:
+ * - isCivil: true if at least one civil subject is found
+ * - subjects: extracted subject URIs and labels
+ */
+function checkCivilLegalArea(subjectData: any): { isCivil: boolean; subjects: Array<{ uri?: string; label?: string }> } {
+  const subjects: Array<{ uri?: string; label?: string }> = [];
+  
+  if (!subjectData) {
+    return { isCivil: false, subjects: [] };
+  }
+  
+  const subjectArray = Array.isArray(subjectData) ? subjectData : [subjectData];
+  
+  for (const subject of subjectArray) {
+    const uri = subject['@_resourceIdentifier'] || subject['@_rdf:resource'];
+    const label = subject['#text'] || subject;
+    
+    const subjectInfo: { uri?: string; label?: string } = {};
+    
+    if (uri && typeof uri === 'string') {
+      subjectInfo.uri = uri;
+    }
+    
+    if (label && typeof label === 'string' && label.trim() && label !== 'Rechtsgebied') {
+      subjectInfo.label = label.trim();
+    }
+    
+    if (subjectInfo.uri || subjectInfo.label) {
+      subjects.push(subjectInfo);
+    }
+  }
+  
+  // Check if any subject is civil law
+  let hasCivilSubject = false;
+  
+  // Known non-civil keywords that should block acceptance
+  const nonCivilKeywords = [
+    'strafrecht',
+    'bestuursrecht',
+    'belastingrecht',
+    'omgevingsrecht',
+    'vreemdelingenrecht',
+  ];
+  
+  for (const subject of subjects) {
+    // Check URI first (most reliable)
+    if (subject.uri) {
+      const normalizedUri = normalizeUri(subject.uri);
+      
+      // Check if it's a known civil law URI
+      if (CIVIL_LAW_URIS.has(normalizedUri)) {
+        hasCivilSubject = true;
+        break; // Found civil URI, we're done
+      }
+      
+      // Check if it's explicitly non-civil URI
+      const uriLower = normalizedUri.toLowerCase();
+      for (const keyword of nonCivilKeywords) {
+        if (uriLower.includes(keyword)) {
+          // Non-civil URI found, skip this case entirely
+          return { isCivil: false, subjects };
+        }
+      }
+    }
+    
+    // Fallback: check labels if no URI match yet
+    if (!hasCivilSubject && subject.label) {
+      const normalizedLabels = normalizeLabel(subject.label);
+      
+      // Check each label part for civil law indicators
+      for (const labelPart of normalizedLabels) {
+        // First check for non-civil keywords - these are blocking
+        for (const keyword of nonCivilKeywords) {
+          if (labelPart.includes(keyword)) {
+            // Non-civil label found, skip this case entirely
+            return { isCivil: false, subjects };
+          }
+        }
+        
+        // Then check for civil law labels
+        for (const civilLabel of CIVIL_LAW_LABELS) {
+          if (labelPart === civilLabel || labelPart.includes(civilLabel)) {
+            hasCivilSubject = true;
+            break;
+          }
+        }
+        
+        if (hasCivilSubject) break;
+      }
+    }
+  }
+  
+  return { isCivil: hasCivilSubject, subjects };
+}
+
 export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord> {
   const url = `${RECHTSPRAAK_BASE_URL}/content?id=${encodeURIComponent(ecli)}`;
   
@@ -235,28 +379,22 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       }
     }
     
-    // Extract legal area from mainDesc
-    const legalArea: string[] = [];
+    // Extract and validate legal area
+    const legalAreaCheck = checkCivilLegalArea(mainDesc['dcterms:subject']);
     
-    if (mainDesc['dcterms:subject']) {
-      const subjects = Array.isArray(mainDesc['dcterms:subject']) 
-        ? mainDesc['dcterms:subject'] 
-        : [mainDesc['dcterms:subject']];
-      
-      subjects.forEach((subject: any) => {
-        // Get the text content
-        const label = subject['#text'] || subject;
-        
-        if (label && typeof label === 'string') {
-          const trimmedLabel = label.trim();
-          if (trimmedLabel && trimmedLabel !== 'Rechtsgebied') {
-            legalArea.push(trimmedLabel);
-          }
-        }
-      });
+    // Build legalArea array from extracted subjects
+    const legalArea: string[] = legalAreaCheck.subjects
+      .filter(s => s.label)
+      .map(s => s.label as string);
+    
+    console.log(`[${ecli}] Legal area subjects:`, legalAreaCheck.subjects);
+    console.log(`[${ecli}] Is civil:`, legalAreaCheck.isCivil);
+    
+    // Validate that this is actually a civil law case
+    if (!legalAreaCheck.isCivil) {
+      const subjectLabels = legalAreaCheck.subjects.map(s => s.label || s.uri || 'Unknown').join(', ');
+      throw new Error(`Niet-civiele zaak: ${subjectLabels || 'Geen rechtsgebied gevonden'}`);
     }
-    
-    console.log(`[${ecli}] Legal area extracted:`, legalArea);
     
     // Extract procedure type from mainDesc
     let procedureType = 'Onbekend';

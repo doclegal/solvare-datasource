@@ -31,6 +31,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const results = [];
       const errors = [];
+      const filteredOut: Array<{ ecli: string; reason: string }> = [];
 
       // Fetch content for each ECLI with rate limiting
       for (let i = 0; i < eclis.length; i++) {
@@ -45,6 +46,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } catch (error: any) {
           console.error(`Error fetching ${ecli}:`, error);
+          // Track non-civil cases separately
+          if (error.message && error.message.includes('Niet-civiele zaak')) {
+            filteredOut.push({
+              ecli,
+              reason: error.message.replace('Niet-civiele zaak: ', ''),
+            });
+            continue;
+          }
           errors.push({
             ecli,
             error: error.message,
@@ -56,9 +65,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         records: results,
         errors,
+        filteredOut,
         total: eclis.length,
         successful: results.length,
         failed: errors.length,
+        filtered: filteredOut.length,
       });
     } catch (error: any) {
       console.error('Error in /api/rechtspraak/content:', error);
