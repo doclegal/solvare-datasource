@@ -16,25 +16,31 @@ interface FilterSectionProps {
 
 export interface FilterParams {
   batchSize: number;
-  dateFrom: string;
-  dateTo: string;
+  datePeriod: string;
   court: string;
   civilSubcategory: string;
   fullDocumentsOnly: boolean;
 }
 
+const datePeriodOptions = [
+  { value: "all", label: "Alles" },
+  { value: "10years", label: "Afgelopen tien jaar" },
+  { value: "5years", label: "Afgelopen vijf jaar" },
+  { value: "1year", label: "Afgelopen jaar" },
+  { value: "1month", label: "Afgelopen maand" },
+  { value: "1week", label: "Afgelopen week" },
+];
+
 export default function FilterSection({ onFetch, onReset, isLoading = false }: FilterSectionProps) {
   const [batchSize, setBatchSize] = useState("50");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [datePeriod, setDatePeriod] = useState("all");
   const [court, setCourt] = useState("");
   const [civilSubcategory, setCivilSubcategory] = useState("all");
 
   const handleFetch = () => {
     onFetch({
       batchSize: parseInt(batchSize) || 50,
-      dateFrom,
-      dateTo,
+      datePeriod,
       court,
       civilSubcategory,
       fullDocumentsOnly: true, // Always filter for full documents
@@ -43,8 +49,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
   const handleReset = () => {
     setBatchSize("50");
-    setDateFrom("");
-    setDateTo("");
+    setDatePeriod("all");
     setCourt("");
     setCivilSubcategory("all");
     onReset();
@@ -75,28 +80,21 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="date-from">Uitspraakdatum vanaf</Label>
-            <Input
-              id="date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              data-testid="input-date-from"
-            />
+            <Label htmlFor="date-period">Periode</Label>
+            <Select value={datePeriod} onValueChange={setDatePeriod}>
+              <SelectTrigger id="date-period" data-testid="select-date-period">
+                <SelectValue placeholder="Selecteer periode" />
+              </SelectTrigger>
+              <SelectContent>
+                {datePeriodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="date-to">Uitspraakdatum tot</Label>
-            <Input
-              id="date-to"
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              data-testid="input-date-to"
-            />
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
+          
           <div className="space-y-2">
             <Label htmlFor="civil-subcategory">Type civiele zaak</Label>
             <Select value={civilSubcategory} onValueChange={setCivilSubcategory}>
@@ -112,7 +110,9 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
               </SelectContent>
             </Select>
           </div>
-          
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="court">Instantie</Label>
             <Select value={court} onValueChange={setCourt}>

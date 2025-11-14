@@ -18,15 +18,53 @@ interface RechtspraakSearchResponse {
   };
 }
 
+/**
+ * Convert a date period string to actual from/to dates
+ */
+function convertPeriodToDates(period: string): { dateFrom?: string; dateTo?: string } {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  
+  if (period === 'all' || !period) {
+    return {}; // No date filter
+  }
+  
+  let fromDate = new Date();
+  
+  switch (period) {
+    case '1week':
+      fromDate.setDate(now.getDate() - 7);
+      break;
+    case '1month':
+      fromDate.setMonth(now.getMonth() - 1);
+      break;
+    case '1year':
+      fromDate.setFullYear(now.getFullYear() - 1);
+      break;
+    case '5years':
+      fromDate.setFullYear(now.getFullYear() - 5);
+      break;
+    case '10years':
+      fromDate.setFullYear(now.getFullYear() - 10);
+      break;
+    default:
+      return {}; // Unknown period, no filter
+  }
+  
+  return {
+    dateFrom: fromDate.toISOString().split('T')[0],
+    dateTo: today,
+  };
+}
+
 export async function searchDecisions(filters: SearchFilters): Promise<{
   records: EcliRecord[];
   totalResults: number;
 }> {
   const params = new URLSearchParams();
   
-  // Add filters as query parameters
-  // NOTE: Date filtering is temporarily disabled - the API returns 400 for date parameters
-  // TODO: Research correct date parameter format from official documentation
+  // Convert period to actual dates
+  const { dateFrom, dateTo } = convertPeriodToDates(filters.datePeriod || 'all');
   
   // Filter on Civielrecht or specific subcategory
   const subcategoryId = filters.civilSubcategory || 'all';
@@ -39,6 +77,14 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   
   if (filters.court && filters.court !== 'all') {
     params.append('creator', filters.court);
+  }
+  
+  // Add date filters if specified
+  if (dateFrom) {
+    params.append('date', dateFrom);
+  }
+  if (dateTo) {
+    params.append('modified', dateTo);
   }
   
   // Always filter for full documents only

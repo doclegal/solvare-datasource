@@ -27,8 +27,7 @@ export type PreparedRecord = z.infer<typeof preparedRecordSchema>;
 // Search filters schema - civielrecht with subcategories
 export const searchFiltersSchema = z.object({
   batchSize: z.number().default(50),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  datePeriod: z.string().optional().default("all"),
   court: z.string().optional(),
   civilSubcategory: z.string().optional(),
   fullDocumentsOnly: z.boolean().default(false),
