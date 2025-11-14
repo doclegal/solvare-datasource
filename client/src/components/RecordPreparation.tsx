@@ -56,10 +56,10 @@ export default function RecordPreparation({
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>Records Voorbereiden</CardTitle>
+            <CardTitle>Voorbereide Records</CardTitle>
             <CardDescription>
-              Haal volledige inhoud op en bereid gestructureerde records voor Pinecone voor
-              {ecliCount > 0 && ` • ${ecliCount} ECLI-codes beschikbaar`}
+              Civielrechtelijke uitspraken met volledige tekst voor Pinecone upload
+              {preparedRecords.length > 0 && ` • ${preparedRecords.length} records voorbereid`}
             </CardDescription>
           </div>
           {preparedRecords.length > 0 && (
@@ -71,20 +71,9 @@ export default function RecordPreparation({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button
-          onClick={onFetchContent}
-          disabled={ecliCount === 0 || isLoading}
-          variant="outline"
-          className="w-full md:w-auto"
-          data-testid="button-fetch-content"
-        >
-          <FileText className="mr-2 h-4 w-4" />
-          {isLoading ? "Inhoud Ophalen..." : `Volledige Inhoud Ophalen (${ecliCount} uitspraken)`}
-        </Button>
-
         {preparedRecords.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p>Nog geen records voorbereid. Haal eerst ECLI-uitspraken op en klik dan op "Volledige Inhoud Ophalen"</p>
+            <p>Gebruik de filters hierboven om civielrechtelijke uitspraken op te halen. De volledige tekst wordt automatisch opgehaald en hier getoond.</p>
           </div>
         ) : (
           <div className="space-y-3">

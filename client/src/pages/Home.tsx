@@ -1,7 +1,6 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
-import EcliTable, { type EcliRecord } from "@/components/EcliTable";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
 import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { useToast } from "@/hooks/use-toast";
@@ -9,12 +8,9 @@ import { apiRequest } from "@/lib/queryClient";
 
 export default function Home() {
   // State management
-  const [ecliRecords, setEcliRecords] = useState<EcliRecord[]>([]);
   const [preparedRecords, setPreparedRecords] = useState<PreparedRecord[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
   const [currentOffset, setCurrentOffset] = useState(0);
-  const [isFetchingEcli, setIsFetchingEcli] = useState(false);
+  const [totalResults, setTotalResults] = useState(0);
   const [isFetchingContent, setIsFetchingContent] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
@@ -26,10 +22,11 @@ export default function Home() {
   };
 
   const handleFetchDecisions = async (filters: FilterParams) => {
-    setIsFetchingEcli(true);
+    setIsFetchingContent(true);
     
     try {
-      const response = await apiRequest(
+      // Step 1: Search for ECLIs
+      const searchResponse = await apiRequest(
         'POST',
         '/api/rechtspraak/search',
         {
@@ -38,100 +35,67 @@ export default function Home() {
         }
       );
 
-      const data = await response.json();
+      const searchData = await searchResponse.json();
       
-      setEcliRecords(prev => [...prev, ...data.records]);
-      setTotalResults(data.totalResults);
-      setCurrentPage(prev => prev + 1);
-      // Update offset for next fetch
+      if (searchData.records.length === 0) {
+        toast({
+          title: "Geen resultaten",
+          description: "Geen uitspraken gevonden met deze filters.",
+        });
+        return;
+      }
+      
+      setTotalResults(searchData.totalResults);
+      
+      // Step 2: Immediately fetch full content for found ECLIs
+      const eclis = searchData.records.map((r: any) => r.ecli);
+      
+      const contentResponse = await apiRequest(
+        'POST',
+        '/api/rechtspraak/content',
+        { eclis }
+      );
+
+      const contentData = await contentResponse.json();
+      
+      // Only increment offset after successful content fetch
       setCurrentOffset(prev => prev + filters.batchSize);
+      
+      // Deduplicate records by ECLI
+      setPreparedRecords(prev => {
+        const existingEclis = new Set(prev.map(r => r.ecli));
+        const newRecords = contentData.records.filter((r: PreparedRecord) => !existingEclis.has(r.ecli));
+        return [...prev, ...newRecords];
+      });
       
       toast({
         title: "Uitspraken opgehaald",
-        description: `${data.records.length} uitspraken toegevoegd. Totaal: ${data.totalResults} beschikbaar.`,
+        description: `${contentData.successful} van ${searchData.records.length} uitspraken succesvol verwerkt. ${searchData.totalResults} totaal beschikbaar.`,
       });
+      
+      if (contentData.failed > 0) {
+        toast({
+          variant: "destructive",
+          title: "Enkele fouten",
+          description: `${contentData.failed} uitspraken konden niet worden opgehaald.`,
+        });
+      }
     } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Fout bij ophalen",
         description: error.message || "Kon uitspraken niet ophalen",
       });
+      // Don't increment offset on error - user can retry the same batch
     } finally {
-      setIsFetchingEcli(false);
+      setIsFetchingContent(false);
     }
   };
 
   const handleResetFilters = () => {
-    setEcliRecords([]);
     setPreparedRecords([]);
-    setCurrentPage(1);
     setTotalResults(0);
     setCurrentOffset(0);
-  };
-
-  const handleLoadMore = async () => {
-    // This would need to store the last filter state to reuse
-    toast({
-      title: "Meer laden",
-      description: "Gebruik de 'Volgende' knop om door pagina's te bladeren",
-    });
-  };
-
-  const handlePrevious = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNext = () => {
-    setCurrentPage(currentPage + 1);
-  };
-
-  const handleClearEcli = () => {
-    setEcliRecords([]);
-    setPreparedRecords([]);
-    setCurrentPage(1);
-    setTotalResults(0);
-    setCurrentOffset(0);
-  };
-
-  const handleFetchContent = async () => {
-    setIsFetchingContent(true);
-
-    try {
-      const eclis = ecliRecords.map(r => r.ecli);
-      
-      const response = await apiRequest(
-        'POST',
-        '/api/rechtspraak/content',
-        { eclis }
-      );
-
-      const data = await response.json();
-      
-      setPreparedRecords(data.records);
-      
-      toast({
-        title: "Inhoud opgehaald",
-        description: `${data.successful} van ${data.total} uitspraken succesvol verwerkt.`,
-      });
-      
-      if (data.failed > 0) {
-        toast({
-          variant: "destructive",
-          title: "Enkele fouten",
-          description: `${data.failed} uitspraken konden niet worden opgehaald.`,
-        });
-      }
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Fout bij ophalen inhoud",
-        description: error.message || "Kon volledige inhoud niet ophalen",
-      });
-    } finally {
-      setIsFetchingContent(false);
-    }
   };
 
   const handleClearRecords = () => {
@@ -230,24 +194,13 @@ export default function Home() {
         <FilterSection
           onFetch={handleFetchDecisions}
           onReset={handleResetFilters}
-          isLoading={isFetchingEcli}
-        />
-
-        <EcliTable
-          records={ecliRecords}
-          currentPage={currentPage}
-          totalResults={totalResults}
-          onLoadMore={handleLoadMore}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-          onClear={handleClearEcli}
-          isLoading={isFetchingEcli}
+          isLoading={isFetchingContent}
         />
 
         <RecordPreparation
-          ecliCount={ecliRecords.length}
+          ecliCount={preparedRecords.length}
           preparedRecords={preparedRecords}
-          onFetchContent={handleFetchContent}
+          onFetchContent={() => {}}
           onClear={handleClearRecords}
           isLoading={isFetchingContent}
         />
