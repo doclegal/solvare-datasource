@@ -1,9 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { searchFiltersSchema, exportConfigSchema, type PreparedRecord } from "@shared/schema";
+import { searchFiltersSchema, exportConfigSchema, preparedRecordSchema, type PreparedRecord, type PreparedBatch } from "@shared/schema";
 import { searchDecisions, fetchDecisionContent } from "./rechtspraak-api";
 import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
+import { storage } from "./storage";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Search Rechtspraak API
@@ -79,15 +80,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Prepare chunks from prepared records
-  app.post('/api/rechtspraak/prepare-chunks', async (req: Request, res: Response) => {
+  // Create or update batch from records (for accumulated multi-fetch workflow)
+  app.post('/api/rechtspraak/create-batch', async (req: Request, res: Response) => {
     try {
-      const { records } = req.body;
+      const { records, batchId: existingBatchId } = req.body;
       
       if (!Array.isArray(records) || records.length === 0) {
         return res.status(400).json({ error: 'Records lijst is vereist' });
       }
 
+      // Validate records schema
+      try {
+        records.forEach((record: any) => {
+          preparedRecordSchema.parse(record);
+        });
+      } catch (validationError: any) {
+        return res.status(400).json({ 
+          error: 'Ongeldige record data', 
+          details: validationError.message 
+        });
+      }
+
+      let batch: PreparedBatch;
+      if (existingBatchId) {
+        try {
+          batch = storage.updateBatch(existingBatchId, records);
+          console.log(`Updated batch ${existingBatchId} with ${records.length} records`);
+        } catch (error: any) {
+          // If batch doesn't exist, create new one
+          batch = storage.createBatch(records);
+          console.log(`Batch ${existingBatchId} not found, created new batch ${batch.batchId} with ${records.length} records`);
+        }
+      } else {
+        batch = storage.createBatch(records);
+        console.log(`Created new batch ${batch.batchId} with ${records.length} records`);
+      }
+      
+      res.json({
+        success: true,
+        batchId: batch.batchId,
+        recordCount: records.length,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/rechtspraak/create-batch:', error);
+      res.status(500).json({ 
+        error: error.message || 'Fout bij aanmaken van batch' 
+      });
+    }
+  });
+
+  // Prepare chunks from prepared records using batchId
+  app.post('/api/rechtspraak/prepare-chunks', async (req: Request, res: Response) => {
+    try {
+      const { batchId } = req.body;
+      
+      if (!batchId) {
+        return res.status(400).json({ error: 'batchId is vereist' });
+      }
+
+      // Retrieve records from server-side storage
+      const batch = storage.getBatch(batchId);
+      if (!batch) {
+        return res.status(404).json({ 
+          error: 'Batch niet gevonden. Records zijn mogelijk verlopen of verwijderd.' 
+        });
+      }
+
+      const records = batch.records;
       const allChunks = [];
       const chunksByEcli: Record<string, any> = {};
 
@@ -190,6 +249,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cleanup batch (manual deletion)
+  app.delete('/api/rechtspraak/batch/:batchId', (req: Request, res: Response) => {
+    const { batchId } = req.params;
+    storage.deleteBatch(batchId);
+    res.json({ success: true, message: 'Batch verwijderd' });
+  });
+
+  // Cleanup old batches (manual trigger)
+  app.post('/api/rechtspraak/cleanup-batches', (req: Request, res: Response) => {
+    const maxAgeMs = req.body.maxAgeMs || 30 * 60 * 1000; // Default: 30 minutes
+    const deletedCount = storage.cleanupOldBatches(maxAgeMs);
+    res.json({ 
+      success: true, 
+      deletedCount,
+      message: `${deletedCount} oude batches verwijderd` 
+    });
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 
@@ -198,6 +275,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       pineconeConfigured: !!process.env.PINECONE_API_KEY,
     });
   });
+
+  // Auto-cleanup old batches every 10 minutes
+  setInterval(() => {
+    const deletedCount = storage.cleanupOldBatches(30 * 60 * 1000);
+    if (deletedCount > 0) {
+      console.log(`Auto-cleanup: ${deletedCount} oude batches verwijderd`);
+    }
+  }, 10 * 60 * 1000);
 
   const httpServer = createServer(app);
   return httpServer;

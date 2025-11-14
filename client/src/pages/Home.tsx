@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
@@ -26,6 +26,7 @@ interface ChunksByEcli {
 export default function Home() {
   // State management
   const [preparedRecords, setPreparedRecords] = useState<PreparedRecord[]>([]);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const [chunkedData, setChunkedData] = useState<{ chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null>(null);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
@@ -34,6 +35,12 @@ export default function Home() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
   const { toast } = useToast();
+  
+  // Use refs to prevent race conditions from concurrent fetches
+  const accumulatedRecordsRef = useRef<PreparedRecord[]>([]);
+  const currentOffsetRef = useRef(0);
+  const fetchLockRef = useRef(false);
+  const activeFiltersRef = useRef<string | null>(null);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString('nl-NL');
@@ -41,19 +48,61 @@ export default function Home() {
   };
 
   const handleFetchDecisions = async (filters: FilterParams) => {
+    // Atomic lock acquisition (prevents overlapping invocations)
+    const acquireLock = () => {
+      if (fetchLockRef.current) return false;
+      fetchLockRef.current = true;
+      return true;
+    };
+    
+    if (!acquireLock()) {
+      console.log('[Fetch guard] Request ignored - fetch already in progress');
+      return;
+    }
+    
     setIsFetchingContent(true);
     
-    // Clear chunks when fetching new records
-    setChunkedData(null);
-    
     try {
+      // Detect filter changes and reset accumulation
+      const serializedFilters = JSON.stringify(filters);
+      if (activeFiltersRef.current !== serializedFilters) {
+        console.log('[Filter change] Resetting accumulation');
+        
+        // Delete server-side batch if exists
+        if (batchId) {
+          try {
+            await apiRequest('DELETE', `/api/rechtspraak/batch/${batchId}`);
+            console.log(`[Filter change] Deleted server batch ${batchId}`);
+          } catch (err) {
+            console.warn('[Filter change] Failed to delete batch:', err);
+          }
+        }
+        
+        // Clear client state
+        accumulatedRecordsRef.current = [];
+        currentOffsetRef.current = 0;
+        setBatchId(null);
+        setChunkedData(null);
+        setPreparedRecords([]);
+        setCurrentOffset(0);
+        setTotalResults(0);
+        setExportLogs([]);
+        activeFiltersRef.current = serializedFilters;
+      }
+      
+      // Clear chunks when fetching new records
+      setChunkedData(null);
+      
+      // Use ref for current offset (atomic)
+      const offsetToUse = currentOffsetRef.current;
+      
       // Step 1: Search for ECLIs
       const searchResponse = await apiRequest(
         'POST',
         '/api/rechtspraak/search',
         {
           ...filters,
-          from: currentOffset,
+          from: offsetToUse,
         }
       );
 
@@ -67,7 +116,6 @@ export default function Home() {
         return;
       }
       
-      setTotalResults(searchData.totalResults);
       
       // Step 2: Immediately fetch full content for found ECLIs
       const eclis = searchData.records.map((r: any) => r.ecli);
@@ -80,15 +128,40 @@ export default function Home() {
 
       const contentData = await contentResponse.json();
       
-      // Only increment offset after successful content fetch
-      setCurrentOffset(prev => prev + filters.batchSize);
+      // Deduplicate and accumulate records
+      const existingEclis = new Set(accumulatedRecordsRef.current.map(r => r.ecli));
+      const newRecords = contentData.records.filter((r: PreparedRecord) => !existingEclis.has(r.ecli));
       
-      // Deduplicate records by ECLI
-      setPreparedRecords(prev => {
-        const existingEclis = new Set(prev.map(r => r.ecli));
-        const newRecords = contentData.records.filter((r: PreparedRecord) => !existingEclis.has(r.ecli));
-        return [...prev, ...newRecords];
-      });
+      // Only advance offset if we got new unique records (prevents pagination corruption)
+      if (newRecords.length > 0) {
+        const accumulatedRecords = [...accumulatedRecordsRef.current, ...newRecords];
+        
+        // Update refs atomically
+        accumulatedRecordsRef.current = accumulatedRecords;
+        const nextOffset = currentOffsetRef.current + filters.batchSize;
+        currentOffsetRef.current = nextOffset;
+        
+        // Update state for UI
+        setPreparedRecords(accumulatedRecords);
+        setCurrentOffset(nextOffset);
+        
+        // Update totalResults to reflect actual accumulated unique records
+        setTotalResults(accumulatedRecords.length);
+        
+        // Create or update batch with ALL accumulated records
+        const batchResponse = await apiRequest(
+          'POST',
+          '/api/rechtspraak/create-batch',
+          { 
+            records: accumulatedRecords,
+            batchId: batchId || undefined,
+          }
+        );
+        const batchData = await batchResponse.json();
+        setBatchId(batchData.batchId);
+      } else {
+        console.log('[Fetch] No new unique records, offset not advanced');
+      }
       
       // Build toast message with filtering info
       let description = `${contentData.successful} civiele uitspraken succesvol verwerkt.`;
@@ -114,11 +187,17 @@ export default function Home() {
       // Don't increment offset on error - user can retry the same batch
     } finally {
       setIsFetchingContent(false);
+      fetchLockRef.current = false;
     }
   };
 
   const handleResetFilters = () => {
     setPreparedRecords([]);
+    accumulatedRecordsRef.current = [];
+    currentOffsetRef.current = 0;
+    fetchLockRef.current = false;
+    activeFiltersRef.current = null;
+    setBatchId(null);
     setChunkedData(null);
     setTotalResults(0);
     setCurrentOffset(0);
@@ -126,18 +205,31 @@ export default function Home() {
 
   const handleClearRecords = () => {
     setPreparedRecords([]);
+    accumulatedRecordsRef.current = [];
+    currentOffsetRef.current = 0;
+    fetchLockRef.current = false;
+    setBatchId(null);
     setChunkedData(null);
     setExportLogs([]);
   };
 
   const handlePrepareChunks = async () => {
+    if (!batchId) {
+      toast({
+        variant: "destructive",
+        title: "Geen batch beschikbaar",
+        description: "Haal eerst uitspraken op voordat je chunks voorbereidt.",
+      });
+      return;
+    }
+    
     setIsPreparingChunks(true);
     
     try {
       const response = await apiRequest(
         'POST',
         '/api/rechtspraak/prepare-chunks',
-        { records: preparedRecords }
+        { batchId }
       );
 
       const data = await response.json();
@@ -152,11 +244,25 @@ export default function Home() {
         description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken.`,
       });
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Fout bij voorbereiden",
-        description: error.message || "Kon chunks niet voorbereiden",
-      });
+      // Handle 404 from stale batchId (e.g., after server restart)
+      if (error.message && error.message.includes('404')) {
+        // Clear all state to allow fresh refetch
+        setBatchId(null);
+        setPreparedRecords([]);
+        accumulatedRecordsRef.current = [];
+        currentOffsetRef.current = 0;
+        toast({
+          variant: "destructive",
+          title: "Batch niet gevonden",
+          description: "Batch is verlopen. Gebruik 'Opnieuw' om uitspraken opnieuw op te halen.",
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Fout bij voorbereiden",
+          description: error.message || "Kon chunks niet voorbereiden",
+        });
+      }
     } finally {
       setIsPreparingChunks(false);
     }

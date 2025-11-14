@@ -129,6 +129,25 @@ Haal volledige content op voor ECLI's.
 }
 ```
 
+#### `POST /api/rechtspraak/create-batch`
+Maak server-side batch van records (voorkomt HTTP 413 bij chunk preparation).
+
+**Request Body**:
+```json
+{
+  "records": [PreparedRecord[], ...]
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "batchId": "uuid-...",
+  "recordCount": 25
+}
+```
+
 #### `POST /api/rechtspraak/prepare-chunks`
 Prepare chunks met intelligente sectie-detectie en metadata extractie.
 

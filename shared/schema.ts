@@ -77,6 +77,15 @@ export const chunkedRecordSchema = z.object({
 
 export type ChunkedRecord = z.infer<typeof chunkedRecordSchema>;
 
+// Prepared batch schema for server-side storage
+export const preparedBatchSchema = z.object({
+  batchId: z.string(),
+  records: z.array(preparedRecordSchema),
+  createdAt: z.date(),
+});
+
+export type PreparedBatch = z.infer<typeof preparedBatchSchema>;
+
 // Pinecone export config schema - supports both prepared records and chunks
 export const exportConfigSchema = z.object({
   indexHost: z.string(),
