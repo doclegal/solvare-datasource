@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { searchFiltersSchema, exportConfigSchema } from "@shared/schema";
+import { searchFiltersSchema, exportConfigSchema, type PreparedRecord } from "@shared/schema";
 import { searchDecisions, fetchDecisionContent } from "./rechtspraak-api";
 import { upsertRecordsToPinecone } from "./pinecone-client";
+import { createChunksFromRecord } from "./chunking";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Search Rechtspraak API
@@ -67,10 +68,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Prepare chunks from prepared records
+  app.post('/api/rechtspraak/prepare-chunks', async (req: Request, res: Response) => {
+    try {
+      const { records } = req.body;
+      
+      if (!Array.isArray(records) || records.length === 0) {
+        return res.status(400).json({ error: 'Records lijst is vereist' });
+      }
+
+      const allChunks = [];
+      const chunksByEcli: Record<string, any> = {};
+
+      for (const record of records) {
+        const chunks = createChunksFromRecord(record);
+        allChunks.push(...chunks);
+        
+        // Group by section type for preview
+        const sectionCounts = chunks.reduce((acc, chunk) => {
+          acc[chunk.section_type] = (acc[chunk.section_type] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        
+        chunksByEcli[record.ecli] = {
+          ecli: record.ecli,
+          title: record.title,
+          totalChunks: chunks.length,
+          sectionCounts,
+          chunks,
+        };
+      }
+
+      res.json({
+        success: true,
+        totalChunks: allChunks.length,
+        totalRecords: records.length,
+        chunksByEcli,
+        allChunks,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/rechtspraak/prepare-chunks:', error);
+      res.status(500).json({ 
+        error: error.message || 'Fout bij voorbereiden van chunks' 
+      });
+    }
+  });
+
   // Export to Pinecone (streaming progress)
   app.post('/api/pinecone/export', async (req: Request, res: Response) => {
     try {
       const config = exportConfigSchema.parse(req.body);
+      
+      // Support both records and chunks
+      const dataToExport = config.chunks || config.records || [];
+      
+      if (dataToExport.length === 0) {
+        throw new Error('Geen records of chunks om te exporteren');
+      }
       
       // Set up SSE (Server-Sent Events) for streaming progress
       res.setHeader('Content-Type', 'text/event-stream');
@@ -84,12 +138,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sendProgress({
         type: 'start',
         message: 'Export naar Pinecone gestart...',
-        totalRecords: config.records.length,
+        totalRecords: dataToExport.length,
       });
 
       const result = await upsertRecordsToPinecone(
         config.indexHost,
-        config.records,
+        dataToExport,
         config.namespace,
         config.batchSize,
         (progress) => {

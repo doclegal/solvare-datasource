@@ -1,5 +1,5 @@
 import { Pinecone } from '@pinecone-database/pinecone';
-import type { PreparedRecord } from '@shared/schema';
+import type { PreparedRecord, ChunkedRecord } from '@shared/schema';
 
 let pineconeClient: Pinecone | null = null;
 
@@ -27,9 +27,15 @@ interface UploadProgress {
   errors: Array<{ ecli: string; error: string }>;
 }
 
+type ExportableRecord = PreparedRecord | ChunkedRecord;
+
+function isChunkedRecord(record: ExportableRecord): record is ChunkedRecord {
+  return 'chunk_id' in record && 'section_type' in record;
+}
+
 export async function upsertRecordsToPinecone(
   indexHost: string,
-  records: PreparedRecord[],
+  records: ExportableRecord[],
   namespace: string = '',
   batchSize: number = 100,
   onProgress?: (progress: UploadProgress) => void
@@ -62,7 +68,7 @@ export async function upsertRecordsToPinecone(
       // Step 1: Generate embeddings using Pinecone's Inference API
       const embeddingsResponse = await pc.inference.embed({
         model: 'multilingual-e5-large',
-        inputs: batch.map(record => record.fullText),
+        inputs: batch.map(record => isChunkedRecord(record) ? record.text : record.fullText),
         parameters: { inputType: 'passage' }
       });
       
@@ -75,19 +81,70 @@ export async function upsertRecordsToPinecone(
           throw new Error(`Failed to generate dense embedding for ECLI: ${record.ecli}`);
         }
         
-        return {
-          id: record.ecli,
-          values: embedding.values,
-          metadata: {
-            text: record.fullText,
+        if (isChunkedRecord(record)) {
+          // For chunks: use chunk_id and include rich metadata
+          // Filter out undefined values as Pinecone doesn't accept them
+          const metadata: Record<string, string | number | boolean> = {
+            text: record.text,
+            ecli: record.ecli,
+            chunk_id: record.chunk_id,
+            section_type: record.section_type,
             title: record.title,
-            court: record.court,
-            decision_date: record.decisionDate,
-            legal_area: record.legalArea.join(', '),
-            procedure_type: record.procedureType,
-            source_url: record.sourceUrl,
-          },
-        };
+            court_name: record.court_name,
+            decision_date: record.decision_date,
+            source_url: record.source_url,
+            is_civil: record.is_civil,
+          };
+          
+          // Add optional fields only if defined
+          if (record.decision_year !== undefined) metadata.decision_year = record.decision_year;
+          if (record.is_kanton_case !== undefined) metadata.is_kanton_case = record.is_kanton_case;
+          if (record.civil_domain) metadata.civil_domain = record.civil_domain;
+          if (record.case_subtype) metadata.case_subtype = record.case_subtype;
+          if (record.procedure_type) metadata.procedure_type = record.procedure_type;
+          if (record.court_level) metadata.court_level = record.court_level;
+          if (record.outcome) metadata.outcome = record.outcome;
+          if (record.party_1_type) metadata.party_1_type = record.party_1_type;
+          if (record.party_2_type) metadata.party_2_type = record.party_2_type;
+          if (record.claim_types && record.claim_types.length > 0) {
+            metadata.claim_types = record.claim_types.join(', ');
+          }
+          if (record.burden_of_proof_on) metadata.burden_of_proof_on = record.burden_of_proof_on;
+          if (record.legal_issue) metadata.legal_issue = record.legal_issue;
+          if (record.key_facts_tags && record.key_facts_tags.length > 0) {
+            metadata.key_facts_tags = record.key_facts_tags.join(', ');
+          }
+          if (record.evidence_themes && record.evidence_themes.length > 0) {
+            metadata.evidence_themes = record.evidence_themes.join(', ');
+          }
+          if (record.risk_profile && record.risk_profile.length > 0) {
+            metadata.risk_profile = record.risk_profile.join(', ');
+          }
+          if (record.statutes_and_articles && record.statutes_and_articles.length > 0) {
+            metadata.statutes_and_articles = record.statutes_and_articles.join(', ');
+          }
+          
+          return {
+            id: record.chunk_id,
+            values: embedding.values,
+            metadata,
+          };
+        } else {
+          // For full records: use ecli and basic metadata
+          return {
+            id: record.ecli,
+            values: embedding.values,
+            metadata: {
+              text: record.fullText,
+              title: record.title,
+              court: record.court,
+              decision_date: record.decisionDate,
+              legal_area: record.legalArea.join(', '),
+              procedure_type: record.procedureType,
+              source_url: record.sourceUrl,
+            },
+          };
+        }
       });
       
       // Step 3: Upsert vectors with embeddings to Pinecone
