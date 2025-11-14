@@ -1,0 +1,244 @@
+You are extending de app .
+
+The app already:
+
+Connects to the Dutch Rechtspraak.nl Open Data API.
+
+Lets the user filter and fetch civil law decisions (e.g. employment, tenancy, consumer, neighbour disputes, kanton cases).
+
+Shows a list of fetched decisions per ECLI with basic information under “Voorbereide Records”.
+
+Has a “Pinecone Export” section, but the preparation of chunked records and rich metadata for Pinecone is not fully implemented yet.
+
+I do not want you to rebuild the Rechtspraak integration.
+Use the existing fetching logic and UI as the starting point.
+
+Your job is to add the preparation and export logic so that the fetched decisions are transformed into high-quality chunked records with metadata, ready to be upserted into a Pinecone vector database.
+
+1. Preparation stage: from fetched decisions to structured chunks
+
+Extend the existing app so that, for every fetched ECLI:
+
+The app can retrieve (or reuse if already fetched) the full XML content from the Rechtspraak content endpoint (metadata + document).
+
+The app parses the XML and identifies key sections based on headings, including in Dutch, such as:
+
+“Inhoudsindicatie”, “Inleiding”
+
+“Vordering”, “De vordering”, “De vorderingen”, “Het verzoek”, “Vorderingen in conventie/reconventie”
+
+“Feiten”, “De feiten”, “Vaststaande feiten”, “De zaak in het kort”, "PROCESGANG"
+
+“Beoordeling”, “Overwegingen”, “Juridische beoordeling”, “Motivering”, "RECHTSOVERWEGINGEN", "slotsom ten aanzien van","De motivering van de beslissing",  
+
+“De beslissing”, “Het dictum”, “Beslissing in conventie / reconventie”, "BESLISSING", "De voorzieningenrechter veroordeelt (...)"
+
+Based on these sections, the app must create the following logical text chunks per decision (per ECLI):
+
+Summary chunk
+
+Based on the “inhoudsindicatie” and, if desired, a short AI-generated summary.
+
+section_type = "summary".
+
+Claims / vorderingen chunk(s)
+
+All text under headings that describe the claims/requests of the parties.
+
+If there are clearly separate claims (e.g. in conventie and reconventie, or different parties), the app may create multiple chunks.
+
+section_type = "claims".
+
+Facts chunks
+
+Factual background sections (“Feiten”, “De feiten”, …).
+
+If long, split into chunks of roughly 500–800 words.
+
+section_type = "facts".
+
+Reasoning chunks
+
+The court’s legal analysis (“Beoordeling”, “Overwegingen”, …).
+
+Also split into chunks of roughly 500–800 words.
+
+section_type = "reasoning".
+
+Decision chunk(s) – always separate
+
+The operative part of the judgment (“De beslissing”, “Het dictum”).
+
+This must always be stored as a separate chunk.
+
+section_type = "decision".
+
+Other chunks (optional)
+
+Any remaining text that cannot reliably be classified above.
+
+section_type = "other".
+
+Each chunk is a separate record with its own text, but all chunks from the same decision share the same ECLI and case-level metadata.
+
+Add a clear “Prepare chunks” or similar action in the UI (for example in the “Voorbereide Records” section) that triggers this processing for the currently fetched decisions.
+
+2. Metadata to attach to every chunk
+
+For every chunk, the app must build a metadata object. Most fields are determined per case (per ECLI) and then copied onto all chunks from that case.
+
+Basic identifiers
+
+ecli – the decision’s ECLI
+
+chunk_id – unique per chunk, e.g. "{ECLI}#claims-1"
+
+section_type – "summary" | "claims" | "facts" | "reasoning" | "decision" | "other"
+
+title – decision title if available
+
+source_url – deeplink to the decision on Rechtspraak.nl
+
+Civil focus and categorisation
+
+is_civil – boolean, always true for stored records (the app already filters for civil law)
+
+is_kanton_case – boolean, true for kanton-type cases
+
+civil_domain – main civil domain, e.g.:
+
+"employment_law"
+
+"residential_tenancy"
+
+"commercial_tenancy"
+
+"consumer_law"
+
+"neighbour_dispute"
+
+"general_contract_law"
+
+"tort_liability"
+
+"debt_collection"
+
+"vve_and_apartment"
+
+"other_civil"
+
+case_subtype – more specific labels, for example:
+
+summary_dismissal, unlawful_termination, rent_arrears, eviction,
+non_conformity, noise_nuisance, boundary_dispute, personal_injury, etc.
+
+procedure_type – e.g. kort_geding, bodemprocedure, hoger_beroep, cassatie, verzoekschriftprocedure
+
+court_level – e.g. kanton, rechtbank, gerechtshof, hoge_raad
+
+court_name – e.g. "Rechtbank Den Haag"
+
+Date and outcome
+
+decision_date – ISO date
+
+decision_year – integer
+
+outcome – standardized outcome, such as:
+
+"claim_allowed"
+
+"claim_partly_allowed"
+
+"claim_rejected"
+
+"appeal_upheld"
+
+"appeal_dismissed"
+
+"cassation_dismissed"
+
+Parties and claims
+
+party_1_type – e.g. employee, tenant, consumer, home_owner, hoa, creditor
+
+party_2_type – e.g. employer, landlord, trader, neighbour, debtor
+
+claim_types – list of claim categories, such as ["termination_of_contract", "damages", "eviction", "payment_of_wages"]
+
+burden_of_proof_on – if it can be inferred: employee, employer, tenant, landlord, consumer, other, or unclear
+
+Higher-level AI fields
+These can be generated by an AI step based on the full decision and then copied to all chunks:
+
+legal_issue – short description of the main legal question(s)
+
+key_facts_tags – list of short fact tags
+
+evidence_themes – e.g. ["witness_statements", "email_correspondence"]
+
+risk_profile – e.g. ["high_risk_of_claim_rejection", "uncertain_evidence"]
+
+statutes_and_articles – list of articles, such as ["Art. 7:677 BW", "Art. 6:162 BW"]
+
+3. Pinecone export: sending chunks as records
+
+The app already has a “Pinecone Export” section. Extend it so that:
+
+Only prepared chunks (with text + metadata) are considered for export.
+
+The user can see:
+
+how many chunks are ready to send,
+
+which ECLIs they come from.
+
+The user can configure:
+
+the Pinecone index (host or name, depending on the SDK used),
+
+the namespace (optional),
+
+the batch size for export.
+
+Pinecone credentials are taken from Replit Secrets, for example:
+
+PINECONE_API_KEY
+
+PINECONE_INDEX_HOST
+
+When the user triggers export, the app:
+
+Sends each chunk as a separate record to Pinecone,
+
+Uses the chunk text as the field that Pinecone will embed,
+
+Attaches the full metadata object described above,
+
+Sends data in batches, showing progress and logging errors.
+
+After export, the app should summarise:
+
+how many records were successfully upserted,
+
+how many failed, and why (if possible).
+
+4. UI behaviour
+
+Keep the current layout (filters, “Civielrecht Uitspraken Ophalen”, list of fetched records).
+
+Add a clear step or button for “Prepare chunks for Pinecone” that:
+
+runs the parsing, chunking, and metadata building,
+
+updates the “Voorbereide Records” section to show, per ECLI, how many chunks of each section_type were created, with an expandable view to inspect them.
+
+Make sure the user understands the three phases:
+
+Fetch decisions from Rechtspraak
+
+Prepare & chunk decisions
+
+Export prepared chunks to Pinecone
+
+Do not change the basic fetching behaviour; focus on adding this preparation and export pipeline on top of what already works.
