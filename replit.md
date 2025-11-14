@@ -60,12 +60,14 @@ Splits uitspraken in logische secties voor betere semantische zoekopdrachten met
 - Identificeert secties op basis van kopjes in de tekst
 
 #### B. LLM Semantic Chunking (NIEUW - Experimenteel)
-- **AI-Powered Classification**: OpenAI GPT-4.1 Mini bepaalt semantisch welk tekstdeel bij welke sectie hoort
+- **AI-Powered Classification**: OpenAI GPT-4o bepaalt semantisch welk tekstdeel bij welke sectie hoort
+- **Structuur-Bewust**: Prompt geeft LLM context over standaard opbouw (Feiten → Vorderingen → Verweer → Beoordeling → Beslissing)
 - **Paragraph Segmentation**: Splitst tekst in paragraphs (~300 woorden) voor classificatie
-- **Section Types**: Feiten, Beoordeling, Vorderingen, Beslissing
+- **Section Types**: Summary, Feiten, Vorderingen/Claims, Juridische Beoordeling, Beslissing
 - **Confidence Scores**: Elk chunk krijgt confidence score (0.0-1.0) van de LLM
+- **Strikte Validatie**: Controleert op complete classificatie en duplicate IDs
 - **Automatic Fallback**: Bij LLM failures wordt keyword-based methode gebruikt
-- **Cost**: ~$0.009 per uitspraak (~11k tokens @ GPT-4.1 Mini rates)
+- **Cost**: ~$0.05 per uitspraak (~11k tokens @ GPT-4o rates)
 
 **Gemeenschappelijke Features:**
 - **Automatische Text Splitting**: Lange secties (>700 woorden) worden gesplitst in chunks van ~600 woorden met 120-woord overlap
@@ -350,14 +352,16 @@ Zie `attached_assets/` voor:
 
 ## Laatste Update
 
-14 november 2024 - LLM Semantic Chunking (experimenteel):
-- **Dual Chunking Systeem**: Keyword-based (traditioneel) + LLM semantic (nieuw)
+14 november 2024 - LLM Semantic Chunking v2.0 (verbeterd):
+- **Upgraded Model**: GPT-4o (was GPT-4.1 Mini) voor betere reasoning
+- **Structuur-Bewuste Prompt**: Geeft LLM context over standaard opbouw Nederlandse uitspraken
+  - Feiten & Procesverloop → Vorderingen → Verweer → Juridische Beoordeling → Beslissing
+- **Strikte Validatie**: Controleert op complete classificatie, duplicate IDs, missing paragraphs
+- **Unique Chunk IDs**: Global counter per section type voorkomt duplicate keys
 - **UI Toggle**: Gebruiker kan kiezen tussen keyword en AI chunking methodes
-- **OpenAI Integration**: GPT-4.1 Mini voor semantische classificatie van tekstfragmenten
-- **Paragraph Segmentation**: Splitst tekst in ~300-woord paragraphs voor LLM classificatie
 - **Automatic Fallback**: Bij LLM errors wordt keyword-based methode gebruikt
 - **Confidence Tracking**: Elk chunk krijgt confidence score van LLM
-- **Metadata**: classification_method, classification_confidence, llm_model, prompt_version
+- **Metadata**: classification_method, classification_confidence, llm_model (gpt-4o), prompt_version (v2.0)
 
 14 november 2024 - Periode beperking + batch management:
 - **Zoekperiode beperkt** tot maximaal 10 jaar terug

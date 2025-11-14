@@ -8,8 +8,8 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-const PROMPT_VERSION = "v1.0";
-const MODEL = "gpt-4.1-mini";
+const PROMPT_VERSION = "v2.0";
+const MODEL = "gpt-4o"; // Better reasoning capabilities
 
 // Section mapping for Dutch legal decisions
 type SectionType = 'summary' | 'claims' | 'facts' | 'reasoning' | 'decision' | 'other';
@@ -70,45 +70,92 @@ function createClassificationPrompt(
   record: PreparedRecord,
   paragraphs: string[]
 ): { system: string; user: string } {
-  const system = `Je bent een expert in het analyseren van Nederlandse rechterlijke uitspraken. 
-Je taak is om tekstfragmenten te classificeren in de volgende categorieën:
+  const system = `Je bent een expert juridisch analist gespecialiseerd in Nederlandse civielrechtelijke uitspraken.
 
-1. **summary**: Inhoudsindicatie, samenvatting van de zaak
-2. **facts**: Feiten, procesverloop, achtergrond, partijen, gebeurtenissen
-3. **reasoning**: Beoordeling, juridische overwegingen, motivering, toetsing
-4. **claims**: Vorderingen, verzoeken, standpunten partijen
-5. **decision**: Beslissing, dictum, uitspraak, veroordeling
+## STANDAARD OPBOUW VAN UITSPRAKEN
 
-Belangrijk:
-- Classificeer op basis van de SEMANTISCHE betekenis, niet op kopjes
-- Feiten kunnen onder verschillende kopjes staan
-- Geef een confidence score tussen 0.0 en 1.0
-- Wees consistent en nauwkeurig`;
+Nederlandse rechterlijke uitspraken volgen meestal deze vaste structuur:
+1. **Feiten & Procesverloop** (begin) - Wie zijn de partijen, wat is er gebeurd, proceshistorie
+2. **Vorderingen** - Wat vordert/verzoekt de eisende partij
+3. **Verweer** - Wat is de reactie/het standpunt van de verwerende partij
+4. **Juridische Beoordeling** - Juridische overwegingen, toetsing aan wet, motivering
+5. **Beslissing/Dictum** (eind) - Uitspraak, veroordeling, wat wordt toegewezen/afgewezen
+
+## CLASSIFICATIE CATEGORIEËN
+
+Classificeer elk tekstfragment in PRECIES één van deze categorieën:
+
+**summary** = Inhoudsindicatie (komt vaak helemaal aan het begin)
+- Officiële korte samenvatting van de zaak
+- Meestal herkenbaar aan compact, samenvattend karakter
+- Staat vaak los van de rest van de tekst
+
+**facts** = Feiten en Procesverloop
+- Beschrijving van gebeurtenissen, achtergrond
+- "Partijen", "De feiten", "Het procesverloop", "In de procedure"
+- Namen, data, concrete gebeurtenissen
+- Wat partijen hebben gedaan/gezegd in eerdere procedures
+
+**claims** = Vorderingen, Verzoeken, Standpunten
+- "De vordering", "Eiseres vordert", "[Partij] stelt zich op het standpunt"
+- Wat wordt gevraagd aan de rechter
+- Juridische argumenten van partijen (zowel eisende als verwerende partij)
+- "Verweer", "gedaagde voert aan"
+
+**reasoning** = Juridische Beoordeling door de Rechter
+- "De kantonrechter overweegt", "Het hof is van oordeel"
+- Juridische analyse, wetsartikelen, jurisprudentie
+- Toetsing van argumenten aan wet/rechtspraak
+- Motivering waarom iets wel/niet toewijsbaar is
+
+**decision** = Beslissing en Dictum
+- "De rechtbank beslist", "Het hof verklaart"
+- "veroordeelt", "wijst af", "wijst toe"
+- Concrete uitspraak wat wordt toegewezen
+- Proceskostenveroordeling
+
+## BELANGRIJKE RICHTLIJNEN
+
+1. Gebruik de SEMANTISCHE BETEKENIS, niet letterlijke kopjes
+2. Let op de POSITIE in de uitspraak (begin = vaak feiten, eind = beslissing)
+3. Feiten en procesverloop komen meestal eerst
+4. Juridische beoordeling bevat woorden als "overweegt", "is van oordeel"
+5. Beslissing komt altijd aan het eind
+6. Geef hoge confidence (>0.9) als je zeker bent, lagere (<0.7) bij twijfel
+7. **ELKE paragraphId MOET EXACT ÉÉN KEER VOORKOMEN** in de output`;
 
   const numberedParagraphs = paragraphs
     .map((para, idx) => `[${idx}]\n${para}`)
     .join('\n\n---\n\n');
 
-  const user = `Classificeer de volgende tekstfragmenten uit een Nederlandse rechterlijke uitspraak:
+  const user = `Analyseer deze Nederlandse rechterlijke uitspraak en classificeer elk genummerd tekstfragment.
 
 **Zaak**: ${record.title}
 **Rechtbank**: ${record.court}
 **Datum**: ${record.decisionDate}
 **Rechtsgebied**: ${record.legalArea.join(', ')}
 
-**Tekstfragmenten**:
+**TEKSTFRAGMENTEN** (totaal ${paragraphs.length} fragmenten):
 ${numberedParagraphs}
 
-Retourneer JSON met dit formaat:
+BELANGRIJK: Je output MOET EXACT ${paragraphs.length} classificaties bevatten (één per fragment [0] t/m [${paragraphs.length - 1}]).
+
+Retourneer JSON met dit exacte formaat:
 {
   "classifications": [
     {
       "paragraphId": 0,
       "section": "facts",
       "confidence": 0.95,
-      "reasoning": "Beschrijft gebeurtenissen en partijen"
+      "reasoning": "Begin van uitspraak, beschrijft partijen en gebeurtenissen"
     },
-    ...
+    {
+      "paragraphId": 1,
+      "section": "facts",
+      "confidence": 0.92,
+      "reasoning": "Vervolg procesverloop"
+    }
+    ... (${paragraphs.length} items totaal, elk uniek paragraphId van 0 t/m ${paragraphs.length - 1})
   ]
 }`;
 
@@ -132,8 +179,8 @@ async function classifyParagraphs(
         { role: 'user', content: user },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.1, // Low temperature for consistency
-      max_tokens: 4000,
+      temperature: 0.2, // Slightly higher for better reasoning
+      max_tokens: 8000, // More tokens for detailed reasoning
     });
 
     const content = response.choices[0]?.message?.content;
@@ -146,6 +193,29 @@ async function classifyParagraphs(
     // Validate response structure
     if (!parsed.classifications || !Array.isArray(parsed.classifications)) {
       throw new Error('Invalid classification response format');
+    }
+
+    // Strict validation: must have exactly one classification per paragraph
+    if (parsed.classifications.length !== paragraphs.length) {
+      throw new Error(
+        `Incomplete classification: expected ${paragraphs.length} classifications, got ${parsed.classifications.length}`
+      );
+    }
+
+    // Check for duplicate paragraph IDs
+    const paragraphIds = new Set<number>();
+    for (const classification of parsed.classifications) {
+      if (paragraphIds.has(classification.paragraphId)) {
+        throw new Error(`Duplicate paragraphId found: ${classification.paragraphId}`);
+      }
+      paragraphIds.add(classification.paragraphId);
+    }
+
+    // Check all paragraph IDs are in range
+    for (let i = 0; i < paragraphs.length; i++) {
+      if (!paragraphIds.has(i)) {
+        throw new Error(`Missing paragraphId: ${i}`);
+      }
     }
 
     return {
@@ -291,8 +361,17 @@ export async function prepareChunksWithLLM(
       // Step 5: Extract metadata and create ChunkedRecord objects
       const metadata = extractMetadata(record, record.fullText);
 
-      for (const { section, text, avgConfidence, chunkIndex } of finalChunks) {
-        const chunkId = `${record.ecli}#${section}-${chunkIndex}`;
+      // Track global chunk counter per section type for unique IDs
+      const sectionCounters: Record<string, number> = {};
+
+      for (const { section, text, avgConfidence } of finalChunks) {
+        // Increment counter for this section type
+        if (!sectionCounters[section]) {
+          sectionCounters[section] = 0;
+        }
+        const globalIndex = sectionCounters[section]++;
+        
+        const chunkId = `${record.ecli}#${section}-${globalIndex}`;
         
         allChunks.push({
           ecli: record.ecli,
