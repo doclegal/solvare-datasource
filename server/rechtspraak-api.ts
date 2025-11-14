@@ -27,14 +27,14 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   // NOTE: Date filtering is temporarily disabled - the API returns 400 for date parameters
   // TODO: Research correct date parameter format from official documentation
   
-  if (filters.documentType && filters.documentType !== 'all') {
-    params.append('type', filters.documentType);
-  }
+  // Always filter on Civielrecht
+  params.append('subject', 'http://psi.rechtspraak.nl/rechtsgebied#civielRecht');
+  
+  // Always filter on Uitspraak (not Conclusie)
+  params.append('type', 'Uitspraak');
+  
   if (filters.court && filters.court !== 'all') {
     params.append('creator', filters.court);
-  }
-  if (filters.legalArea && filters.legalArea !== 'all') {
-    params.append('subject', filters.legalArea);
   }
   if (filters.fullDocumentsOnly) {
     params.append('return', 'DOC');
