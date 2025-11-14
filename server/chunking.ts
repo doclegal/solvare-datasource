@@ -122,7 +122,7 @@ function splitTextIntoChunks(text: string, targetWords: number = 600, overlapWor
 /**
  * Extract enhanced metadata from prepared record and full text
  */
-function extractMetadata(record: PreparedRecord, fullText: string) {
+export function extractMetadata(record: PreparedRecord, fullText: string) {
   const year = record.decisionDate ? parseInt(record.decisionDate.split('-')[0]) : undefined;
   const textLower = fullText.toLowerCase();
   

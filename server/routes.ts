@@ -184,6 +184,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Prepare chunks using LLM classification (new parallel method)
+  app.post('/api/rechtspraak/prepare-chunks-llm', async (req: Request, res: Response) => {
+    try {
+      const { batchId } = req.body;
+      
+      if (!batchId) {
+        return res.status(400).json({ error: 'batchId is verplicht' });
+      }
+      
+      // Get batch from storage
+      const batch = storage.getBatch(batchId);
+      if (!batch) {
+        return res.status(404).json({ error: 'Batch niet gevonden' });
+      }
+      
+      console.log(`[LLM Chunking] Preparing ${batch.records.length} records with LLM classification`);
+      
+      // Use LLM-based chunking
+      const { prepareChunksWithLLM } = await import('./chunking-llm');
+      const result = await prepareChunksWithLLM(batch.records);
+      
+      res.json({
+        success: true,
+        totalChunks: result.totalChunks,
+        totalRecords: result.totalRecords,
+        fallbackCount: result.fallbackCount,
+        method: 'llm',
+        chunks: result.chunks,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/rechtspraak/prepare-chunks-llm:', error);
+      res.status(500).json({ 
+        error: error.message || 'Fout bij LLM chunking' 
+      });
+    }
+  });
+
   // Export to Pinecone (streaming progress)
   app.post('/api/pinecone/export', async (req: Request, res: Response) => {
     try {

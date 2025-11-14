@@ -73,6 +73,12 @@ export const chunkedRecordSchema = z.object({
   evidence_themes: z.array(z.string()).optional(),
   risk_profile: z.array(z.string()).optional(),
   statutes_and_articles: z.array(z.string()).optional(),
+  
+  // LLM chunking metadata (new)
+  classification_method: z.enum(['keyword', 'llm', 'keyword-fallback']).optional(),
+  classification_confidence: z.number().min(0).max(1).optional(),
+  llm_model: z.string().optional(),
+  prompt_version: z.string().optional(),
 });
 
 export type ChunkedRecord = z.infer<typeof chunkedRecordSchema>;
