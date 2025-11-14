@@ -81,6 +81,9 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="date-period">Periode</Label>
+            <p className="text-xs text-muted-foreground mb-1">
+              Filtert op wijzigingsdatum (wanneer uitspraak voor het laatst is bijgewerkt)
+            </p>
             <Select value={datePeriod} onValueChange={setDatePeriod}>
               <SelectTrigger id="date-period" data-testid="select-date-period">
                 <SelectValue placeholder="Selecteer periode" />

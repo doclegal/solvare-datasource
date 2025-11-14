@@ -19,16 +19,17 @@ interface RechtspraakSearchResponse {
 }
 
 /**
- * Convert a date period string to actual from/to dates
- * Uses the 'date' field to filter on actual judgment date (uitspraakdatum)
+ * Convert a date period string to a start date for filtering
+ * Uses the 'modified' field to filter on when the judgment was last updated in the database
+ * Note: The Rechtspraak API does not support filtering on actual judgment date (uitspraakdatum),
+ * only on publication/modification dates.
  */
-function convertPeriodToDates(period: string): { dateFrom?: string; dateTo?: string } {
+function convertPeriodToDates(period: string): { dateFrom?: string } {
   if (period === 'all' || !period) {
     return {}; // No date filter - return all results
   }
   
   const now = new Date();
-  const today = now.toISOString().split('T')[0]; // Format: YYYY-MM-DD
   const fromDate = new Date(now);
   
   switch (period) {
@@ -53,7 +54,6 @@ function convertPeriodToDates(period: string): { dateFrom?: string; dateTo?: str
   
   return {
     dateFrom: fromDate.toISOString().split('T')[0],
-    dateTo: today,
   };
 }
 
@@ -63,8 +63,8 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
 }> {
   const params = new URLSearchParams();
   
-  // Convert period to actual dates
-  const { dateFrom, dateTo } = convertPeriodToDates(filters.datePeriod || 'all');
+  // Convert period to start date for filtering
+  const { dateFrom } = convertPeriodToDates(filters.datePeriod || 'all');
   
   // Filter on Civielrecht or specific subcategory
   const subcategoryId = filters.civilSubcategory || 'all';
@@ -79,14 +79,12 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
     params.append('creator', filters.court);
   }
   
-  // Add date filters if specified (uses bracket notation for range queries)
-  // date[gte] = greater than or equal (vanaf uitspraakdatum)
-  // date[lte] = less than or equal (tot uitspraakdatum)
+  // Add modified date filter if specified
+  // The API only supports filtering on modification date, not on judgment date
+  // We use a single 'modified' parameter with the start date to get all judgments
+  // modified on or after that date
   if (dateFrom) {
-    params.append('date[gte]', dateFrom);
-  }
-  if (dateTo) {
-    params.append('date[lte]', dateTo);
+    params.append('modified', dateFrom);
   }
   
   // Always filter for full documents only
