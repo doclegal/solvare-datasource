@@ -337,17 +337,7 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       timeout: 30000,
     });
 
-    // DEBUG: Log raw XML to see structure
-    console.log(`\n=== RAW XML RESPONSE for ${ecli} (first 3000 chars) ===`);
-    console.log(response.data.substring(0, 3000));
-    console.log('=== END RAW XML ===\n');
-
     const data = parser.parse(response.data);
-    
-    // DEBUG: Log parsed data structure
-    console.log(`\n=== PARSED DATA for ${ecli} ===`);
-    console.log(JSON.stringify(data, null, 2).substring(0, 4000));
-    console.log('=== END PARSED DATA ===\n');
     
     // Extract metadata from XML
     const rdf = data['open-rechtspraak']?.['rdf:RDF'] || {};
@@ -421,29 +411,30 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       }
     }
     
-    // Extract Inhoudsindicatie (official summary) from multiple possible locations
+    // Extract Inhoudsindicatie (official summary) 
+    // The inhoudsindicatie is in a separate section in the XML: data['open-rechtspraak'].inhoudsindicatie
     let inhoudsindicatie = '';
     
-    // Try dcterms:abstract first (most common)
-    if (mainDesc['dcterms:abstract']) {
-      const abstractNode = mainDesc['dcterms:abstract'];
-      inhoudsindicatie = abstractNode['#text'] || abstractNode;
+    // Priority 1: Check the dedicated inhoudsindicatie section
+    if (data['open-rechtspraak']?.inhoudsindicatie) {
+      const inhoudNode = data['open-rechtspraak'].inhoudsindicatie;
+      // Extract text from the inhoudsindicatie node (often contains 'para' or direct text)
+      inhoudsindicatie = extractTextFromNode(inhoudNode);
     }
     
-    // Try psi:inhoudsindicatie as fallback
+    // Priority 2: Try dcterms:abstract if it has actual text (not just a reference)
+    if (!inhoudsindicatie && mainDesc['dcterms:abstract']) {
+      const abstractNode = mainDesc['dcterms:abstract'];
+      // Only use if it's actual text, not a reference
+      if (abstractNode['#text'] || (typeof abstractNode === 'string' && !abstractNode.includes('resourceIdentifier'))) {
+        inhoudsindicatie = abstractNode['#text'] || abstractNode;
+      }
+    }
+    
+    // Priority 3: Try psi:inhoudsindicatie as fallback
     if (!inhoudsindicatie && mainDesc['psi:inhoudsindicatie']) {
       const inhoudNode = mainDesc['psi:inhoudsindicatie'];
-      inhoudsindicatie = inhoudNode['#text'] || inhoudNode;
-    }
-    
-    // Also check in uitspraak section
-    if (!inhoudsindicatie && uitspraak) {
-      // Look for inhoudsindicatie node
-      if (uitspraak.inhoudsindicatie) {
-        inhoudsindicatie = extractTextFromNode(uitspraak.inhoudsindicatie);
-      } else if (uitspraak.Inhoudsindicatie) {
-        inhoudsindicatie = extractTextFromNode(uitspraak.Inhoudsindicatie);
-      }
+      inhoudsindicatie = extractTextFromNode(inhoudNode);
     }
     
     if (typeof inhoudsindicatie === 'string') {

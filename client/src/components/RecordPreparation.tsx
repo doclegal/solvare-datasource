@@ -14,6 +14,7 @@ export interface PreparedRecord {
   procedureType: string;
   sourceUrl: string;
   fullText: string;
+  inhoudsindicatie?: string;
 }
 
 interface ChunkedRecord {
@@ -249,6 +250,18 @@ export default function RecordPreparation({
                       <p className="text-sm font-medium mb-1">Titel</p>
                       <p className="text-sm text-muted-foreground">{record.title}</p>
                     </div>
+
+                    {record.inhoudsindicatie && (
+                      <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-md border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Inhoudsindicatie</p>
+                        </div>
+                        <p className="text-sm text-blue-800 dark:text-blue-200 leading-relaxed">
+                          {record.inhoudsindicatie}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
