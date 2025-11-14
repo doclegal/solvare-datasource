@@ -27,12 +27,10 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
 
 ### 1. Rechtspraak Filters & Ophalen
 - Zoek uitspraken met filters:
-  - Uitspraakdatum (van-tot)
-  - Wijzigingsdatum (van-tot)
-  - Documenttype (Uitspraak/Conclusie)
+  - Wijzigingsdatum (maximaal 10 jaar terug)
   - Instantie (rechtbank/hof)
-  - Rechtsgebied (Civiel/Straf/Bestuurs/Europees)
-  - Alleen volledige documenten optie
+  - Type civiele zaak (Arbeidsrecht, Huurrecht, Consumentenrecht, etc.)
+  - Alleen volledige documenten (altijd actief)
 - Paginering met configureerbare batchgrootte
 - Display ECLI codes met metadata
 
@@ -312,6 +310,13 @@ Zie `attached_assets/` voor:
 - `API Pinecone_*.txt`: Pinecone API referentie
 
 ## Laatste Update
+
+14 november 2024 - Periode beperking + batch management:
+- **Zoekperiode beperkt** tot maximaal 10 jaar terug
+- Standaardperiode: "Afgelopen tien jaar"
+- "Alles" optie verwijderd om database belasting te beperken
+- Server-side batch management met batchId voor HTTP 413 preventie
+- Atomic state management met refs voor race condition preventie
 
 14 november 2024 - Intelligente chunking implementatie:
 - Priority-based section detection met keyword matching

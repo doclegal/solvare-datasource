@@ -23,7 +23,6 @@ export interface FilterParams {
 }
 
 const datePeriodOptions = [
-  { value: "all", label: "Alles" },
   { value: "10years", label: "Afgelopen tien jaar" },
   { value: "5years", label: "Afgelopen vijf jaar" },
   { value: "1year", label: "Afgelopen jaar" },
@@ -33,7 +32,7 @@ const datePeriodOptions = [
 
 export default function FilterSection({ onFetch, onReset, isLoading = false }: FilterSectionProps) {
   const [batchSize, setBatchSize] = useState("50");
-  const [datePeriod, setDatePeriod] = useState("all");
+  const [datePeriod, setDatePeriod] = useState("10years");
   const [court, setCourt] = useState("");
   const [civilSubcategory, setCivilSubcategory] = useState("all");
 
@@ -49,7 +48,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
   const handleReset = () => {
     setBatchSize("50");
-    setDatePeriod("all");
+    setDatePeriod("10years");
     setCourt("");
     setCivilSubcategory("all");
     onReset();
@@ -80,9 +79,9 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="date-period">Periode</Label>
+            <Label htmlFor="date-period">Periode (max. 10 jaar)</Label>
             <p className="text-xs text-muted-foreground mb-1">
-              Filtert op wijzigingsdatum (wanneer uitspraak voor het laatst is bijgewerkt)
+              Filtert op wijzigingsdatum (maximaal 10 jaar terug)
             </p>
             <Select value={datePeriod} onValueChange={setDatePeriod}>
               <SelectTrigger id="date-period" data-testid="select-date-period">
