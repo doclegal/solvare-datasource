@@ -1,57 +1,74 @@
 import type { PreparedRecord, ChunkedRecord } from '@shared/schema';
 
 /**
- * Section headings to identify different parts of a legal decision
+ * Section keywords to identify different parts of a legal decision
+ * Using contains-match with priority ordering (check decision before claims)
  */
-const SECTION_PATTERNS = {
+const SECTION_KEYWORDS = {
+  // Priority order matters: decision should be checked before claims
+  decision: [
+    'beslissing',
+    'dictum',
+    'veroordeelt',
+    'wijst af',
+    'verklaart',
+  ],
   summary: [
-    /^inhoudsindicatie$/i,
-    /^samenvatting$/i,
-    /^korte inhoud$/i,
+    'inhoudsindicatie',
+    'samenvatting',
+    'korte inhoud',
   ],
   claims: [
-    /^(de\s+)?vordering(en)?$/i,
-    /^het\s+verzoek$/i,
-    /^verzoek(en)?$/i,
-    /^(de\s+)?vorderingen?\s+(in\s+)?conventie/i,
-    /^(de\s+)?vorderingen?\s+(in\s+)?reconventie/i,
+    'vordering',
+    'het verzoek',
+    // Don't include conventie/reconventie here - they're in "Beslissing in conventie"
+    'vorderingen in conventie',
+    'vorderingen in reconventie',
   ],
   facts: [
-    /^(de\s+)?feiten$/i,
-    /^vaststaande\s+feiten$/i,
-    /^de\s+zaak\s+in\s+het\s+kort$/i,
-    /^procesgang$/i,
-    /^procesverloop$/i,
-    /^(het\s+)?verloop\s+van\s+(het\s+)?geding$/i,
+    'feiten',
+    'vaststaande feiten',
+    'de zaak in het kort',
+    'procesgang',
+    'procesverloop',
+    'verloop van het geding',
   ],
   reasoning: [
-    /^(de\s+)?beoordeling$/i,
-    /^overwegingen$/i,
-    /^juridische\s+beoordeling$/i,
-    /^motivering$/i,
-    /^rechtsoverwegingen$/i,
-    /^slotsom\s+ten\s+aanzien\s+van/i,
-    /^de\s+motivering\s+van\s+de\s+beslissing$/i,
-  ],
-  decision: [
-    /^(de\s+)?beslissing$/i,
-    /^het\s+dictum$/i,
-    /^beslissing\s+in\s+conventie/i,
-    /^beslissing\s+in\s+reconventie$/i,
-    /^de\s+(kantonrechter|voorzieningenrechter|rechtbank|hof)\s+(veroordeelt|wijst\s+af|verklaart)/i,
+    'beoordeling',
+    'overwegingen',
+    'juridische beoordeling',
+    'motivering',
+    'rechtsoverwegingen',
+    'slotsom',
   ],
 };
 
 /**
- * Identify section type based on heading text
+ * Normalize heading by removing numbering and punctuation
+ */
+function normalizeHeading(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replace(/^[\d\.\s]+/, '') // Remove leading numbers like "1.", "2.1", etc.
+    .replace(/[:\.\-]+$/g, '') // Remove trailing punctuation
+    .trim();
+}
+
+/**
+ * Identify section type based on heading text (robust contains-match with priority)
+ * Priority: decision > summary > claims > facts > reasoning
  */
 function identifySectionType(heading: string): 'summary' | 'claims' | 'facts' | 'reasoning' | 'decision' | 'other' {
-  const cleanHeading = heading.trim();
+  const normalized = normalizeHeading(heading);
   
-  for (const [type, patterns] of Object.entries(SECTION_PATTERNS)) {
-    for (const pattern of patterns) {
-      if (pattern.test(cleanHeading)) {
-        return type as any;
+  // Check section types in priority order (decision first to avoid "beslissing in conventie" → claims)
+  const priorityOrder: Array<keyof typeof SECTION_KEYWORDS> = ['decision', 'summary', 'claims', 'facts', 'reasoning'];
+  
+  for (const type of priorityOrder) {
+    const keywords = SECTION_KEYWORDS[type];
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword.toLowerCase())) {
+        return type;
       }
     }
   }
@@ -61,12 +78,17 @@ function identifySectionType(heading: string): 'summary' | 'claims' | 'facts' | 
 
 /**
  * Split text into chunks of approximately targetWords words
+ * Fixed to prevent empty chunks and ensure proper overlap
  */
 function splitTextIntoChunks(text: string, targetWords: number = 600, overlapWords: number = 120): string[] {
-  const words = text.split(/\s+/);
+  const words = text.split(/\s+/).filter(w => w.length > 0); // Filter empty strings
+  
+  if (words.length === 0) {
+    return []; // Return empty array for empty text
+  }
   
   if (words.length <= targetWords) {
-    return [text];
+    return [text.trim()];
   }
   
   const chunks: string[] = [];
@@ -75,20 +97,34 @@ function splitTextIntoChunks(text: string, targetWords: number = 600, overlapWor
   while (start < words.length) {
     const end = Math.min(start + targetWords, words.length);
     const chunk = words.slice(start, end).join(' ');
-    chunks.push(chunk);
+    
+    if (chunk.trim().length > 0) { // Only add non-empty chunks
+      chunks.push(chunk);
+    }
     
     // Move forward but keep overlap
+    // If we're at the last segment, break to avoid infinite loop
+    if (end >= words.length) {
+      break;
+    }
+    
     start += targetWords - overlapWords;
+    
+    // Guard against infinite loop if overlap is too large
+    if (start >= words.length) {
+      break;
+    }
   }
   
   return chunks;
 }
 
 /**
- * Extract metadata from prepared record
+ * Extract enhanced metadata from prepared record and full text
  */
-function extractMetadata(record: PreparedRecord) {
+function extractMetadata(record: PreparedRecord, fullText: string) {
   const year = record.decisionDate ? parseInt(record.decisionDate.split('-')[0]) : undefined;
+  const textLower = fullText.toLowerCase();
   
   // Determine court level from court name
   let courtLevel = 'unknown';
@@ -108,20 +144,46 @@ function extractMetadata(record: PreparedRecord) {
   
   // Infer civil domain from legal area
   let civilDomain = 'other_civil';
+  let caseSubtype: string | undefined = undefined;
   const legalAreaStr = record.legalArea.join(' ').toLowerCase();
   
   if (legalAreaStr.includes('arbeidsrecht')) {
     civilDomain = 'employment_law';
+    // Detect subtypes
+    if (textLower.includes('ontslag') || textLower.includes('beëindiging')) {
+      caseSubtype = 'termination_of_employment';
+    } else if (textLower.includes('loon') || textLower.includes('salaris')) {
+      caseSubtype = 'payment_of_wages';
+    }
   } else if (legalAreaStr.includes('huurrecht') || legalAreaStr.includes('huur')) {
-    civilDomain = 'residential_tenancy';
+    if (legalAreaStr.includes('woonruimte') || textLower.includes('woningen')) {
+      civilDomain = 'residential_tenancy';
+      if (textLower.includes('ontruiming')) {
+        caseSubtype = 'eviction';
+      } else if (textLower.includes('huurachterstand')) {
+        caseSubtype = 'rent_arrears';
+      }
+    } else {
+      civilDomain = 'commercial_tenancy';
+    }
   } else if (legalAreaStr.includes('consumentenrecht')) {
     civilDomain = 'consumer_law';
+    if (textLower.includes('non-conformiteit') || textLower.includes('gebrek')) {
+      caseSubtype = 'non_conformity';
+    }
   } else if (legalAreaStr.includes('goederenrecht')) {
     civilDomain = 'property_law';
   } else if (legalAreaStr.includes('verbintenissen')) {
     civilDomain = 'general_contract_law';
   } else if (legalAreaStr.includes('insolventie')) {
     civilDomain = 'debt_collection';
+  } else if (legalAreaStr.includes('burenrecht')) {
+    civilDomain = 'neighbour_dispute';
+    if (textLower.includes('geluidshinder') || textLower.includes('geluidsoverlast')) {
+      caseSubtype = 'noise_nuisance';
+    } else if (textLower.includes('erfafscheiding') || textLower.includes('grens')) {
+      caseSubtype = 'boundary_dispute';
+    }
   }
   
   // Infer procedure type
@@ -139,12 +201,66 @@ function extractMetadata(record: PreparedRecord) {
     procedureTypeNormalized = 'verzoekschriftprocedure';
   }
   
+  // Infer outcome from decision text (check specific phrases before generic ones)
+  let outcome: string | undefined = undefined;
+  if (textLower.includes('gedeeltelijk toegewezen')) {
+    // Check specific "partly allowed" before generic "allowed"
+    outcome = 'claim_partly_allowed';
+  } else if (textLower.includes('toegewezen') || textLower.includes('toewijzen')) {
+    outcome = 'claim_allowed';
+  } else if (textLower.includes('afgewezen') || textLower.includes('wijst af')) {
+    outcome = 'claim_rejected';
+  } else if (textLower.includes('bekrachtigt') || textLower.includes('bekrachtiging')) {
+    outcome = 'appeal_upheld';
+  } else if (textLower.includes('vernietigt') || textLower.includes('vernietiging')) {
+    outcome = 'appeal_dismissed';
+  } else if (textLower.includes('verwerpt') && courtLevel === 'hoge_raad') {
+    outcome = 'cassation_dismissed';
+  }
+  
+  // Infer party types based on domain
+  let party1Type: string | undefined = undefined;
+  let party2Type: string | undefined = undefined;
+  
+  if (civilDomain === 'employment_law') {
+    party1Type = 'employee';
+    party2Type = 'employer';
+  } else if (civilDomain === 'residential_tenancy' || civilDomain === 'commercial_tenancy') {
+    party1Type = 'tenant';
+    party2Type = 'landlord';
+  } else if (civilDomain === 'consumer_law') {
+    party1Type = 'consumer';
+    party2Type = 'trader';
+  } else if (civilDomain === 'neighbour_dispute') {
+    party1Type = 'home_owner';
+    party2Type = 'neighbour';
+  } else if (civilDomain === 'debt_collection') {
+    party1Type = 'debtor';
+    party2Type = 'creditor';
+  }
+  
+  // Extract statute references
+  const statutes: string[] = [];
+  const statutePattern = /art(?:ikel)?\s+(\d+(?:[a-z])?(?::\d+)?)\s+(?:lid\s+\d+\s+)?(?:BW|Rv|Wet|EVRM)/gi;
+  let match;
+  while ((match = statutePattern.exec(fullText)) !== null) {
+    const statute = match[0].trim();
+    if (!statutes.includes(statute)) {
+      statutes.push(statute);
+    }
+  }
+  
   return {
     decision_year: year,
     court_level: courtLevel,
     is_kanton_case: isKantonCase,
     civil_domain: civilDomain,
+    case_subtype: caseSubtype,
     procedure_type: procedureTypeNormalized,
+    outcome,
+    party_1_type: party1Type,
+    party_2_type: party2Type,
+    statutes_and_articles: statutes.length > 0 ? statutes : undefined,
   };
 }
 
@@ -154,7 +270,7 @@ function extractMetadata(record: PreparedRecord) {
 function parseIntoSections(fullText: string): Array<{ type: string; text: string; heading?: string }> {
   const sections: Array<{ type: string; text: string; heading?: string }> = [];
   
-  // Split by common heading patterns (typically followed by newlines)
+  // Split by lines
   const lines = fullText.split('\n');
   let currentSection: { type: string; text: string; heading?: string } | null = null;
   
@@ -208,7 +324,7 @@ function parseIntoSections(fullText: string): Array<{ type: string; text: string
  */
 export function createChunksFromRecord(record: PreparedRecord): ChunkedRecord[] {
   const chunks: ChunkedRecord[] = [];
-  const baseMetadata = extractMetadata(record);
+  const baseMetadata = extractMetadata(record, record.fullText);
   
   // Parse text into sections
   const sections = parseIntoSections(record.fullText);
@@ -226,11 +342,18 @@ export function createChunksFromRecord(record: PreparedRecord): ChunkedRecord[] 
     
     // For long sections (facts/reasoning), split into chunks
     const shouldSplit = (sectionType === 'facts' || sectionType === 'reasoning') && 
-                        section.text.split(/\s+/).length > 700;
+                        section.text.split(/\s+/).filter(w => w.length > 0).length > 700;
     
     const textChunks = shouldSplit ? splitTextIntoChunks(section.text) : [section.text];
     
     for (const textChunk of textChunks) {
+      const trimmedChunk = textChunk.trim();
+      
+      // Skip empty chunks
+      if (trimmedChunk.length === 0) {
+        continue;
+      }
+      
       const chunkIndex = sectionCounters[sectionType]++;
       const chunkId = `${record.ecli}#${sectionType}-${chunkIndex}`;
       
@@ -241,12 +364,13 @@ export function createChunksFromRecord(record: PreparedRecord): ChunkedRecord[] 
         section_type: sectionType,
         title: record.title,
         source_url: record.sourceUrl,
-        text: textChunk.trim(),
+        text: trimmedChunk,
         
         // Civil focus
         is_civil: true,
         is_kanton_case: baseMetadata.is_kanton_case,
         civil_domain: baseMetadata.civil_domain,
+        case_subtype: baseMetadata.case_subtype,
         procedure_type: baseMetadata.procedure_type,
         court_level: baseMetadata.court_level,
         court_name: record.court,
@@ -254,6 +378,14 @@ export function createChunksFromRecord(record: PreparedRecord): ChunkedRecord[] 
         // Date and outcome
         decision_date: record.decisionDate,
         decision_year: baseMetadata.decision_year,
+        outcome: baseMetadata.outcome,
+        
+        // Parties
+        party_1_type: baseMetadata.party_1_type,
+        party_2_type: baseMetadata.party_2_type,
+        
+        // Statutes
+        statutes_and_articles: baseMetadata.statutes_and_articles,
       });
     }
   }

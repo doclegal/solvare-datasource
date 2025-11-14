@@ -6,12 +6,31 @@ import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
+interface ChunkedRecord {
+  ecli: string;
+  chunk_id: string;
+  section_type: string;
+  title: string;
+  text: string;
+  [key: string]: any;
+}
+
+interface ChunksByEcli {
+  ecli: string;
+  title: string;
+  totalChunks: number;
+  sectionCounts: Record<string, number>;
+  chunks: ChunkedRecord[];
+}
+
 export default function Home() {
   // State management
   const [preparedRecords, setPreparedRecords] = useState<PreparedRecord[]>([]);
+  const [chunkedData, setChunkedData] = useState<{ chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null>(null);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const [isFetchingContent, setIsFetchingContent] = useState(false);
+  const [isPreparingChunks, setIsPreparingChunks] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
   const { toast } = useToast();
@@ -23,6 +42,9 @@ export default function Home() {
 
   const handleFetchDecisions = async (filters: FilterParams) => {
     setIsFetchingContent(true);
+    
+    // Clear chunks when fetching new records
+    setChunkedData(null);
     
     try {
       // Step 1: Search for ECLIs
@@ -94,37 +116,83 @@ export default function Home() {
 
   const handleResetFilters = () => {
     setPreparedRecords([]);
+    setChunkedData(null);
     setTotalResults(0);
     setCurrentOffset(0);
   };
 
   const handleClearRecords = () => {
     setPreparedRecords([]);
+    setChunkedData(null);
     setExportLogs([]);
+  };
+
+  const handlePrepareChunks = async () => {
+    setIsPreparingChunks(true);
+    
+    try {
+      const response = await apiRequest(
+        'POST',
+        '/api/rechtspraak/prepare-chunks',
+        { records: preparedRecords }
+      );
+
+      const data = await response.json();
+      
+      setChunkedData({
+        chunksByEcli: data.chunksByEcli,
+        allChunks: data.allChunks,
+      });
+      
+      toast({
+        title: "Chunks voorbereid",
+        description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken.`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij voorbereiden",
+        description: error.message || "Kon chunks niet voorbereiden",
+      });
+    } finally {
+      setIsPreparingChunks(false);
+    }
   };
 
   const handleExport = async (config: ExportConfig) => {
     setIsExporting(true);
     setExportLogs([]);
     
+    // Use chunks if available, otherwise use full records
+    const dataToExport = chunkedData?.allChunks || preparedRecords;
+    const exportType = chunkedData ? 'chunks' : 'records';
+    
     addLog('Export naar Pinecone gestart...');
+    addLog(`Type: ${chunkedData ? 'Chunks (intelligent sections)' : 'Full records'}`);
     addLog(`Index host: ${config.indexHost}`);
     addLog(`Namespace: ${config.namespace || '(standaard)'}`);
     addLog(`Batchgrootte: ${config.batchSize}`);
-    addLog(`Totaal records: ${preparedRecords.length}`);
+    addLog(`Totaal ${exportType}: ${dataToExport.length}`);
 
     try {
+      const exportPayload: any = {
+        indexHost: config.indexHost,
+        namespace: config.namespace,
+        batchSize: config.batchSize,
+      };
+      
+      if (chunkedData) {
+        exportPayload.chunks = chunkedData.allChunks;
+      } else {
+        exportPayload.records = preparedRecords;
+      }
+      
       const response = await fetch('/api/pinecone/export', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          indexHost: config.indexHost,
-          namespace: config.namespace,
-          batchSize: config.batchSize,
-          records: preparedRecords,
-        }),
+        body: JSON.stringify(exportPayload),
       });
 
       if (!response.ok) {
@@ -200,13 +268,17 @@ export default function Home() {
         <RecordPreparation
           ecliCount={preparedRecords.length}
           preparedRecords={preparedRecords}
+          chunkedData={chunkedData}
+          onPrepareChunks={handlePrepareChunks}
           onFetchContent={() => {}}
           onClear={handleClearRecords}
           isLoading={isFetchingContent}
+          isPreparingChunks={isPreparingChunks}
         />
 
         <PineconeExport
-          recordCount={preparedRecords.length}
+          recordCount={chunkedData?.allChunks?.length || preparedRecords.length}
+          isChunked={!!chunkedData}
           onExport={handleExport}
           isExporting={isExporting}
           exportLogs={exportLogs}

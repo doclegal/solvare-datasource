@@ -9,6 +9,7 @@ import { Upload, Info } from "lucide-react";
 
 interface PineconeExportProps {
   recordCount: number;
+  isChunked?: boolean;
   onExport: (config: ExportConfig) => void;
   isExporting?: boolean;
   exportLogs?: string[];
@@ -22,6 +23,7 @@ export interface ExportConfig {
 
 export default function PineconeExport({
   recordCount,
+  isChunked = false,
   onExport,
   isExporting = false,
   exportLogs = [],
@@ -43,8 +45,10 @@ export default function PineconeExport({
       <CardHeader>
         <CardTitle>Pinecone Export</CardTitle>
         <CardDescription>
-          Verstuur voorbereide records naar je Pinecone vector database
-          {recordCount > 0 && ` • ${recordCount} records klaar`}
+          {isChunked 
+            ? `Verstuur intelligent gechunkte records naar Pinecone • ${recordCount} chunks klaar`
+            : `Verstuur voorbereide records naar je Pinecone vector database${recordCount > 0 ? ` • ${recordCount} records klaar` : ''}`
+          }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
