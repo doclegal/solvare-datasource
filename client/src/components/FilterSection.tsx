@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Search, RotateCcw } from "lucide-react";
 import instantiesData from "@/data/instanties.json";
+import civilSubcategoriesData from "@/data/civil-subcategories.json";
 
 interface FilterSectionProps {
   onFetch: (filters: FilterParams) => void;
@@ -19,6 +20,7 @@ export interface FilterParams {
   dateFrom: string;
   dateTo: string;
   court: string;
+  civilSubcategory: string;
   fullDocumentsOnly: boolean;
 }
 
@@ -27,6 +29,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [court, setCourt] = useState("");
+  const [civilSubcategory, setCivilSubcategory] = useState("all");
   const [fullDocumentsOnly, setFullDocumentsOnly] = useState(false);
 
   const handleFetch = () => {
@@ -35,6 +38,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
       dateFrom,
       dateTo,
       court,
+      civilSubcategory,
       fullDocumentsOnly,
     });
   };
@@ -44,6 +48,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     setDateFrom("");
     setDateTo("");
     setCourt("");
+    setCivilSubcategory("all");
     setFullDocumentsOnly(false);
     onReset();
   };
@@ -94,34 +99,52 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="court">Instantie</Label>
-          <Select value={court} onValueChange={setCourt}>
-            <SelectTrigger id="court" data-testid="select-court">
-              <SelectValue placeholder="Selecteer instantie" />
-            </SelectTrigger>
-            <SelectContent className="max-h-[300px]">
-              <SelectItem value="all">Alle instanties</SelectItem>
-              {instantiesData.map((inst: any, idx: number) => {
-                const value = (inst.afkorting && inst.afkorting.trim()) 
-                  ? inst.afkorting 
-                  : inst.identifier;
-                const displayName = (inst.afkorting && inst.afkorting.trim())
-                  ? `${inst.naam} (${inst.afkorting})`
-                  : inst.naam;
-                
-                if (!value || value.trim() === '') {
-                  return null;
-                }
-                
-                return (
-                  <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
-                    {displayName}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="civil-subcategory">Type civiele zaak</Label>
+            <Select value={civilSubcategory} onValueChange={setCivilSubcategory}>
+              <SelectTrigger id="civil-subcategory" data-testid="select-civil-subcategory">
+                <SelectValue placeholder="Selecteer type zaak" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {civilSubcategoriesData.map((cat: any) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.label}
                   </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="court">Instantie</Label>
+            <Select value={court} onValueChange={setCourt}>
+              <SelectTrigger id="court" data-testid="select-court">
+                <SelectValue placeholder="Selecteer instantie" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                <SelectItem value="all">Alle instanties</SelectItem>
+                {instantiesData.map((inst: any, idx: number) => {
+                  const value = (inst.afkorting && inst.afkorting.trim()) 
+                    ? inst.afkorting 
+                    : inst.identifier;
+                  const displayName = (inst.afkorting && inst.afkorting.trim())
+                    ? `${inst.naam} (${inst.afkorting})`
+                    : inst.naam;
+                  
+                  if (!value || value.trim() === '') {
+                    return null;
+                  }
+                  
+                  return (
+                    <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
+                      {displayName}
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center space-x-2">

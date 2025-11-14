@@ -1,0 +1,47 @@
+[
+  {
+    "id": "all",
+    "label": "Alle civiele zaken",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht"
+  },
+  {
+    "id": "arbeidsrecht",
+    "label": "Arbeidsrecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_arbeidsrecht"
+  },
+  {
+    "id": "europees",
+    "label": "Europees civiel recht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_europees"
+  },
+  {
+    "id": "goederenrecht",
+    "label": "Goederenrecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_goederenrecht"
+  },
+  {
+    "id": "insolventierecht",
+    "label": "Insolventierecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_insolventierecht"
+  },
+  {
+    "id": "intellectueelEigendom",
+    "label": "Intellectueel eigendomsrecht / mediarecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_intellectueelEigendom"
+  },
+  {
+    "id": "ondernemingsrecht",
+    "label": "Ondernemingsrecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_ondernemingsrecht"
+  },
+  {
+    "id": "personen",
+    "label": "Personen- en familierecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_personenEnFamilierecht"
+  },
+  {
+    "id": "verbintenissenrecht",
+    "label": "Verbintenissenrecht",
+    "value": "http://psi.rechtspraak.nl/rechtsgebied#civielRecht_verbintenissenrecht"
+  }
+]

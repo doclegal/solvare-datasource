@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import type { EcliRecord, PreparedRecord, SearchFilters } from '@shared/schema';
+import civilSubcategories from './data/civil-subcategories.json';
 
 const RECHTSPRAAK_BASE_URL = 'https://data.rechtspraak.nl/uitspraken';
 const parser = new XMLParser({
@@ -27,8 +28,11 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   // NOTE: Date filtering is temporarily disabled - the API returns 400 for date parameters
   // TODO: Research correct date parameter format from official documentation
   
-  // Always filter on Civielrecht
-  params.append('subject', 'http://psi.rechtspraak.nl/rechtsgebied#civielRecht');
+  // Filter on Civielrecht or specific subcategory
+  const subcategoryId = filters.civilSubcategory || 'all';
+  const subcategory = civilSubcategories.find(cat => cat.id === subcategoryId);
+  const subjectUri = subcategory?.value || 'http://psi.rechtspraak.nl/rechtsgebied#civielRecht';
+  params.append('subject', subjectUri);
   
   // Always filter on Uitspraak (not Conclusie)
   params.append('type', 'Uitspraak');
@@ -133,17 +137,28 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
     const rdf = data['open-rechtspraak']?.['rdf:RDF'] || {};
     const uitspraak = data['open-rechtspraak']?.uitspraak || data['open-rechtspraak']?.conclusie || {};
     
+    // RDF can have rdf:Description as array or object - normalize it
+    let descriptions = rdf['rdf:Description'];
+    if (!Array.isArray(descriptions)) {
+      descriptions = descriptions ? [descriptions] : [];
+    }
+    
+    // Find the main description (usually the first one with most metadata)
+    const mainDesc = descriptions.find(desc => desc['dcterms:subject']) || descriptions[0] || {};
+    
     // Extract title
     let title = 'Geen titel';
-    if (rdf['dcterms:title']) {
-      title = rdf['dcterms:title']['#text'] || rdf['dcterms:title'];
+    if (mainDesc['dcterms:title']) {
+      title = mainDesc['dcterms:title']['#text'] || mainDesc['dcterms:title'];
     }
     
     // Extract court
     let court = 'Onbekend';
-    if (rdf['dcterms:creator']) {
-      const creator = rdf['dcterms:creator'];
-      if (creator['@_rdfs:label']) {
+    if (mainDesc['dcterms:creator']) {
+      const creator = mainDesc['dcterms:creator'];
+      if (creator['#text']) {
+        court = creator['#text'];
+      } else if (creator['@_rdfs:label']) {
         court = creator['@_rdfs:label'];
       } else if (creator['@_resourceIdentifier']) {
         court = getCourtName(creator['@_resourceIdentifier']);
@@ -152,34 +167,45 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
     
     // Extract decision date
     let decisionDate = '';
-    if (rdf['dcterms:date']) {
-      decisionDate = rdf['dcterms:date']['@_rdfs:label'] || rdf['dcterms:date']['#text'] || rdf['dcterms:date'];
-      if (decisionDate.includes('T')) {
+    if (mainDesc['dcterms:date']) {
+      decisionDate = mainDesc['dcterms:date']['#text'] || mainDesc['dcterms:date']['@_rdfs:label'] || mainDesc['dcterms:date'];
+      if (typeof decisionDate === 'string' && decisionDate.includes('T')) {
         decisionDate = decisionDate.split('T')[0];
       }
     }
     
-    // Extract legal area
+    // Extract legal area from mainDesc
     const legalArea: string[] = [];
-    if (rdf['dcterms:subject']) {
-      const subjects = Array.isArray(rdf['dcterms:subject']) 
-        ? rdf['dcterms:subject'] 
-        : [rdf['dcterms:subject']];
+    
+    if (mainDesc['dcterms:subject']) {
+      const subjects = Array.isArray(mainDesc['dcterms:subject']) 
+        ? mainDesc['dcterms:subject'] 
+        : [mainDesc['dcterms:subject']];
       
       subjects.forEach((subject: any) => {
-        // The text value is in #text, not in @_rdfs:label attribute
+        // Get the text content
         const label = subject['#text'] || subject;
-        if (label && typeof label === 'string' && label !== 'Rechtsgebied') {
-          legalArea.push(label);
+        
+        if (label && typeof label === 'string') {
+          const trimmedLabel = label.trim();
+          if (trimmedLabel && trimmedLabel !== 'Rechtsgebied') {
+            legalArea.push(trimmedLabel);
+          }
         }
       });
     }
     
-    // Extract procedure type
+    console.log(`[${ecli}] Legal area extracted:`, legalArea);
+    
+    // Extract procedure type from mainDesc
     let procedureType = 'Onbekend';
-    if (rdf['psi:procedure']) {
-      // The text value is in #text, not in @_rdfs:label attribute
-      const procValue = rdf['psi:procedure']['#text'] || rdf['psi:procedure'];
+    if (mainDesc['psi:procedure']) {
+      const procedures = Array.isArray(mainDesc['psi:procedure'])
+        ? mainDesc['psi:procedure']
+        : [mainDesc['psi:procedure']];
+      
+      // Take the first procedure type
+      const procValue = procedures[0]['#text'] || procedures[0];
       if (procValue && typeof procValue === 'string') {
         procedureType = procValue;
       }
