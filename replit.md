@@ -48,8 +48,29 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
   - Bron URL
 - Display prepared records met preview
 
-### 3. Pinecone Export
-- Upload prepared records naar Pinecone index
+### 3. Intelligente Chunking (NIEUW)
+- Splits uitspraken in logische secties voor betere semantische zoekopdrachten
+- **Section Detection** met priority-gebaseerde keyword matching:
+  - `summary`: Inhoudsindicatie, samenvatting
+  - `claims`: Vorderingen (in conventie/reconventie)
+  - `facts`: Feiten, procesverloop, partijen
+  - `reasoning`: Beoordeling, overwegingen, motivering
+  - `decision`: Beslissing, dictum
+  - `other`: Overige tekst
+- **Automatische Text Splitting**: Lange secties (>700 woorden) worden gesplitst in chunks van ~600 woorden met 120-woord overlap
+- **Rijke Metadata Extractie** per chunk:
+  - Civil domain (employment_law, tenancy, consumer_law, etc.)
+  - Case subtype (termination, eviction, non_conformity, noise_nuisance, etc.)
+  - Outcome (claim_allowed/partly_allowed/rejected, appeal_upheld/dismissed, etc.)
+  - Party types (employee/employer, tenant/landlord, consumer/trader, etc.)
+  - Court level (kanton, rechtbank, gerechtshof, hoge_raad)
+  - Procedure type (kort_geding, bodemprocedure, hoger_beroep, cassatie)
+  - Statutes & articles (geëxtraheerd via regex: "Art 6:162 BW", etc.)
+- **UI Preview**: Expandable accordion met chunk counts per section type en color-coded badges
+
+### 4. Pinecone Export
+- Upload prepared records OF chunks naar Pinecone index
+- **Chunks** worden individueel opgeslagen met 30+ metadata velden voor filtering
 - Configureerbaar:
   - Index host
   - Namespace (optioneel)
@@ -108,8 +129,37 @@ Haal volledige content op voor ECLI's.
 }
 ```
 
+#### `POST /api/rechtspraak/prepare-chunks`
+Prepare chunks met intelligente sectie-detectie en metadata extractie.
+
+**Request Body**:
+```json
+{
+  "eclis": ["ECLI:NL:HR:2024:123", ...]
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "totalChunks": 45,
+  "chunks": [
+    {
+      "chunk_id": "ECLI:NL:HR:2024:123#summary-0",
+      "section_type": "summary",
+      "text": "...",
+      "civil_domain": "employment_law",
+      "case_subtype": "termination_of_employment",
+      "outcome": "claim_partly_allowed",
+      ...
+    }
+  ]
+}
+```
+
 #### `POST /api/pinecone/export`
-Export records naar Pinecone (streaming via SSE).
+Export records OF chunks naar Pinecone (streaming via SSE).
 
 **Request Body**:
 ```json
@@ -117,7 +167,8 @@ Export records naar Pinecone (streaming via SSE).
   "indexHost": "my-index-abc123.svc.region.pinecone.io",
   "namespace": "rechtspraak-uitspraken",
   "batchSize": 100,
-  "records": [...]
+  "records": [...],  // PreparedRecord[] OF ChunkedRecord[]
+  "isChunked": true  // Optional: true voor chunks, false voor records
 }
 ```
 
@@ -167,7 +218,8 @@ npm run dev
 
 1. **Zoeken**: Gebruiker stelt filters in → Frontend → Backend → Rechtspraak API → ECLI lijst (met paginering)
 2. **Content ophalen**: ECLI lijst → Backend → Rechtspraak content API → XML parsing → Structured records met volledige tekst
-3. **Export**: Prepared records → Backend → Pinecone Inference API (embedding generation) → Pinecone upsert (batched) → Vector database
+3. **Chunking** (optioneel): Prepared records → Backend chunking engine → Intelligente sectie-detectie + metadata extractie → Chunks met 30+ velden
+4. **Export**: Prepared records OF chunks → Backend → Pinecone Inference API (embedding generation) → Pinecone upsert (batched) → Vector database
 
 ### Paginering
 - Bij eerste zoekopdracht: `from=0`
@@ -179,6 +231,7 @@ npm run dev
 Zie `shared/schema.ts` voor TypeScript types:
 - `EcliRecord`: Basis ECLI metadata
 - `PreparedRecord`: Volledige record met content
+- `ChunkedRecord`: Chunk met section_type en uitgebreide metadata (30+ velden)
 - `SearchFilters`: Zoekfilters
 - `ExportConfig`: Pinecone export configuratie
 
@@ -193,10 +246,19 @@ Zie `shared/schema.ts` voor TypeScript types:
 
 ### Backend Modules
 - `rechtspraak-api.ts`: Rechtspraak API client functies
+- `chunking.ts`: Intelligente sectie-detectie en metadata extractie
 - `pinecone-client.ts`: Pinecone upload logica
 - `routes.ts`: Express route handlers
 
 ## Bijzonderheden
+
+### Chunking Engine
+- **Priority-based Section Detection**: Decision keywords worden EERST gecheckt om mislabeling te voorkomen ("Beslissing in conventie" → `decision`, niet `claims`)
+- **Heading Normalization**: Verwijdert nummering (1., 2.1, etc.) en punctuatie voor robuuste matching
+- **Preamble Handling**: Tekst voor eerste heading wordt als aparte `summary` section opgeslagen
+- **Empty Chunk Prevention**: Guards tegen lege chunks, infinite loops, en undefined crashes
+- **Outcome Inference**: Check specifieke phrases EERST ("gedeeltelijk toegewezen" voor "toegewezen")
+- **Statute Extraction**: Regex pattern detecteert "Art X BW", "Art X:Y Rv", etc.
 
 ### XML Parsing
 - Rechtspraak gebruikt complex XML formaat (RDF + custom namespaces)
@@ -212,6 +274,7 @@ Zie `shared/schema.ts` voor TypeScript types:
 - Graceful degradation bij partial failures
 - Detailed error logging in UI
 - Retry-able operations waar mogelijk
+- procedureType guard voorkomt crashes bij missing values
 
 ## Toekomstige Verbeteringen
 
@@ -231,7 +294,15 @@ Zie `attached_assets/` voor:
 
 ## Laatste Update
 
-13 november 2024 - Volledige implementatie met:
+14 november 2024 - Intelligente chunking implementatie:
+- Priority-based section detection met keyword matching
+- Automatische text splitting voor lange secties (600 woorden met 120 overlap)
+- Rijke metadata extractie: civil_domain, case_subtype, outcome, party types, statutes
+- UI preview met accordion en color-coded section badges
+- Production-ready chunking engine met guards tegen crashes en lege chunks
+- Preamble handling: aparte summary section met heading context preservation
+
+13 november 2024 - Initiële implementatie:
 - Nederlandse interface (alle teksten in het Nederlands)
 - Rechtspraak Open Data API integratie met XML parsing
 - Pinecone Inference API voor automatische embedding generation
