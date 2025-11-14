@@ -40,9 +40,9 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   if (filters.court && filters.court !== 'all') {
     params.append('creator', filters.court);
   }
-  if (filters.fullDocumentsOnly) {
-    params.append('return', 'DOC');
-  }
+  
+  // Always filter for full documents only
+  params.append('return', 'DOC');
   
   // Pagination
   params.append('max', filters.batchSize.toString());
@@ -144,7 +144,7 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
     }
     
     // Find the main description (usually the first one with most metadata)
-    const mainDesc = descriptions.find(desc => desc['dcterms:subject']) || descriptions[0] || {};
+    const mainDesc = descriptions.find((desc: any) => desc['dcterms:subject']) || descriptions[0] || {};
     
     // Extract title
     let title = 'Geen titel';

@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Search, RotateCcw } from "lucide-react";
 import instantiesData from "@/data/instanties.json";
 import civilSubcategoriesData from "@/data/civil-subcategories.json";
@@ -30,7 +29,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const [dateTo, setDateTo] = useState("");
   const [court, setCourt] = useState("");
   const [civilSubcategory, setCivilSubcategory] = useState("all");
-  const [fullDocumentsOnly, setFullDocumentsOnly] = useState(false);
 
   const handleFetch = () => {
     onFetch({
@@ -39,7 +37,7 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
       dateTo,
       court,
       civilSubcategory,
-      fullDocumentsOnly,
+      fullDocumentsOnly: true, // Always filter for full documents
     });
   };
 
@@ -49,7 +47,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     setDateTo("");
     setCourt("");
     setCivilSubcategory("all");
-    setFullDocumentsOnly(false);
     onReset();
   };
 
@@ -145,18 +142,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
               </SelectContent>
             </Select>
           </div>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="full-docs"
-            checked={fullDocumentsOnly}
-            onCheckedChange={(checked) => setFullDocumentsOnly(checked as boolean)}
-            data-testid="checkbox-full-docs"
-          />
-          <Label htmlFor="full-docs" className="text-sm font-normal cursor-pointer">
-            Alleen uitspraken met volledige documenten beschikbaar
-          </Label>
         </div>
 
         <div className="flex gap-3 pt-2">
