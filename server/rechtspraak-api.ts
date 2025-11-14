@@ -20,16 +20,16 @@ interface RechtspraakSearchResponse {
 
 /**
  * Convert a date period string to actual from/to dates
+ * Uses the 'date' field to filter on actual judgment date (uitspraakdatum)
  */
 function convertPeriodToDates(period: string): { dateFrom?: string; dateTo?: string } {
-  const now = new Date();
-  const today = now.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-  
   if (period === 'all' || !period) {
-    return {}; // No date filter
+    return {}; // No date filter - return all results
   }
   
-  let fromDate = new Date();
+  const now = new Date();
+  const today = now.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  const fromDate = new Date(now);
   
   switch (period) {
     case '1week':
@@ -79,12 +79,14 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
     params.append('creator', filters.court);
   }
   
-  // Add date filters if specified
+  // Add date filters if specified (uses bracket notation for range queries)
+  // date[gte] = greater than or equal (vanaf uitspraakdatum)
+  // date[lte] = less than or equal (tot uitspraakdatum)
   if (dateFrom) {
-    params.append('date', dateFrom);
+    params.append('date[gte]', dateFrom);
   }
   if (dateTo) {
-    params.append('modified', dateTo);
+    params.append('date[lte]', dateTo);
   }
   
   // Always filter for full documents only
