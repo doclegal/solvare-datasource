@@ -337,7 +337,17 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       timeout: 30000,
     });
 
+    // DEBUG: Log raw XML to see structure
+    console.log(`\n=== RAW XML RESPONSE for ${ecli} (first 3000 chars) ===`);
+    console.log(response.data.substring(0, 3000));
+    console.log('=== END RAW XML ===\n');
+
     const data = parser.parse(response.data);
+    
+    // DEBUG: Log parsed data structure
+    console.log(`\n=== PARSED DATA for ${ecli} ===`);
+    console.log(JSON.stringify(data, null, 2).substring(0, 4000));
+    console.log('=== END PARSED DATA ===\n');
     
     // Extract metadata from XML
     const rdf = data['open-rechtspraak']?.['rdf:RDF'] || {};
