@@ -3,7 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Trash2, ExternalLink, Sparkles } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { FileText, Trash2, ExternalLink, Sparkles, Bot } from "lucide-react";
 
 export interface PreparedRecord {
   ecli: string;
@@ -38,7 +40,7 @@ interface RecordPreparationProps {
   ecliCount: number;
   preparedRecords: PreparedRecord[];
   chunkedData?: { chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null;
-  onPrepareChunks?: () => void;
+  onPrepareChunks?: (useLLM: boolean) => void;
   onFetchContent: () => void;
   onClear: () => void;
   isLoading?: boolean;
@@ -75,6 +77,7 @@ export default function RecordPreparation({
 }: RecordPreparationProps) {
   const [expandedText, setExpandedText] = useState<Set<string>>(new Set());
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
+  const [useLLMChunking, setUseLLMChunking] = useState(false);
 
   const toggleExpanded = (ecli: string) => {
     const newExpanded = new Set(expandedText);
@@ -126,18 +129,6 @@ export default function RecordPreparation({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            {preparedRecords.length > 0 && !chunkedData && onPrepareChunks && (
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={onPrepareChunks}
-                disabled={isPreparingChunks || preparedRecords.length === 0}
-                data-testid="button-prepare-chunks"
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {isPreparingChunks ? 'Bezig...' : 'Chunks Voorbereiden'}
-              </Button>
-            )}
             {preparedRecords.length > 0 && (
               <Button variant="outline" size="sm" onClick={onClear} data-testid="button-clear-records">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -148,6 +139,47 @@ export default function RecordPreparation({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Chunking method toggle */}
+        {preparedRecords.length > 0 && !chunkedData && onPrepareChunks && (
+          <div className="flex items-center justify-between p-4 border rounded-md bg-muted/30">
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="llm-chunking" className="font-semibold">Chunking Methode</Label>
+                <Badge variant={useLLMChunking ? "default" : "secondary"} className="text-xs">
+                  {useLLMChunking ? 'AI Semantisch' : 'Keyword Gebaseerd'}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {useLLMChunking 
+                  ? 'AI bepaalt semantisch welk tekstdeel bij feiten/beoordeling/vorderingen/beslissing hoort'
+                  : 'Traditionele methode: identificeert secties op basis van kopjes'
+                }
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="llm-chunking" className="text-sm cursor-pointer">
+                  AI Chunking
+                </Label>
+                <Switch 
+                  id="llm-chunking"
+                  checked={useLLMChunking}
+                  onCheckedChange={setUseLLMChunking}
+                  data-testid="switch-llm-chunking"
+                />
+              </div>
+              <Button 
+                variant="default" 
+                onClick={() => onPrepareChunks(useLLMChunking)}
+                disabled={isPreparingChunks || preparedRecords.length === 0}
+                data-testid="button-prepare-chunks"
+              >
+                {useLLMChunking ? <Bot className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                {isPreparingChunks ? 'Bezig...' : 'Chunks Voorbereiden'}
+              </Button>
+            </div>
+          </div>
+        )}
         {preparedRecords.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>Gebruik de filters hierboven om civielrechtelijke uitspraken op te halen. De volledige tekst wordt automatisch opgehaald en hier getoond.</p>

@@ -213,7 +213,7 @@ export default function Home() {
     setExportLogs([]);
   };
 
-  const handlePrepareChunks = async () => {
+  const handlePrepareChunks = async (useLLM: boolean = false) => {
     if (!batchId) {
       toast({
         variant: "destructive",
@@ -226,23 +226,63 @@ export default function Home() {
     setIsPreparingChunks(true);
     
     try {
+      const endpoint = useLLM 
+        ? '/api/rechtspraak/prepare-chunks-llm'
+        : '/api/rechtspraak/prepare-chunks';
+      
       const response = await apiRequest(
         'POST',
-        '/api/rechtspraak/prepare-chunks',
+        endpoint,
         { batchId }
       );
 
       const data = await response.json();
       
-      setChunkedData({
-        chunksByEcli: data.chunksByEcli,
-        allChunks: data.allChunks,
-      });
-      
-      toast({
-        title: "Chunks voorbereid",
-        description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken.`,
-      });
+      // Handle both keyword chunking (with chunksByEcli) and LLM chunking (flat chunks array)
+      if (useLLM) {
+        // LLM endpoint returns flat chunks array, need to group by ECLI
+        const chunksByEcli: Record<string, any> = {};
+        data.chunks.forEach((chunk: any) => {
+          if (!chunksByEcli[chunk.ecli]) {
+            chunksByEcli[chunk.ecli] = {
+              ecli: chunk.ecli,
+              title: chunk.title,
+              totalChunks: 0,
+              sectionCounts: {},
+              chunks: [],
+            };
+          }
+          
+          chunksByEcli[chunk.ecli].totalChunks++;
+          chunksByEcli[chunk.ecli].sectionCounts[chunk.section_type] = 
+            (chunksByEcli[chunk.ecli].sectionCounts[chunk.section_type] || 0) + 1;
+          chunksByEcli[chunk.ecli].chunks.push(chunk);
+        });
+        
+        setChunkedData({
+          chunksByEcli,
+          allChunks: data.chunks,
+        });
+        
+        const fallbackMsg = data.fallbackCount > 0 
+          ? ` (${data.fallbackCount} uitspraken gebruikten fallback naar keyword methode)` 
+          : '';
+        
+        toast({
+          title: "AI Chunks voorbereid",
+          description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken${fallbackMsg}.`,
+        });
+      } else {
+        setChunkedData({
+          chunksByEcli: data.chunksByEcli,
+          allChunks: data.allChunks,
+        });
+        
+        toast({
+          title: "Chunks voorbereid",
+          description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken.`,
+        });
+      }
     } catch (error: any) {
       // Handle 404 from stale batchId (e.g., after server restart)
       if (error.message && error.message.includes('404')) {

@@ -301,6 +301,7 @@ export async function prepareChunksWithLLM(
           title: record.title,
           source_url: record.sourceUrl,
           text,
+          is_civil: true,
           court_name: record.court,
           decision_date: record.decisionDate,
           

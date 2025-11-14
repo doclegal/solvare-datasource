@@ -46,8 +46,10 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
   - Bron URL
 - Display prepared records met preview
 
-### 3. Intelligente Chunking (NIEUW)
-- Splits uitspraken in logische secties voor betere semantische zoekopdrachten
+### 3. Intelligente Chunking (NIEUW - Dual Mode)
+Splits uitspraken in logische secties voor betere semantische zoekopdrachten met **twee parallelle methodes**:
+
+#### A. Keyword-Based Chunking (Traditioneel)
 - **Section Detection** met priority-gebaseerde keyword matching:
   - `summary`: Inhoudsindicatie, samenvatting
   - `claims`: Vorderingen (in conventie/reconventie)
@@ -55,6 +57,17 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
   - `reasoning`: Beoordeling, overwegingen, motivering
   - `decision`: Beslissing, dictum
   - `other`: Overige tekst
+- Identificeert secties op basis van kopjes in de tekst
+
+#### B. LLM Semantic Chunking (NIEUW - Experimenteel)
+- **AI-Powered Classification**: OpenAI GPT-4.1 Mini bepaalt semantisch welk tekstdeel bij welke sectie hoort
+- **Paragraph Segmentation**: Splitst tekst in paragraphs (~300 woorden) voor classificatie
+- **Section Types**: Feiten, Beoordeling, Vorderingen, Beslissing
+- **Confidence Scores**: Elk chunk krijgt confidence score (0.0-1.0) van de LLM
+- **Automatic Fallback**: Bij LLM failures wordt keyword-based methode gebruikt
+- **Cost**: ~$0.009 per uitspraak (~11k tokens @ GPT-4.1 Mini rates)
+
+**Gemeenschappelijke Features:**
 - **Automatische Text Splitting**: Lange secties (>700 woorden) worden gesplitst in chunks van ~600 woorden met 120-woord overlap
 - **Rijke Metadata Extractie** per chunk:
   - Civil domain (employment_law, tenancy, consumer_law, etc.)
@@ -65,6 +78,7 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
   - Procedure type (kort_geding, bodemprocedure, hoger_beroep, cassatie)
   - Statutes & articles (geëxtraheerd via regex: "Art 6:162 BW", etc.)
 - **UI Preview**: Expandable accordion met chunk counts per section type en color-coded badges
+- **Metadata Tracking**: classification_method (keyword/llm/keyword-fallback), confidence, model version
 
 ### 4. Pinecone Export
 - Upload prepared records OF chunks naar Pinecone index
@@ -147,12 +161,12 @@ Maak server-side batch van records (voorkomt HTTP 413 bij chunk preparation).
 ```
 
 #### `POST /api/rechtspraak/prepare-chunks`
-Prepare chunks met intelligente sectie-detectie en metadata extractie.
+Prepare chunks met keyword-based sectie-detectie en metadata extractie.
 
 **Request Body**:
 ```json
 {
-  "eclis": ["ECLI:NL:HR:2024:123", ...]
+  "batchId": "uuid-..."
 }
 ```
 
@@ -161,14 +175,39 @@ Prepare chunks met intelligente sectie-detectie en metadata extractie.
 {
   "success": true,
   "totalChunks": 45,
+  "totalRecords": 10,
+  "chunksByEcli": {...},
+  "allChunks": [...]
+}
+```
+
+#### `POST /api/rechtspraak/prepare-chunks-llm`
+Prepare chunks met LLM semantische classificatie (experimenteel).
+
+**Request Body**:
+```json
+{
+  "batchId": "uuid-..."
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "totalChunks": 45,
+  "totalRecords": 10,
+  "fallbackCount": 2,
+  "method": "llm",
   "chunks": [
     {
-      "chunk_id": "ECLI:NL:HR:2024:123#summary-0",
-      "section_type": "summary",
+      "chunk_id": "ECLI:NL:HR:2024:123#facts-0",
+      "section_type": "facts",
       "text": "...",
-      "civil_domain": "employment_law",
-      "case_subtype": "termination_of_employment",
-      "outcome": "claim_partly_allowed",
+      "classification_method": "llm",
+      "classification_confidence": 0.95,
+      "llm_model": "gpt-4.1-mini",
+      "prompt_version": "v1.0",
       ...
     }
   ]
@@ -310,6 +349,15 @@ Zie `attached_assets/` voor:
 - `API Pinecone_*.txt`: Pinecone API referentie
 
 ## Laatste Update
+
+14 november 2024 - LLM Semantic Chunking (experimenteel):
+- **Dual Chunking Systeem**: Keyword-based (traditioneel) + LLM semantic (nieuw)
+- **UI Toggle**: Gebruiker kan kiezen tussen keyword en AI chunking methodes
+- **OpenAI Integration**: GPT-4.1 Mini voor semantische classificatie van tekstfragmenten
+- **Paragraph Segmentation**: Splitst tekst in ~300-woord paragraphs voor LLM classificatie
+- **Automatic Fallback**: Bij LLM errors wordt keyword-based methode gebruikt
+- **Confidence Tracking**: Elk chunk krijgt confidence score van LLM
+- **Metadata**: classification_method, classification_confidence, llm_model, prompt_version
 
 14 november 2024 - Periode beperking + batch management:
 - **Zoekperiode beperkt** tot maximaal 10 jaar terug
