@@ -310,7 +310,8 @@ function checkCivilLegalArea(subjectData: any): { isCivil: boolean; subjects: Ar
         }
         
         // Then check for civil law labels
-        for (const civilLabel of CIVIL_LAW_LABELS) {
+        const civilLabelsArray = Array.from(CIVIL_LAW_LABELS);
+        for (const civilLabel of civilLabelsArray) {
           if (labelPart === civilLabel || labelPart.includes(civilLabel)) {
             hasCivilSubject = true;
             break;
@@ -410,15 +411,46 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       }
     }
     
+    // Extract Inhoudsindicatie (official summary) from multiple possible locations
+    let inhoudsindicatie = '';
+    
+    // Try dcterms:abstract first (most common)
+    if (mainDesc['dcterms:abstract']) {
+      const abstractNode = mainDesc['dcterms:abstract'];
+      inhoudsindicatie = abstractNode['#text'] || abstractNode;
+    }
+    
+    // Try psi:inhoudsindicatie as fallback
+    if (!inhoudsindicatie && mainDesc['psi:inhoudsindicatie']) {
+      const inhoudNode = mainDesc['psi:inhoudsindicatie'];
+      inhoudsindicatie = inhoudNode['#text'] || inhoudNode;
+    }
+    
+    // Also check in uitspraak section
+    if (!inhoudsindicatie && uitspraak) {
+      // Look for inhoudsindicatie node
+      if (uitspraak.inhoudsindicatie) {
+        inhoudsindicatie = extractTextFromNode(uitspraak.inhoudsindicatie);
+      } else if (uitspraak.Inhoudsindicatie) {
+        inhoudsindicatie = extractTextFromNode(uitspraak.Inhoudsindicatie);
+      }
+    }
+    
+    if (typeof inhoudsindicatie === 'string') {
+      inhoudsindicatie = inhoudsindicatie.trim();
+    }
+    
+    console.log(`[${ecli}] Inhoudsindicatie found:`, inhoudsindicatie ? `${inhoudsindicatie.substring(0, 100)}...` : 'NONE');
+    
     // Extract full text from uitspraak sections
     let fullText = '';
     if (uitspraak) {
       fullText = extractTextFromNode(uitspraak);
     }
     
-    // If no text extracted, try to get summary
-    if (!fullText && rdf['dcterms:abstract']) {
-      fullText = rdf['dcterms:abstract']['#text'] || rdf['dcterms:abstract'];
+    // If no text extracted, use inhoudsindicatie as fallback
+    if (!fullText && inhoudsindicatie) {
+      fullText = inhoudsindicatie;
     }
     
     const sourceUrl = `https://uitspraken.rechtspraak.nl/details?id=${ecli}`;
@@ -432,6 +464,7 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       procedureType,
       sourceUrl,
       fullText: fullText || 'Geen volledige tekst beschikbaar',
+      inhoudsindicatie: inhoudsindicatie || undefined,
     };
   } catch (error: any) {
     console.error(`Error fetching content for ${ecli}:`, error.message);

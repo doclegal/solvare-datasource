@@ -20,6 +20,7 @@ export const preparedRecordSchema = z.object({
   procedureType: z.string(),
   sourceUrl: z.string(),
   fullText: z.string(),
+  inhoudsindicatie: z.string().optional(), // Official summary from Rechtspraak
 });
 
 export type PreparedRecord = z.infer<typeof preparedRecordSchema>;

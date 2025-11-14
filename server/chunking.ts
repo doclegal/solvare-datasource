@@ -343,20 +343,106 @@ function parseIntoSections(fullText: string): Array<{ type: string; text: string
 }
 
 /**
+ * Create summary chunk from Inhoudsindicatie or fallback to extracted facts/reasoning
+ */
+function createSummaryChunk(record: PreparedRecord, baseMetadata: any): ChunkedRecord | null {
+  let summaryText = '';
+  
+  // Priority 1: Use Inhoudsindicatie if available
+  if (record.inhoudsindicatie && record.inhoudsindicatie.trim()) {
+    summaryText = record.inhoudsindicatie.trim();
+    console.log(`[${record.ecli}] Using Inhoudsindicatie for summary chunk`);
+  } else {
+    // Priority 2: Extract from Facts + Reasoning sections
+    console.log(`[${record.ecli}] No Inhoudsindicatie found, extracting from Facts + Reasoning`);
+    
+    const sections = parseIntoSections(record.fullText);
+    const factsSection = sections.find(s => s.type === 'facts');
+    const reasoningSection = sections.find(s => s.type === 'reasoning');
+    
+    let combinedText = '';
+    if (factsSection) {
+      combinedText += factsSection.text + '\n\n';
+    }
+    if (reasoningSection) {
+      // Take first ~300 words of reasoning
+      const reasoningWords = reasoningSection.text.split(/\s+/).slice(0, 300);
+      combinedText += reasoningWords.join(' ');
+    }
+    
+    if (!combinedText.trim()) {
+      // Ultimate fallback: take first ~200 words of full text, skip preamble
+      const words = record.fullText.split(/\s+/);
+      // Skip first 50 words (likely preamble/header)
+      const contentWords = words.slice(50, 250);
+      summaryText = contentWords.join(' ');
+    } else {
+      // Take first 3-5 sentences from combined text
+      const sentences = combinedText.match(/[^.!?]+[.!?]+/g) || [];
+      summaryText = sentences.slice(0, 5).join(' ').trim();
+    }
+  }
+  
+  if (!summaryText) {
+    return null;
+  }
+  
+  return {
+    ecli: record.ecli,
+    chunk_id: `${record.ecli}#summary-0`,
+    section_type: 'summary',
+    title: record.title,
+    source_url: record.sourceUrl,
+    text: summaryText,
+    
+    is_civil: true,
+    is_kanton_case: baseMetadata.is_kanton_case,
+    civil_domain: baseMetadata.civil_domain,
+    case_subtype: baseMetadata.case_subtype,
+    procedure_type: baseMetadata.procedure_type,
+    court_level: baseMetadata.court_level,
+    court_name: record.court,
+    
+    decision_date: record.decisionDate,
+    decision_year: baseMetadata.decision_year,
+    outcome: baseMetadata.outcome,
+    
+    party_1_type: baseMetadata.party_1_type,
+    party_2_type: baseMetadata.party_2_type,
+    
+    statutes_and_articles: baseMetadata.statutes_and_articles,
+  };
+}
+
+/**
  * Create chunks from a prepared record
  */
 export function createChunksFromRecord(record: PreparedRecord): ChunkedRecord[] {
   const chunks: ChunkedRecord[] = [];
   const baseMetadata = extractMetadata(record, record.fullText);
   
-  // Parse text into sections
+  // Step 1: Create summary chunk from Inhoudsindicatie or fallback
+  const summaryChunk = createSummaryChunk(record, baseMetadata);
+  if (summaryChunk) {
+    chunks.push(summaryChunk);
+  }
+  
+  // Step 2: Parse text into sections (skip preamble - it's in summary now)
   const sections = parseIntoSections(record.fullText);
   
   // Track chunk indices per section type
   const sectionCounters: Record<string, number> = {};
   
+  // Start counter at 1 for summary since we already have summary-0
+  sectionCounters['summary'] = summaryChunk ? 1 : 0;
+  
   for (const section of sections) {
     const sectionType = section.type as ChunkedRecord['section_type'];
+    
+    // Skip summary sections - we already have the summary chunk from Inhoudsindicatie
+    if (sectionType === 'summary') {
+      continue;
+    }
     
     // Initialize counter for this section type
     if (!sectionCounters[sectionType]) {
