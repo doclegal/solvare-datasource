@@ -14,7 +14,8 @@ const parser = new XMLParser({
 interface RechtspraakSearchResponse {
   feed: {
     entry: any | any[];
-    'opensearch:totalResults': number;
+    'opensearch:totalResults'?: number;
+    subtitle?: string | { '#text': string };
   };
 }
 
@@ -110,15 +111,29 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
 
     const data = parser.parse(response.data) as RechtspraakSearchResponse;
     
-    console.log('[Rechtspraak API] Response status:', response.status);
-    console.log('[Rechtspraak API] Total results:', data.feed?.['opensearch:totalResults'] || 0);
-    console.log('[Rechtspraak API] Entries count:', Array.isArray(data.feed?.entry) ? data.feed.entry.length : (data.feed?.entry ? 1 : 0));
-    
     if (!data.feed) {
       return { records: [], totalResults: 0 };
     }
 
-    const totalResults = data.feed['opensearch:totalResults'] || 0;
+    // Extract total results count
+    // When return=DOC is used, opensearch:totalResults is not provided
+    // Instead, the count is in subtitle as "Aantal gevonden ECLI's: 1493"
+    let totalResults = data.feed['opensearch:totalResults'] || 0;
+    
+    if (totalResults === 0 && data.feed.subtitle) {
+      const subtitle = typeof data.feed.subtitle === 'string' 
+        ? data.feed.subtitle 
+        : data.feed.subtitle['#text'] || '';
+      
+      const match = subtitle.match(/Aantal gevonden ECLI's:\s*(\d+)/);
+      if (match && match[1]) {
+        totalResults = parseInt(match[1], 10);
+      }
+    }
+    
+    console.log('[Rechtspraak API] Response status:', response.status);
+    console.log('[Rechtspraak API] Total results:', totalResults);
+    console.log('[Rechtspraak API] Entries count:', Array.isArray(data.feed?.entry) ? data.feed.entry.length : (data.feed?.entry ? 1 : 0));
     
     // Handle both single entry and multiple entries
     let entries = data.feed.entry;
