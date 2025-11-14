@@ -186,9 +186,9 @@ function extractMetadata(record: PreparedRecord, fullText: string) {
     }
   }
   
-  // Infer procedure type
+  // Infer procedure type (guard against undefined/null)
   let procedureTypeNormalized = 'unknown';
-  const procLower = record.procedureType.toLowerCase();
+  const procLower = (record.procedureType || '').toLowerCase();
   if (procLower.includes('kort geding')) {
     procedureTypeNormalized = 'kort_geding';
   } else if (procLower.includes('bodem') || procLower.includes('bodemprocedure')) {
@@ -266,6 +266,8 @@ function extractMetadata(record: PreparedRecord, fullText: string) {
 
 /**
  * Parse full text into sections based on headings
+ * Preamble text (before first heading) becomes separate 'summary' section
+ * Headings are included in section text for context preservation
  */
 function parseIntoSections(fullText: string): Array<{ type: string; text: string; heading?: string }> {
   const sections: Array<{ type: string; text: string; heading?: string }> = [];
@@ -273,6 +275,8 @@ function parseIntoSections(fullText: string): Array<{ type: string; text: string
   // Split by lines
   const lines = fullText.split('\n');
   let currentSection: { type: string; text: string; heading?: string } | null = null;
+  let preambleText = '';
+  let hasSeenHeading = false;
   
   for (const line of lines) {
     const trimmed = line.trim();
@@ -287,33 +291,52 @@ function parseIntoSections(fullText: string): Array<{ type: string; text: string
       
       // If we identified a known section type, start new section
       if (sectionType !== 'other') {
+        // If we have preamble and haven't seen a heading yet, save preamble as summary
+        if (!hasSeenHeading && preambleText.trim()) {
+          sections.push({
+            type: 'summary',
+            text: preambleText,
+          });
+          preambleText = '';
+        }
+        
+        hasSeenHeading = true;
+        
+        // Push previous section if exists
         if (currentSection && currentSection.text.trim()) {
           sections.push(currentSection);
         }
+        
+        // Create new section, include heading in text for context
         currentSection = {
           type: sectionType,
-          text: '',
+          text: line + '\n', // Include heading line in text
           heading: trimmed,
         };
         continue;
       }
     }
     
-    // Add line to current section
-    if (currentSection) {
+    // Add line to current section or preamble
+    if (hasSeenHeading && currentSection) {
       currentSection.text += line + '\n';
     } else {
-      // No section yet, start "other"
-      if (!currentSection) {
-        currentSection = { type: 'other', text: '' };
-      }
-      currentSection.text += line + '\n';
+      // No heading yet, accumulate in preamble
+      preambleText += line + '\n';
     }
   }
   
   // Push final section
   if (currentSection && currentSection.text.trim()) {
     sections.push(currentSection);
+  }
+  
+  // If only preamble exists (no headings found), classify as summary
+  if (!hasSeenHeading && preambleText.trim()) {
+    sections.push({
+      type: 'summary',
+      text: preambleText,
+    });
   }
   
   return sections;
