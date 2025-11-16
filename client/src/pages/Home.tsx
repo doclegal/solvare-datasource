@@ -430,6 +430,12 @@ export default function Home() {
                 addLog(`⚠ Waarschuwing: Kon ECLI's niet markeren als verwerkt - ${error.message}`);
               }
               
+              // Clear prepared records and chunks after successful upload
+              setPreparedRecords([]);
+              setChunkedData(null);
+              accumulatedRecordsRef.current = [];
+              addLog('✓ Metadata Records tabel geleegd');
+              
               toast({
                 title: "Export voltooid",
                 description: `${data.successCount} van ${data.totalRecords} records succesvol naar Pinecone verstuurd.`,
