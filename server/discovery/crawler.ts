@@ -13,8 +13,10 @@ interface CrawlResult {
   robotsAllowed: boolean;
 }
 
+type RobotsParserInstance = ReturnType<typeof RobotsParser>;
+
 interface RobotsCacheEntry {
-  parser: RobotsParser;
+  parser: RobotsParserInstance;
   fetchedAt: number;
 }
 
@@ -40,7 +42,7 @@ function getHostname(url: string): string {
 /**
  * Fetch and parse robots.txt for a host
  */
-async function getRobotsParser(hostname: string): Promise<RobotsParser> {
+async function getRobotsParser(hostname: string): Promise<RobotsParserInstance> {
   const cached = robotsCache.get(hostname);
   const now = Date.now();
   
