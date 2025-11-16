@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, RotateCcw } from "lucide-react";
-import instantiesData from "@/data/instanties.json";
 import civilSubcategoriesData from "@/data/civil-subcategories.json";
 
 interface FilterSectionProps {
@@ -33,14 +32,13 @@ const datePeriodOptions = [
 export default function FilterSection({ onFetch, onReset, isLoading = false }: FilterSectionProps) {
   const [batchSize, setBatchSize] = useState("50");
   const [datePeriod, setDatePeriod] = useState("10years");
-  const [court, setCourt] = useState("");
   const [civilSubcategory, setCivilSubcategory] = useState("all");
 
   const handleFetch = () => {
     onFetch({
       batchSize: parseInt(batchSize) || 50,
       datePeriod,
-      court,
+      court: "all", // Always search all courts (Rechtbanken, Gerechtshoven, Hoge Raad)
       civilSubcategory,
       fullDocumentsOnly: true, // Always filter for full documents
     });
@@ -49,7 +47,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const handleReset = () => {
     setBatchSize("50");
     setDatePeriod("10years");
-    setCourt("");
     setCivilSubcategory("all");
     onReset();
   };
@@ -109,38 +106,6 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
                     {cat.label}
                   </SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="court">Instantie</Label>
-            <Select value={court} onValueChange={setCourt}>
-              <SelectTrigger id="court" data-testid="select-court">
-                <SelectValue placeholder="Selecteer instantie" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                <SelectItem value="all">Alle instanties</SelectItem>
-                {instantiesData.map((inst: any, idx: number) => {
-                  const value = (inst.afkorting && inst.afkorting.trim()) 
-                    ? inst.afkorting 
-                    : inst.identifier;
-                  const displayName = (inst.afkorting && inst.afkorting.trim())
-                    ? `${inst.naam} (${inst.afkorting})`
-                    : inst.naam;
-                  
-                  if (!value || value.trim() === '') {
-                    return null;
-                  }
-                  
-                  return (
-                    <SelectItem key={inst.identifier || `inst_${idx}`} value={value}>
-                      {displayName}
-                    </SelectItem>
-                  );
-                })}
               </SelectContent>
             </Select>
           </div>
