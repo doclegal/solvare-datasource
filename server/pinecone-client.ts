@@ -49,7 +49,8 @@ export async function upsertRecordsToPinecone(
   // This implementation uses Pinecone's Inference API to generate embeddings
   // using the 'multilingual-e5-large' model, which supports Dutch text well.
   // The embeddings are then uploaded to your Pinecone index.
-  const index = pc.index(indexName);
+  // Use the full host URL to bypass index lookup
+  const index = pc.index(indexName, indexHost);
   const targetNamespace = namespace || '';
   
   const progress: UploadProgress = {
