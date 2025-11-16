@@ -430,6 +430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Connection', 'keep-alive');
       
       const sendProgress = (progress: DiscoveryProgress) => {
+        console.log('[SSE] Sending progress:', progress.type, progress.message);
         res.write(`data: ${JSON.stringify(progress)}\n\n`);
       };
       
