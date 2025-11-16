@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { pgTable, serial, varchar, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
 
 // Rechtspraak ECLI record schema
 export const ecliRecordSchema = z.object({
@@ -102,3 +104,20 @@ export const exportConfigSchema = z.object({
 });
 
 export type ExportConfig = z.infer<typeof exportConfigSchema>;
+
+// Database table: Track processed ECLI records
+export const processedEclis = pgTable("processed_eclis", {
+  id: serial("id").primaryKey(),
+  ecli: varchar("ecli", { length: 255 }).notNull().unique(),
+  namespace: varchar("namespace", { length: 100 }).notNull(),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+});
+
+// Zod schemas for database operations
+export const insertProcessedEcliSchema = createInsertSchema(processedEclis).omit({
+  id: true,
+  uploadedAt: true,
+});
+
+export type InsertProcessedEcli = z.infer<typeof insertProcessedEcliSchema>;
+export type ProcessedEcli = typeof processedEclis.$inferSelect;
