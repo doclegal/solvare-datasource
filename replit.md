@@ -319,6 +319,19 @@ Zie `attached_assets/` voor:
 
 ## Laatste Update
 
+16 november 2024 - Metadata-Only Pinecone Export:
+- **Metadata-only export**: Elke Inhoudsindicatie = 1 Pinecone vector
+- **Embedding generatie**: Pinecone Inference API (multilingual-e5-large) genereert embeddings uit Inhoudsindicatie
+- **Metadata velden**: ecli, text (inhoudsindicatie), title, court, decision_date, legal_area, procedure_type, source_url
+- **Vector ID**: ECLI (uniek identifier)
+- **Workflow**: PreparedRecord → Pinecone embedding → Upsert met metadata
+- Correcte Pinecone SDK signature: `pc.inference.embed('model', { inputs, parameters })`
+
+16 november 2024 - Instantie Filter Verwijderd:
+- **Alle instanties**: Standaard worden ALLE rechtbanken, gerechtshoven en Hoge Raad doorzocht
+- Geen keuzemenu meer voor instantie selectie
+- 222.112+ civielrechtelijke uitspraken beschikbaar
+
 16 november 2024 - Inhoudsindicatie Filtering (KRITISCH):
 - **KWALITEITSFILTER**: Alleen zaken met geldige Inhoudsindicatie worden opgehaald
 - Filter verwijdert automatisch:
