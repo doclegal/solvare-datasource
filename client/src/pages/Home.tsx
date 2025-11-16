@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
@@ -6,6 +6,8 @@ import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+
+const STORAGE_KEY = 'rechtspraak_prepared_records';
 
 interface ChunkedRecord {
   ecli: string;
@@ -44,6 +46,34 @@ export default function Home() {
   const currentOffsetRef = useRef(0);
   const fetchLockRef = useRef(false);
   const activeFiltersRef = useRef<string | null>(null);
+
+  // Load prepared records from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const records = JSON.parse(stored);
+        setPreparedRecords(records);
+        accumulatedRecordsRef.current = records;
+        setTotalResults(records.length);
+        console.log(`[localStorage] Loaded ${records.length} records from storage`);
+      }
+    } catch (error) {
+      console.error('[localStorage] Failed to load records:', error);
+    }
+  }, []);
+
+  // Save prepared records to localStorage whenever they change
+  useEffect(() => {
+    if (preparedRecords.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(preparedRecords));
+        console.log(`[localStorage] Saved ${preparedRecords.length} records`);
+      } catch (error) {
+        console.error('[localStorage] Failed to save records:', error);
+      }
+    }
+  }, [preparedRecords]);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString('nl-NL');
@@ -94,6 +124,14 @@ export default function Home() {
         setTotalResults(0);
         setExportLogs([]);
         activeFiltersRef.current = serializedFilters;
+        
+        // Clear localStorage on filter change
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          console.log('[Filter change] Cleared localStorage');
+        } catch (error) {
+          console.error('[Filter change] Failed to clear localStorage:', error);
+        }
       }
       
       // Clear chunks when fetching new records
@@ -246,6 +284,14 @@ export default function Home() {
     setBatchId(null);
     setChunkedData(null);
     setExportLogs([]);
+    
+    // Clear localStorage
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      console.log('[localStorage] Cleared stored records');
+    } catch (error) {
+      console.error('[localStorage] Failed to clear records:', error);
+    }
   };
 
   const handlePrepareChunks = async (useLLM: boolean = false) => {
