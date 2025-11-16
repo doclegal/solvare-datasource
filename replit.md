@@ -1,388 +1,63 @@
 # Rechtspraak Ingestie Tool
 
-## Projectoverzicht
-
-Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke uitspraken van de Open Data API van Rechtspraak.nl en deze voorbereiden voor opslag als vector records in Pinecone.
-
-**Doel**: Uitspraken van Nederlandse rechtbanken ophalen, full-text extraheren, en uploaden naar Pinecone voor semantische zoekopdrachten.
-
-**BELANGRIJKE KWALITEITSFILTER**: Alleen zaken met een geldige **Inhoudsindicatie** (officiële samenvatting in `<summary>` veld) worden opgehaald. Zaken zonder inhoudsindicatie, met een lege inhoudsindicatie, of met alleen een "-" (streepje) worden automatisch uitgefilterd om datakwaliteit te waarborgen.
-
-## Architectuur
-
-### Frontend
-- **Framework**: React met TypeScript
-- **Styling**: Tailwind CSS + Shadcn UI componenten
-- **State Management**: React hooks (useState)
-- **API Communicatie**: Fetch API met custom apiRequest helper
-- **Taal**: Nederlands
-
-### Backend
-- **Framework**: Express.js met TypeScript
-- **API Integraties**: 
-  - Rechtspraak.nl Open Data API (XML)
-  - Pinecone Vector Database (Node.js SDK)
-- **Data Parsing**: fast-xml-parser voor XML processing
-- **HTTP Client**: Axios voor externe API calls
-
-## Functionaliteit
-
-### 1. Rechtspraak Filters & Ophalen
-- Zoek uitspraken met filters:
-  - Wijzigingsdatum (maximaal 10 jaar terug)
-  - **Alle instanties** (rechtbanken, gerechtshoven, Hoge Raad - automatisch)
-  - Type civiele zaak (Arbeidsrecht, Huurrecht, Consumentenrecht, etc.)
-  - Alleen volledige documenten (altijd actief)
-- Paginering met configureerbare batchgrootte
-- Display ECLI codes met metadata
-
-### 2. Metadata Ophalen (Geen volledige tekst)
-- Haal ALLEEN metadata op voor geselecteerde ECLI's (veel sneller)
-- Parse XML en extraheer:
-  - Titel
-  - Instantie/rechtbank
-  - Uitspraakdatum
-  - Rechtsgebied(en)
-  - Proceduresoort
-  - **Inhoudsindicatie** (officiële samenvatting)
-  - Bron URL (link naar volledige uitspraak)
-- Display prepared records met metadata preview
-- **GEEN volledige tekst** - alleen metadata voor snelheid en efficiëntie
-
-### 3. Pinecone Export (Metadata-Only)
-- Upload metadata records naar Pinecone index
-- **Metadata fields**: ECLI, Titel, Instantie, Datum, Rechtsgebied, Proceduresoort, Inhoudsindicatie, Bron URL
-- **Index**: rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io (hardcoded)
-- **Namespace**: ECLI_NL (vast voor alle records, niet meer per rechtsgebied)
-- Configureerbaar:
-  - Batchgrootte (aanbevolen: 100-500)
-- Real-time voortgang via Server-Sent Events (SSE)
-- Foutafhandeling met gedetailleerde logging
-
-## API Endpoints
-
-### Backend Routes
-
-#### `POST /api/rechtspraak/search`
-Zoek uitspraken in Rechtspraak Open Data API.
-
-**Request Body**:
-```json
-{
-  "batchSize": 50,
-  "dateFrom": "2024-01-01",
-  "dateTo": "2024-12-31",
-  "documentType": "Uitspraak",
-  "court": "HR",
-  "legalArea": "Civiel",
-  "fullDocumentsOnly": true,
-  "from": 0
-}
-```
-
-**Response**:
-```json
-{
-  "records": [...],
-  "totalResults": 1234
-}
-```
-
-#### `POST /api/rechtspraak/content`
-Haal volledige content op voor ECLI's.
-
-**Request Body**:
-```json
-{
-  "eclis": ["ECLI:NL:HR:2024:123", ...]
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "records": [...],
-  "errors": [...],
-  "total": 10,
-  "successful": 9,
-  "failed": 1
-}
-```
-
-#### `POST /api/rechtspraak/create-batch`
-Maak server-side batch van records (voorkomt HTTP 413 bij chunk preparation).
-
-**Request Body**:
-```json
-{
-  "records": [PreparedRecord[], ...]
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "batchId": "uuid-...",
-  "recordCount": 25
-}
-```
-
-#### `POST /api/rechtspraak/prepare-chunks`
-Prepare chunks met keyword-based sectie-detectie en metadata extractie.
-
-**Request Body**:
-```json
-{
-  "batchId": "uuid-..."
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "totalChunks": 45,
-  "totalRecords": 10,
-  "chunksByEcli": {...},
-  "allChunks": [...]
-}
-```
-
-#### `POST /api/rechtspraak/prepare-chunks-llm`
-Prepare chunks met LLM semantische classificatie (experimenteel).
-
-**Request Body**:
-```json
-{
-  "batchId": "uuid-..."
-}
-```
-
-**Response**:
-```json
-{
-  "success": true,
-  "totalChunks": 45,
-  "totalRecords": 10,
-  "fallbackCount": 2,
-  "method": "llm",
-  "chunks": [
-    {
-      "chunk_id": "ECLI:NL:HR:2024:123#facts-0",
-      "section_type": "facts",
-      "text": "...",
-      "classification_method": "llm",
-      "classification_confidence": 0.95,
-      "llm_model": "gpt-4.1-mini",
-      "prompt_version": "v1.0",
-      ...
-    }
-  ]
-}
-```
-
-#### `POST /api/pinecone/export`
-Export records OF chunks naar Pinecone (streaming via SSE).
-
-**Request Body**:
-```json
-{
-  "indexHost": "my-index-abc123.svc.region.pinecone.io",
-  "namespace": "rechtspraak-uitspraken",
-  "batchSize": 100,
-  "records": [...],  // PreparedRecord[] OF ChunkedRecord[]
-  "isChunked": true  // Optional: true voor chunks, false voor records
-}
-```
-
-**Response**: Server-Sent Events stream met progress updates
-
-#### `GET /api/health`
-Health check endpoint.
-
-## Externe APIs
-
-### Rechtspraak Open Data API
-- **Base URL**: `https://data.rechtspraak.nl/uitspraken`
-- **Zoeken**: `/zoeken?{parameters}`
-- **Content**: `/content?id={ECLI}`
-- **Formaat**: XML (Atom feed)
-- **Rate limiting**: 200ms delay tussen requests
-
-### Pinecone API
-- **SDK**: `@pinecone-database/pinecone` (Node.js)
-- **Auth**: API key via environment variable `PINECONE_API_KEY`
-- **Operations**: 
-  - Inference API voor embedding generation (model: multilingual-e5-large)
-  - Upsert vectors met embeddings en metadata
-- **Embedding Model**: multilingual-e5-large (ondersteunt Nederlands)
-- **Limits**: Zie Pinecone documentatie voor embedding tokens en upsert rates
-
-## Environment Variables
-
-### Vereist
-- `PINECONE_API_KEY`: API key voor Pinecone authenticatie
-
-### Optioneel
-- `NODE_ENV`: development/production
-- `PORT`: Server poort (default: 5000)
-
-### Niet meer gebruikt
-- `VITE_PINECONE_INDEX_HOST`: Index host is nu hardcoded in de app
-
-## Installatie & Setup
-
-```bash
-# Installeer dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-## Data Flow
-
-1. **Zoeken**: Gebruiker stelt filters in → Frontend → Backend → Rechtspraak API → ECLI lijst (met paginering)
-2. **Content ophalen**: ECLI lijst → Backend → Rechtspraak content API → XML parsing → Structured records met volledige tekst
-3. **Chunking** (optioneel): Prepared records → Backend chunking engine → Intelligente sectie-detectie + metadata extractie → Chunks met 30+ velden
-4. **Export**: Prepared records OF chunks → Backend → Pinecone Inference API (embedding generation) → Pinecone upsert (batched) → Vector database
-
-### Paginering
-- Bij eerste zoekopdracht: `from=0`
-- Bij volgende pagina's: `from` wordt verhoogd met `batchSize`
-- Gebruiker kan steeds meer resultaten ophalen door opnieuw te zoeken
-
-## Schema Types
-
-Zie `shared/schema.ts` voor TypeScript types:
-- `EcliRecord`: Basis ECLI metadata
-- `PreparedRecord`: Volledige record met content
-- `ChunkedRecord`: Chunk met section_type en uitgebreide metadata (30+ velden)
-- `SearchFilters`: Zoekfilters
-- `ExportConfig`: Pinecone export configuratie
-
-## Componenten
-
-### Frontend Components
-- `Header`: App header met status badge
-- `FilterSection`: Zoekfilters voor Rechtspraak API
-- `EcliTable`: Tabel met opgehaalde ECLI records + paginering
-- `RecordPreparation`: Full content ophalen en preview
-- `PineconeExport`: Export configuratie en voortgang
-
-### Backend Modules
-- `rechtspraak-api.ts`: Rechtspraak API client functies
-- `chunking.ts`: Intelligente sectie-detectie en metadata extractie
-- `pinecone-client.ts`: Pinecone upload logica
-- `routes.ts`: Express route handlers
-
-## Bijzonderheden
-
-### Chunking Engine
-- **Priority-based Section Detection**: Decision keywords worden EERST gecheckt om mislabeling te voorkomen ("Beslissing in conventie" → `decision`, niet `claims`)
-- **Heading Normalization**: Verwijdert nummering (1., 2.1, etc.) en punctuatie voor robuuste matching
-- **Preamble Handling**: Tekst voor eerste heading wordt als aparte `summary` section opgeslagen
-- **Empty Chunk Prevention**: Guards tegen lege chunks, infinite loops, en undefined crashes
-- **Outcome Inference**: Check specifieke phrases EERST ("gedeeltelijk toegewezen" voor "toegewezen")
-- **Statute Extraction**: Regex pattern detecteert "Art X BW", "Art X:Y Rv", etc.
-
-### XML Parsing
-- Rechtspraak gebruikt complex XML formaat (RDF + custom namespaces)
-- Recursive text extraction voor volledige tekst
-- Fallback naar abstract als geen volledige tekst beschikbaar
-
-### Rate Limiting
-- 200ms delay tussen Rechtspraak content requests
-- Pinecone: 100ms delay tussen batches
-- Vermijd "hammering the server" (zie Rechtspraak docs)
-
-### Error Handling
-- Graceful degradation bij partial failures
-- Detailed error logging in UI
-- Retry-able operations waar mogelijk
-- procedureType guard voorkomt crashes bij missing values
-
-## Toekomstige Verbeteringen
-
-Potentiële uitbreidingen (niet geïmplementeerd):
-- Filter presets opslaan
-- Selective ECLI processing (checkboxes)
-- Local embedding generation
-- Export naar JSON/CSV
-- Ingestion history dashboard
-- Incremental updates (wijzigingsdatum tracking)
-
-## Documentatie
-
-Zie `attached_assets/` voor:
-- `Open Data rechtspraak_*.pdf`: Rechtspraak API documentatie
-- `API Pinecone_*.txt`: Pinecone API referentie
-
-## Laatste Update
-
-16 november 2024 - Vaste Index Host & ECLI_NL Namespace:
-- **Index host hardcoded**: rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io (geen environment variable meer nodig)
-- **Namespace vastgezet**: ECLI_NL voor alle records (niet meer per rechtsgebied)
-- Input veld blijft editable voor toekomstige flexibiliteit
-- VITE_PINECONE_INDEX_HOST is niet meer nodig
-- Pinecone SDK gebruikt direct host URL om Control Plane lookup te vermijden
-
-16 november 2024 - Metadata-Only Pinecone Export:
-- **Metadata-only export**: Elke Inhoudsindicatie = 1 Pinecone vector
-- **Embedding generatie**: Pinecone Inference API (multilingual-e5-large) genereert embeddings uit Inhoudsindicatie
-- **Metadata velden**: ecli, text (inhoudsindicatie), title, court, decision_date, legal_area, procedure_type, source_url
-- **Vector ID**: ECLI (uniek identifier)
-- **Workflow**: PreparedRecord → Pinecone embedding → Upsert met metadata
-- Correcte Pinecone SDK signature: `pc.inference.embed('model', { inputs, parameters })`
-
-16 november 2024 - Instantie Filter Verwijderd:
-- **Alle instanties**: Standaard worden ALLE rechtbanken, gerechtshoven en Hoge Raad doorzocht
-- Geen keuzemenu meer voor instantie selectie
-- 222.112+ civielrechtelijke uitspraken beschikbaar
-
-16 november 2024 - Inhoudsindicatie Filtering (KRITISCH):
-- **KWALITEITSFILTER**: Alleen zaken met geldige Inhoudsindicatie worden opgehaald
-- Filter verwijdert automatisch:
-  - Lege summaries (empty string)
-  - Streepje-alleen summaries ("-")
-  - Whitespace-only summaries
-- Inhoudsindicaties beschikbaar sinds minstens 2006 in `<summary>` veld
-- UI toont nu Inhoudsindicatie kolom in ECLI tabel
-- Backend logt gefilterde records voor debugging
-- Court filter fix: HR (Hoge Raad) mapping naar volledige URI werkt nu correct
-
-14 november 2024 - LLM Semantic Chunking v2.0 (verbeterd):
-- **Upgraded Model**: GPT-4o (was GPT-4.1 Mini) voor betere reasoning
-- **Structuur-Bewuste Prompt**: Geeft LLM context over standaard opbouw Nederlandse uitspraken
-  - Feiten & Procesverloop → Vorderingen → Verweer → Juridische Beoordeling → Beslissing
-- **Strikte Validatie**: Controleert op complete classificatie, duplicate IDs, missing paragraphs
-- **Unique Chunk IDs**: Global counter per section type voorkomt duplicate keys
-- **UI Toggle**: Gebruiker kan kiezen tussen keyword en AI chunking methodes
-- **Automatic Fallback**: Bij LLM errors wordt keyword-based methode gebruikt
-- **Confidence Tracking**: Elk chunk krijgt confidence score van LLM
-- **Metadata**: classification_method, classification_confidence, llm_model (gpt-4o), prompt_version (v2.0)
-
-14 november 2024 - Periode beperking + batch management:
-- **Zoekperiode beperkt** tot maximaal 10 jaar terug
-- Standaardperiode: "Afgelopen tien jaar"
-- "Alles" optie verwijderd om database belasting te beperken
-- Server-side batch management met batchId voor HTTP 413 preventie
-- Atomic state management met refs voor race condition preventie
-
-14 november 2024 - Intelligente chunking implementatie:
-- Priority-based section detection met keyword matching
-- Automatische text splitting voor lange secties (600 woorden met 120 overlap)
-- Rijke metadata extractie: civil_domain, case_subtype, outcome, party types, statutes
-- UI preview met accordion en color-coded section badges
-- Production-ready chunking engine met guards tegen crashes en lege chunks
-- Preamble handling: aparte summary section met heading context preservation
-
-13 november 2024 - Initiële implementatie:
-- Nederlandse interface (alle teksten in het Nederlands)
-- Rechtspraak Open Data API integratie met XML parsing
-- Pinecone Inference API voor automatische embedding generation
-- Werkende paginering voor grote resultatensets
-- Real-time progress feedback via SSE
-- Robuste error handling voor partial failures
+## Overview
+
+This project is a web application designed to retrieve and process Dutch judicial rulings from the Rechtspraak.nl Open Data API. Its primary purpose is to extract full-text content, apply quality filters, and prepare this data for storage as vector records in Pinecone, enabling semantic search capabilities. The application focuses on ingesting cases with valid "Inhoudsindicatie" (official summaries) and uses a PostgreSQL database for duplicate tracking, ensuring data quality and preventing redundant processing across different namespaces.
+
+## User Preferences
+
+- All text and UI elements should be in Dutch.
+- I prefer clear, concise explanations and direct interaction.
+- I appreciate real-time progress feedback, especially for long-running operations.
+- I want the tool to prioritize data quality, specifically by filtering out records without valid summaries.
+- The system should prevent duplicate processing of ECLI records.
+- I prefer to be informed about the status of operations, including successful and failed attempts.
+- Avoid making changes to how the `ECLI_NL` namespace is handled; it should remain fixed for all records.
+
+## System Architecture
+
+The application follows a client-server architecture with a React-based frontend and an Express.js backend.
+
+### UI/UX Decisions
+- **Framework**: React with TypeScript.
+- **Styling**: Tailwind CSS and Shadcn UI components provide a modern and consistent interface.
+- **Language**: All UI elements and communications are in Dutch.
+- **Interaction**: Features like configurable batch sizes, real-time progress via Server-Sent Events (SSE), and detailed error logging aim to provide a transparent and efficient user experience. Tables display ECLI codes with metadata, and previews are available for prepared records.
+- **Filtering**: Search filters allow users to narrow down rulings by modification date (max 10 years back), automatically including all instances (courts, appeal courts, Supreme Court), and specific civil case types. A critical quality filter ensures only cases with valid 'Inhoudsindicatie' are processed.
+
+### Technical Implementations
+- **Frontend**: Utilizes React hooks for state management and the Fetch API with a custom `apiRequest` helper for backend communication.
+- **Backend**: Built with Express.js and TypeScript.
+- **Database**: PostgreSQL (Neon) is used for duplicate tracking of processed ECLIs, managed via Drizzle ORM.
+- **API Integration**: Handles XML data from Rechtspraak.nl using `fast-xml-parser` and interacts with Pinecone using its Node.js SDK. Axios is used for external API calls.
+- **Data Processing**:
+    - **Metadata Retrieval**: Efficiently extracts metadata (Title, Court, Date, Legal Area, Procedure Type, Inhoudsindicatie, Source URL) for selected ECLIs without fetching full text initially.
+    - **Pinecone Export**: Uploads metadata records to a hardcoded Pinecone index (`rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`) within the `ECLI_NL` namespace. Embedding generation uses the `multilingual-e5-large` model.
+    - **Chunking Engine (Optional)**: Features an advanced chunking engine with priority-based section detection, heading normalization, and preamble handling. It can automatically split long sections and extracts rich metadata (e.g., civil_domain, case_subtype, outcome, statutes). An experimental LLM-based semantic chunking method (using GPT-4o) with confidence tracking and automatic fallback is also available.
+- **Concurrency & Rate Limiting**: Implements a 200ms delay between Rechtspraak API requests and a 100ms delay between Pinecone batches to respect API limits.
+- **Error Handling**: Includes graceful degradation, detailed error logging in the UI, and retry mechanisms where applicable.
+
+### System Design Choices
+- **Duplicate Tracking**: A `processed_eclis` table in PostgreSQL tracks already processed ECLIs based on a composite unique key (namespace, ecli), preventing redundant API calls and uploads.
+- **Fixed Pinecone Configuration**: The Pinecone index host and namespace (`ECLI_NL`) are hardcoded for consistency and to simplify deployment.
+- **Server-side Batch Management**: For chunk preparation, records are batched server-side to prevent HTTP 413 errors with large payloads.
+- **Metadata-Only Export**: The primary Pinecone export strategy focuses on ingesting only the "Inhoudsindicatie" as a vector, with the ECLI serving as the unique vector ID.
+
+## External Dependencies
+
+- **Rechtspraak Open Data API**:
+    - **Base URL**: `https://data.rechtspraak.nl/uitspraken`
+    - **Endpoints**: `/zoeken` for search, `/content` for ECLI content.
+    - **Format**: XML (Atom feed).
+    - **Rate Limit**: 200ms delay between requests.
+
+- **Pinecone Vector Database**:
+    - **SDK**: `@pinecone-database/pinecone` (Node.js).
+    - **Authentication**: `PINECONE_API_KEY` environment variable.
+    - **Embedding Model**: `multilingual-e5-large` (supports Dutch).
+    - **Operations**: Upsert vectors with embeddings and metadata.
+    - **Index Host (Hardcoded)**: `rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`.
+    - **Namespace (Fixed)**: `ECLI_NL`.
+
+- **PostgreSQL (Neon)**:
+    - Used for duplicate tracking of processed ECLIs.
