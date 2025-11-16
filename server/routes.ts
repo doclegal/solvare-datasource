@@ -112,6 +112,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Enrich ECLIs with AI summaries (batch processing with SSE progress)
+  app.post('/api/rechtspraak/enrich-batch', async (req: Request, res: Response) => {
+    try {
+      const { eclis } = req.body;
+      
+      if (!Array.isArray(eclis) || eclis.length === 0) {
+        return res.status(400).json({ error: 'ECLI lijst is vereist' });
+      }
+
+      // Set up SSE for real-time progress
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      const sendProgress = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+        const data = `data: ${JSON.stringify({ type, message })}\n\n`;
+        res.write(data);
+        if ('flush' in res && typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+      };
+
+      const results: PreparedRecord[] = [];
+      const errors: Array<{ ecli: string; error: string }> = [];
+
+      sendProgress(`Starten met verrijken van ${eclis.length} ECLI(s) met AI samenvattingen...`, 'info');
+
+      // Process each ECLI with AI enrichment
+      for (let i = 0; i < eclis.length; i++) {
+        const ecli = eclis[i];
+        
+        try {
+          sendProgress(`[${i + 1}/${eclis.length}] Ophalen ${ecli}...`, 'info');
+          
+          // Step 1: Fetch metadata
+          const record = await fetchDecisionContent(ecli);
+          
+          // Step 2: Fetch full text
+          sendProgress(`[${i + 1}/${eclis.length}] Volledige tekst ophalen voor ${ecli}...`, 'info');
+          const fullText = await fetchFullText(ecli);
+          
+          // Step 3: Generate AI summary
+          sendProgress(`[${i + 1}/${eclis.length}] AI samenvatting genereren voor ${ecli}...`, 'info');
+          const aiSummary = await generateAISummary(fullText, ecli);
+          
+          // Merge everything
+          const enrichedRecord: PreparedRecord = {
+            ...record,
+            fullText,
+            ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+            ai_feiten: aiSummary.feiten,
+            ai_geschil: aiSummary.geschil,
+            ai_beslissing: aiSummary.beslissing,
+            ai_motivering: aiSummary.motivering,
+          };
+          
+          results.push(enrichedRecord);
+          sendProgress(`[${i + 1}/${eclis.length}] ✓ ${ecli} succesvol verrijkt`, 'success');
+          
+          // Small delay to avoid hammering APIs
+          if (i < eclis.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (error: any) {
+          console.error(`Error enriching ${ecli}:`, error);
+          errors.push({
+            ecli,
+            error: error.message,
+          });
+          sendProgress(`[${i + 1}/${eclis.length}] ✗ Fout bij ${ecli}: ${error.message}`, 'error');
+        }
+      }
+
+      // Send completion event
+      const completionData = `data: ${JSON.stringify({
+        type: 'complete',
+        records: results,
+        errors,
+        total: eclis.length,
+        successful: results.length,
+        failed: errors.length,
+      })}\n\n`;
+      res.write(completionData);
+      if ('flush' in res && typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
+
+      res.end();
+    } catch (error: any) {
+      console.error('Error in /api/rechtspraak/enrich-batch:', error);
+      
+      const errorData = `data: ${JSON.stringify({
+        type: 'error',
+        message: error.message || 'Fout bij verrijken van ECLIs',
+      })}\n\n`;
+      res.write(errorData);
+      if ('flush' in res && typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
+      
+      res.end();
+    }
+  });
+
   // Create or update batch from records (for accumulated multi-fetch workflow)
   app.post('/api/rechtspraak/create-batch', async (req: Request, res: Response) => {
     try {
