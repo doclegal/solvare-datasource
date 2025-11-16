@@ -51,6 +51,7 @@ interface RecordPreparationProps {
   onPrepareChunks?: (useLLM: boolean) => void;
   onFetchContent: () => void;
   onClear: () => void;
+  onEnrichWithAI?: () => void;
   isLoading?: boolean;
   isPreparingChunks?: boolean;
 }
@@ -80,6 +81,7 @@ export default function RecordPreparation({
   onPrepareChunks,
   onFetchContent,
   onClear,
+  onEnrichWithAI,
   isLoading = false,
   isPreparingChunks = false,
 }: RecordPreparationProps) {
@@ -137,6 +139,12 @@ export default function RecordPreparation({
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {preparedRecords.length > 0 && onEnrichWithAI && (
+              <Button variant="default" size="sm" onClick={onEnrichWithAI} data-testid="button-enrich-ai">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Genereer AI Samenvatting
+              </Button>
+            )}
             {preparedRecords.length > 0 && (
               <Button variant="outline" size="sm" onClick={onClear} data-testid="button-clear-records">
                 <Trash2 className="mr-2 h-4 w-4" />

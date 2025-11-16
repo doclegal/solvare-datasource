@@ -4,7 +4,6 @@ import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
 import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
-import { AiEnrichment } from "@/components/AiEnrichment";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -476,13 +475,88 @@ export default function Home() {
     addLog(`✓ ${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`);
   };
 
+  const handleEnrichWithAI = async () => {
+    if (preparedRecords.length === 0) {
+      toast({
+        title: 'Geen records',
+        description: 'Er zijn geen records om te verrijken',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    addLog(`Start AI enrichment voor ${preparedRecords.length} records...`);
+
+    try {
+      const eclis = preparedRecords.map(r => r.ecli);
+      
+      const response = await fetch('/api/rechtspraak/enrich-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eclis }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Geen response stream beschikbaar');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'complete') {
+                // Update prepared records with AI enriched data
+                setPreparedRecords(data.records || []);
+                accumulatedRecordsRef.current = data.records || [];
+                
+                addLog(`✓ AI enrichment voltooid: ${data.successful} succesvol, ${data.failed} fouten`);
+                
+                toast({
+                  title: 'AI Enrichment Voltooid',
+                  description: `${data.successful} records verrijkt met AI samenvattingen`,
+                });
+              } else if (data.message) {
+                addLog(data.message);
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE message:', e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      addLog(`✗ AI enrichment mislukt: ${error.message}`);
+      toast({
+        title: 'Fout bij AI Enrichment',
+        description: error.message || 'Er is een fout opgetreden',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header isConnected={true} />
       
       <main className="flex-1 max-w-7xl w-full mx-auto px-8 py-6 space-y-8">
-        <AiEnrichment />
-        
         <EcliDiscovery onRecordsDiscovered={handleRecordsDiscovered} />
         
         <FilterSection
@@ -498,6 +572,7 @@ export default function Home() {
           onPrepareChunks={handlePrepareChunks}
           onFetchContent={() => {}}
           onClear={handleClearRecords}
+          onEnrichWithAI={handleEnrichWithAI}
           isLoading={isFetchingContent}
           isPreparingChunks={isPreparingChunks}
         />
