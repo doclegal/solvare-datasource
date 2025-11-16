@@ -34,13 +34,15 @@ The application follows a client-server architecture with a React-based frontend
 - **API Integration**: Handles XML data from Rechtspraak.nl using `fast-xml-parser` and interacts with Pinecone using its Node.js SDK. Axios is used for external API calls.
 - **Data Processing**:
     - **Metadata Retrieval**: Efficiently extracts metadata (Title, Court, Date, Legal Area, Procedure Type, Inhoudsindicatie, Source URL) for selected ECLIs without fetching full text initially.
-    - **ECLI Discovery System**: Modular architecture with four components:
-        - **Crawler** (`server/discovery/crawler.ts`): Fetches HTML from URLs with robots.txt compliance, host-level rate limiting (1s between requests to same host), and 1-hour robots.txt cache.
+    - **ECLI Discovery System**: Modular architecture with breadth-first section crawling:
+        - **Link Extractor** (`server/discovery/link-extractor.ts`): Cheerio-based HTML parsing with same-domain and same-path-prefix filtering. Uses trailing slash normalization to prevent lexical supersets (e.g., `/civil/` won't match `/civilian/`). Deduplicates links and removes fragments.
+        - **Section Crawler** (`server/discovery/section-crawler.ts`): BFS (queue-based) crawler with configurable limits (maxDepth=3, maxPages=75 by default). Implements per-host rate limiting (1s + jitter), visited tracking, depth management, and continues on individual page failures. Real-time SSE progress callbacks.
+        - **Base Crawler** (`server/discovery/crawler.ts`): Fetches HTML from URLs with robots.txt compliance, host-level rate limiting (1s between requests to same host), and 1-hour robots.txt cache.
         - **Extractor** (`server/discovery/extractor.ts`): Regex-based ECLI detection (`ECLI:[A-Z]{2}:[A-Z0-9]+:\d{4}:[A-Z0-9]+`), normalization to uppercase, and deduplication.
         - **Validator** (`server/discovery/validator.ts`): Verifies ECLIs via Rechtspraak API, extracts metadata for valid cases.
-        - **Service** (`server/discovery/service.ts`): Orchestrates discovery flow, checks PostgreSQL for already-processed ECLIs, creates PreparedRecords with `alsoReadOn` metadata.
-        - **API Endpoint**: `/api/ecli-discovery/ingest` with SSE streaming for real-time progress feedback.
-        - **Frontend Component**: `EcliDiscovery.tsx` with dynamic URL inputs, live status updates, and automatic integration into preparation pipeline.
+        - **Service** (`server/discovery/service.ts`): Orchestrates breadth-first section crawling per root URL. Maintains global ECLI → Set<sourceUrls> map for metadata merging. Sequential section processing. Creates PreparedRecords with merged `alsoReadOn` metadata from multiple sources.
+        - **API Endpoint**: `/api/ecli-discovery/ingest` with SSE streaming for real-time progress feedback. Accepts optional config: `maxDepth` (1-10), `maxPages` (1-500), `delayMs` (100-5000ms).
+        - **Frontend Component**: `EcliDiscovery.tsx` with dynamic URL inputs, live status updates (pages crawled, depth, queue size), and automatic integration into preparation pipeline.
         - **Default URLs**: Preconfigured with 10 legal websites covering various practice areas (huurrecht, arbeidsrecht, bestuursrecht, consumentenrecht) including Academie voor de Rechtspraktijk, cassatieblog.nl, recht.nl, TRIP Advocaten, Stibbe, Unger Nolet, NJB, Benk, Yspeert, and Wijnenstael.
     - **Pinecone Export**: Uploads metadata records to a hardcoded Pinecone index (`rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`) within the `ECLI_NL` namespace. Embedding generation uses the `multilingual-e5-large` model.
     - **Chunking Engine (Optional)**: Features an advanced chunking engine with priority-based section detection, heading normalization, and preamble handling. It can automatically split long sections and extracts rich metadata (e.g., civil_domain, case_subtype, outcome, statutes). An experimental LLM-based semantic chunking method (using GPT-4o) with confidence tracking and automatic fallback is also available.
