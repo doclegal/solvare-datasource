@@ -67,18 +67,22 @@ export function AiEnrichment() {
   };
 
   const startEnrichment = async () => {
+    console.log('[AI Enrichment] Starting with', DISCOVERED_ECLIS.length, 'ECLIs');
     setIsEnriching(true);
-    setProgress([]);
+    setProgress(['⏳ Starten met AI enrichment...']);
     setEnrichedRecords([]);
     setErrors([]);
     setStats(null);
 
     try {
+      console.log('[AI Enrichment] Sending request to /api/rechtspraak/enrich-batch');
       const response = await fetch('/api/rechtspraak/enrich-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ eclis: DISCOVERED_ECLIS }),
       });
+
+      console.log('[AI Enrichment] Response status:', response.status, response.ok);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -89,13 +93,19 @@ export function AiEnrichment() {
         throw new Error('Geen response stream beschikbaar');
       }
 
+      console.log('[AI Enrichment] Stream reader acquired, starting to read...');
+
       const decoder = new TextDecoder();
       let buffer = '';
+      let messageCount = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         
-        if (done) break;
+        if (done) {
+          console.log('[AI Enrichment] Stream done, total messages:', messageCount);
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
@@ -105,8 +115,11 @@ export function AiEnrichment() {
           if (line.startsWith('data: ')) {
             try {
               const data: ProgressMessage = JSON.parse(line.slice(6));
+              messageCount++;
+              console.log('[AI Enrichment] Message', messageCount, ':', data);
               
               if (data.type === 'complete') {
+                console.log('[AI Enrichment] Complete! Records:', data.records?.length, 'Errors:', data.errors?.length);
                 setEnrichedRecords(data.records || []);
                 setErrors(data.errors || []);
                 setStats({
@@ -119,22 +132,24 @@ export function AiEnrichment() {
                   description: `${data.successful} ECLIs succesvol verrijkt, ${data.failed} fouten`,
                 });
               } else if (data.message) {
+                console.log('[AI Enrichment] Progress update:', data.message);
                 setProgress(prev => [...prev, data.message!]);
               }
             } catch (e) {
-              console.error('Failed to parse SSE message:', e);
+              console.error('[AI Enrichment] Failed to parse SSE message:', e, 'Line:', line);
             }
           }
         }
       }
     } catch (error: any) {
-      console.error('Enrichment error:', error);
+      console.error('[AI Enrichment] Error:', error);
       toast({
         title: 'Fout bij AI Enrichment',
         description: error.message || 'Er is een fout opgetreden',
         variant: 'destructive',
       });
     } finally {
+      console.log('[AI Enrichment] Finished, setting isEnriching to false');
       setIsEnriching(false);
     }
   };
