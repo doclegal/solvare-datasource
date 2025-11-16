@@ -16,6 +16,15 @@ export interface PreparedRecord {
   procedureType: string;
   sourceUrl: string;
   inhoudsindicatie: string; // Required - official summary
+  
+  // AI-generated summary sections
+  ai_inhoudsindicatie?: string;
+  ai_feiten?: string;
+  ai_geschil?: string;
+  ai_beslissing?: string;
+  ai_motivering?: string;
+  
+  alsoReadOn?: string[]; // Discovery metadata
 }
 
 interface ChunkedRecord {
@@ -241,7 +250,54 @@ export default function RecordPreparation({
                       <p className="text-sm text-muted-foreground">{record.title}</p>
                     </div>
 
-                    {record.inhoudsindicatie && (
+                    {/* AI Summary Sections - Show only if available */}
+                    {record.ai_inhoudsindicatie && (
+                      <div className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
+                        <div className="flex items-center gap-2 mb-3">
+                          <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          <p className="text-sm font-semibold text-purple-900 dark:text-purple-100">AI Samenvatting</p>
+                          <Badge variant="secondary" className="text-xs">GPT-3.5</Badge>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <h4 className="text-xs font-semibold text-purple-800 dark:text-purple-200 mb-1">Inhoudsindicatie</h4>
+                            <p className="text-sm text-purple-900 dark:text-purple-100 leading-relaxed">{record.ai_inhoudsindicatie}</p>
+                          </div>
+                          
+                          {record.ai_feiten && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-purple-800 dark:text-purple-200 mb-1">Feiten</h4>
+                              <p className="text-sm text-purple-900 dark:text-purple-100 leading-relaxed">{record.ai_feiten}</p>
+                            </div>
+                          )}
+                          
+                          {record.ai_geschil && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-purple-800 dark:text-purple-200 mb-1">Geschil</h4>
+                              <p className="text-sm text-purple-900 dark:text-purple-100 leading-relaxed">{record.ai_geschil}</p>
+                            </div>
+                          )}
+                          
+                          {record.ai_beslissing && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-purple-800 dark:text-purple-200 mb-1">Beslissing</h4>
+                              <p className="text-sm text-purple-900 dark:text-purple-100 leading-relaxed">{record.ai_beslissing}</p>
+                            </div>
+                          )}
+                          
+                          {record.ai_motivering && (
+                            <div>
+                              <h4 className="text-xs font-semibold text-purple-800 dark:text-purple-200 mb-1">Motivering</h4>
+                              <p className="text-sm text-purple-900 dark:text-purple-100 leading-relaxed">{record.ai_motivering}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Original Inhoudsindicatie - Show only if no AI summary */}
+                    {!record.ai_inhoudsindicatie && record.inhoudsindicatie && (
                       <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-md border border-blue-200 dark:border-blue-800">
                         <div className="flex items-center gap-2 mb-2">
                           <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -269,6 +325,19 @@ export default function RecordPreparation({
                         <p className="text-sm text-muted-foreground">{record.procedureType}</p>
                       </div>
                     </div>
+
+                    {record.alsoReadOn && record.alsoReadOn.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium mb-1">Ook gevonden op</p>
+                        <div className="flex flex-wrap gap-1">
+                          {record.alsoReadOn.map((url, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {new URL(url).hostname}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div>
                       <p className="text-sm font-medium mb-1">Bron</p>

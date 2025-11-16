@@ -16,11 +16,11 @@ export interface ValidationResult {
 
 /**
  * Validate a single ECLI via Rechtspraak API
- * Returns validation result with full metadata + AI summary
+ * Returns validation result with metadata (AI summary best-effort)
  */
 export async function validateECLI(ecli: string): Promise<ValidationResult> {
   try {
-    // Step 1: Fetch metadata
+    // Step 1: Fetch metadata (required)
     const record = await fetchDecisionContent(ecli);
     
     // Check if has valid Inhoudsindicatie (required)
@@ -33,23 +33,30 @@ export async function validateECLI(ecli: string): Promise<ValidationResult> {
       };
     }
     
-    // Step 2: Fetch full text
-    console.log(`[${ecli}] Downloading full text...`);
-    const fullText = await fetchFullText(ecli);
-    
-    // Step 3: Generate AI summary
-    console.log(`[${ecli}] Generating AI summary...`);
-    const aiSummary = await generateAISummary(fullText, ecli);
-    
-    // Step 4: Merge AI summary into record
-    const enrichedRecord: PreparedRecord = {
-      ...record,
-      ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
-      ai_feiten: aiSummary.feiten,
-      ai_geschil: aiSummary.geschil,
-      ai_beslissing: aiSummary.beslissing,
-      ai_motivering: aiSummary.motivering,
-    };
+    // Step 2 & 3: Fetch full text + AI summary (best-effort)
+    let enrichedRecord = record;
+    try {
+      console.log(`[${ecli}] Downloading full text...`);
+      const fullText = await fetchFullText(ecli);
+      
+      console.log(`[${ecli}] Generating AI summary...`);
+      const aiSummary = await generateAISummary(fullText, ecli);
+      
+      // Merge AI summary into record
+      enrichedRecord = {
+        ...record,
+        ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+        ai_feiten: aiSummary.feiten,
+        ai_geschil: aiSummary.geschil,
+        ai_beslissing: aiSummary.beslissing,
+        ai_motivering: aiSummary.motivering,
+      };
+      
+      console.log(`[${ecli}] ✓ With AI summary`);
+    } catch (aiError: any) {
+      // Graceful degradation: continue with metadata-only record
+      console.warn(`[${ecli}] AI summary failed (keeping metadata): ${aiError.message}`);
+    }
     
     return {
       ecli,

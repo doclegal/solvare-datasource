@@ -43,29 +43,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < eclis.length; i++) {
         const ecli = eclis[i];
         try {
-          // Step 1: Fetch metadata
+          // Step 1: Fetch metadata (required)
           const record = await fetchDecisionContent(ecli);
           
-          // Step 2: Fetch full text
-          console.log(`[${ecli}] Downloading full text...`);
-          const fullText = await fetchFullText(ecli);
-          
-          // Step 3: Generate AI summary
-          console.log(`[${ecli}] Generating AI summary...`);
-          const aiSummary = await generateAISummary(fullText, ecli);
-          
-          // Step 4: Merge AI summary into record
-          const enrichedRecord: PreparedRecord = {
-            ...record,
-            ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
-            ai_feiten: aiSummary.feiten,
-            ai_geschil: aiSummary.geschil,
-            ai_beslissing: aiSummary.beslissing,
-            ai_motivering: aiSummary.motivering,
-          };
+          // Step 2 & 3: Fetch full text + AI summary (best-effort)
+          let enrichedRecord = record;
+          try {
+            console.log(`[${ecli}] Downloading full text...`);
+            const fullText = await fetchFullText(ecli);
+            
+            console.log(`[${ecli}] Generating AI summary...`);
+            const aiSummary = await generateAISummary(fullText, ecli);
+            
+            // Merge AI summary into record
+            enrichedRecord = {
+              ...record,
+              ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+              ai_feiten: aiSummary.feiten,
+              ai_geschil: aiSummary.geschil,
+              ai_beslissing: aiSummary.beslissing,
+              ai_motivering: aiSummary.motivering,
+            };
+            
+            console.log(`[${ecli}] ✓ Completed with AI summary`);
+          } catch (aiError: any) {
+            // Graceful degradation: keep metadata record even if AI fails
+            console.warn(`[${ecli}] AI summary failed (keeping metadata): ${aiError.message}`);
+          }
           
           results.push(enrichedRecord);
-          console.log(`[${ecli}] ✓ Completed with AI summary`);
           
           // Small delay to avoid hammering the server
           if (i < eclis.length - 1) {
