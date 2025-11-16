@@ -30,7 +30,7 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
 ### 1. Rechtspraak Filters & Ophalen
 - Zoek uitspraken met filters:
   - Wijzigingsdatum (maximaal 10 jaar terug)
-  - Instantie (rechtbank/hof)
+  - **Alle instanties** (rechtbanken, gerechtshoven, Hoge Raad - automatisch)
   - Type civiele zaak (Arbeidsrecht, Huurrecht, Consumentenrecht, etc.)
   - Alleen volledige documenten (altijd actief)
 - Paginering met configureerbare batchgrootte
@@ -52,9 +52,9 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
 ### 3. Pinecone Export (Metadata-Only)
 - Upload metadata records naar Pinecone index
 - **Metadata fields**: ECLI, Titel, Instantie, Datum, Rechtsgebied, Proceduresoort, Inhoudsindicatie, Bron URL
+- **Index**: rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io (hardcoded)
+- **Namespace**: ECLI_NL (vast voor alle records, niet meer per rechtsgebied)
 - Configureerbaar:
-  - Index host
-  - Namespace (optioneel)
   - Batchgrootte (aanbevolen: 100-500)
 - Real-time voortgang via Server-Sent Events (SSE)
 - Foutafhandeling met gedetailleerde logging
@@ -229,6 +229,9 @@ Health check endpoint.
 - `NODE_ENV`: development/production
 - `PORT`: Server poort (default: 5000)
 
+### Niet meer gebruikt
+- `VITE_PINECONE_INDEX_HOST`: Index host is nu hardcoded in de app
+
 ## Installatie & Setup
 
 ```bash
@@ -318,6 +321,13 @@ Zie `attached_assets/` voor:
 - `API Pinecone_*.txt`: Pinecone API referentie
 
 ## Laatste Update
+
+16 november 2024 - Vaste Index Host & ECLI_NL Namespace:
+- **Index host hardcoded**: rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io (geen environment variable meer nodig)
+- **Namespace vastgezet**: ECLI_NL voor alle records (niet meer per rechtsgebied)
+- Input veld blijft editable voor toekomstige flexibiliteit
+- VITE_PINECONE_INDEX_HOST is niet meer nodig
+- Pinecone SDK gebruikt direct host URL om Control Plane lookup te vermijden
 
 16 november 2024 - Metadata-Only Pinecone Export:
 - **Metadata-only export**: Elke Inhoudsindicatie = 1 Pinecone vector

@@ -35,15 +35,9 @@ export default function PineconeExport({
   isExporting = false,
   exportLogs = [],
 }: PineconeExportProps) {
-  const [indexHost, setIndexHost] = useState(import.meta.env.VITE_PINECONE_INDEX_HOST || "");
+  const [indexHost, setIndexHost] = useState("rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io");
   const [namespace, setNamespace] = useState("");
   const [batchSize, setBatchSize] = useState("100");
-  
-  // Debug: Log the environment variable value
-  useEffect(() => {
-    console.log('[PineconeExport] VITE_PINECONE_INDEX_HOST:', import.meta.env.VITE_PINECONE_INDEX_HOST);
-    console.log('[PineconeExport] indexHost state:', indexHost);
-  }, [indexHost]);
   
   // Auto-generate namespace from civil subcategory
   useEffect(() => {
