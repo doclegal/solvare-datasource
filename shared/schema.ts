@@ -11,7 +11,7 @@ export const ecliRecordSchema = z.object({
 
 export type EcliRecord = z.infer<typeof ecliRecordSchema>;
 
-// Prepared record schema for Pinecone
+// Prepared record schema for Pinecone (metadata-only, no full text)
 export const preparedRecordSchema = z.object({
   ecli: z.string(),
   title: z.string(),
@@ -20,8 +20,7 @@ export const preparedRecordSchema = z.object({
   legalArea: z.array(z.string()),
   procedureType: z.string(),
   sourceUrl: z.string(),
-  fullText: z.string(),
-  inhoudsindicatie: z.string().optional(), // Official summary from Rechtspraak
+  inhoudsindicatie: z.string(), // Official summary from Rechtspraak (required)
 });
 
 export type PreparedRecord = z.infer<typeof preparedRecordSchema>;

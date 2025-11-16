@@ -15,8 +15,7 @@ export interface PreparedRecord {
   legalArea: string[];
   procedureType: string;
   sourceUrl: string;
-  fullText: string;
-  inhoudsindicatie?: string;
+  inhoudsindicatie: string; // Required - official summary
 }
 
 interface ChunkedRecord {
@@ -120,11 +119,11 @@ export default function RecordPreparation({
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <CardTitle>Voorbereide Records {chunkedData && '& Chunks'}</CardTitle>
+            <CardTitle>Metadata Records</CardTitle>
             <CardDescription>
               {chunkedData 
                 ? `${chunkedData.allChunks.length} chunks voorbereid uit ${preparedRecords.length} uitspraken`
-                : `Civielrechtelijke uitspraken met volledige tekst${preparedRecords.length > 0 ? ` • ${preparedRecords.length} records` : ''}`
+                : `Civielrechtelijke uitspraken met metadata${preparedRecords.length > 0 ? ` • ${preparedRecords.length} records` : ''}`
               }
             </CardDescription>
           </div>
@@ -139,50 +138,9 @@ export default function RecordPreparation({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Chunking method toggle */}
-        {preparedRecords.length > 0 && !chunkedData && onPrepareChunks && (
-          <div className="flex items-center justify-between p-4 border rounded-md bg-muted/30">
-            <div className="flex-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="llm-chunking" className="font-semibold">Chunking Methode</Label>
-                <Badge variant={useLLMChunking ? "default" : "secondary"} className="text-xs">
-                  {useLLMChunking ? 'AI Semantisch' : 'Keyword Gebaseerd'}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {useLLMChunking 
-                  ? 'AI bepaalt semantisch welk tekstdeel bij feiten/beoordeling/vorderingen/beslissing hoort'
-                  : 'Traditionele methode: identificeert secties op basis van kopjes'
-                }
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="llm-chunking" className="text-sm cursor-pointer">
-                  AI Chunking
-                </Label>
-                <Switch 
-                  id="llm-chunking"
-                  checked={useLLMChunking}
-                  onCheckedChange={setUseLLMChunking}
-                  data-testid="switch-llm-chunking"
-                />
-              </div>
-              <Button 
-                variant="default" 
-                onClick={() => onPrepareChunks(useLLMChunking)}
-                disabled={isPreparingChunks || preparedRecords.length === 0}
-                data-testid="button-prepare-chunks"
-              >
-                {useLLMChunking ? <Bot className="mr-2 h-4 w-4" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                {isPreparingChunks ? 'Bezig...' : 'Chunks Voorbereiden'}
-              </Button>
-            </div>
-          </div>
-        )}
         {preparedRecords.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            <p>Gebruik de filters hierboven om civielrechtelijke uitspraken op te halen. De volledige tekst wordt automatisch opgehaald en hier getoond.</p>
+            <p>Gebruik de filters hierboven om uitspraken met metadata op te halen.</p>
           </div>
         ) : chunkedData ? (
           <div className="space-y-4">
@@ -319,32 +277,11 @@ export default function RecordPreparation({
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                        data-testid={`link-source-${record.ecli}`}
                       >
-                        {record.sourceUrl}
+                        Bekijk volledige uitspraak
                         <ExternalLink className="h-3 w-3" />
                       </a>
-                    </div>
-
-                    <div>
-                      <p className="text-sm font-medium mb-1">Voorvertoning Volledige Tekst</p>
-                      <div className="bg-muted p-3 rounded-md">
-                        <p className="text-sm font-mono whitespace-pre-wrap">
-                          {truncateText(record.fullText, record.ecli)}
-                        </p>
-                        {record.fullText.length > 300 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 p-0 h-auto"
-                            onClick={() => toggleExpanded(record.ecli)}
-                          >
-                            {expandedText.has(record.ecli) ? "Minder tonen" : "Meer tonen"}
-                          </Button>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {record.fullText.length} tekens
-                      </p>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

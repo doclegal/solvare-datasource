@@ -194,7 +194,7 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
       // - Empty summaries
       // - Single dash "-" (indicates missing summary)
       // - Whitespace-only summaries
-      .filter(record => {
+      .filter((record: EcliRecord) => {
         const hasValidSummary = record.summary && 
                                record.summary.trim() !== '' && 
                                record.summary.trim() !== '-';
@@ -480,16 +480,8 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
     
     console.log(`[${ecli}] Inhoudsindicatie found:`, inhoudsindicatie ? `${inhoudsindicatie.substring(0, 100)}...` : 'NONE');
     
-    // Extract full text from uitspraak sections
-    let fullText = '';
-    if (uitspraak) {
-      fullText = extractTextFromNode(uitspraak);
-    }
-    
-    // If no text extracted, use inhoudsindicatie as fallback
-    if (!fullText && inhoudsindicatie) {
-      fullText = inhoudsindicatie;
-    }
+    // IMPORTANT: We no longer fetch full text - only metadata
+    // This is much faster and more efficient
     
     const sourceUrl = `https://uitspraken.rechtspraak.nl/details?id=${ecli}`;
     
@@ -501,8 +493,7 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       legalArea: legalArea.length > 0 ? legalArea : ['Niet gespecificeerd'],
       procedureType,
       sourceUrl,
-      fullText: fullText || 'Geen volledige tekst beschikbaar',
-      inhoudsindicatie: inhoudsindicatie || undefined,
+      inhoudsindicatie: inhoudsindicatie || 'Geen inhoudsindicatie beschikbaar',
     };
   } catch (error: any) {
     console.error(`Error fetching content for ${ecli}:`, error.message);

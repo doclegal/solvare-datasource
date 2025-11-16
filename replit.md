@@ -36,57 +36,22 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
 - Paginering met configureerbare batchgrootte
 - Display ECLI codes met metadata
 
-### 2. Record Voorbereiden
-- Haal volledige XML content op voor geselecteerde ECLI's
+### 2. Metadata Ophalen (Geen volledige tekst)
+- Haal ALLEEN metadata op voor geselecteerde ECLI's (veel sneller)
 - Parse XML en extraheer:
   - Titel
   - Instantie/rechtbank
   - Uitspraakdatum
   - Rechtsgebied(en)
   - Proceduresoort
-  - Volledige tekst van de uitspraak
-  - Bron URL
-- Display prepared records met preview
+  - **Inhoudsindicatie** (officiële samenvatting)
+  - Bron URL (link naar volledige uitspraak)
+- Display prepared records met metadata preview
+- **GEEN volledige tekst** - alleen metadata voor snelheid en efficiëntie
 
-### 3. Intelligente Chunking (NIEUW - Dual Mode)
-Splits uitspraken in logische secties voor betere semantische zoekopdrachten met **twee parallelle methodes**:
-
-#### A. Keyword-Based Chunking (Traditioneel)
-- **Section Detection** met priority-gebaseerde keyword matching:
-  - `summary`: Inhoudsindicatie, samenvatting
-  - `claims`: Vorderingen (in conventie/reconventie)
-  - `facts`: Feiten, procesverloop, partijen
-  - `reasoning`: Beoordeling, overwegingen, motivering
-  - `decision`: Beslissing, dictum
-  - `other`: Overige tekst
-- Identificeert secties op basis van kopjes in de tekst
-
-#### B. LLM Semantic Chunking (NIEUW - Experimenteel)
-- **AI-Powered Classification**: OpenAI GPT-4o bepaalt semantisch welk tekstdeel bij welke sectie hoort
-- **Structuur-Bewust**: Prompt geeft LLM context over standaard opbouw (Feiten → Vorderingen → Verweer → Beoordeling → Beslissing)
-- **Paragraph Segmentation**: Splitst tekst in paragraphs (~300 woorden) voor classificatie
-- **Section Types**: Summary, Feiten, Vorderingen/Claims, Juridische Beoordeling, Beslissing
-- **Confidence Scores**: Elk chunk krijgt confidence score (0.0-1.0) van de LLM
-- **Strikte Validatie**: Controleert op complete classificatie en duplicate IDs
-- **Automatic Fallback**: Bij LLM failures wordt keyword-based methode gebruikt
-- **Cost**: ~$0.05 per uitspraak (~11k tokens @ GPT-4o rates)
-
-**Gemeenschappelijke Features:**
-- **Automatische Text Splitting**: Lange secties (>700 woorden) worden gesplitst in chunks van ~600 woorden met 120-woord overlap
-- **Rijke Metadata Extractie** per chunk:
-  - Civil domain (employment_law, tenancy, consumer_law, etc.)
-  - Case subtype (termination, eviction, non_conformity, noise_nuisance, etc.)
-  - Outcome (claim_allowed/partly_allowed/rejected, appeal_upheld/dismissed, etc.)
-  - Party types (employee/employer, tenant/landlord, consumer/trader, etc.)
-  - Court level (kanton, rechtbank, gerechtshof, hoge_raad)
-  - Procedure type (kort_geding, bodemprocedure, hoger_beroep, cassatie)
-  - Statutes & articles (geëxtraheerd via regex: "Art 6:162 BW", etc.)
-- **UI Preview**: Expandable accordion met chunk counts per section type en color-coded badges
-- **Metadata Tracking**: classification_method (keyword/llm/keyword-fallback), confidence, model version
-
-### 4. Pinecone Export
-- Upload prepared records OF chunks naar Pinecone index
-- **Chunks** worden individueel opgeslagen met 30+ metadata velden voor filtering
+### 3. Pinecone Export (Metadata-Only)
+- Upload metadata records naar Pinecone index
+- **Metadata fields**: ECLI, Titel, Instantie, Datum, Rechtsgebied, Proceduresoort, Inhoudsindicatie, Bron URL
 - Configureerbaar:
   - Index host
   - Namespace (optioneel)
