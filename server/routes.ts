@@ -6,7 +6,7 @@ import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
-import { inArray, eq } from "drizzle-orm";
+import { inArray, eq, and } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Search Rechtspraak API
@@ -319,12 +319,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Namespace is vereist' });
       }
       
-      // Query database for already processed ECLIs in this namespace
+      // Query database for already processed ECLIs in this specific namespace
       const processed = await db
         .select({ ecli: processedEclis.ecli })
         .from(processedEclis)
         .where(
-          inArray(processedEclis.ecli, eclis)
+          and(
+            eq(processedEclis.namespace, namespace),
+            inArray(processedEclis.ecli, eclis)
+          )
         );
       
       const processedEcliSet = new Set(processed.map(p => p.ecli));

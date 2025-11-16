@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pgTable, serial, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Rechtspraak ECLI record schema
@@ -108,10 +108,15 @@ export type ExportConfig = z.infer<typeof exportConfigSchema>;
 // Database table: Track processed ECLI records
 export const processedEclis = pgTable("processed_eclis", {
   id: serial("id").primaryKey(),
-  ecli: varchar("ecli", { length: 255 }).notNull().unique(),
+  ecli: varchar("ecli", { length: 255 }).notNull(),
   namespace: varchar("namespace", { length: 100 }).notNull(),
   uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // Composite unique index: same ECLI can exist in different namespaces
+  uniqueEcliNamespace: uniqueIndex("unique_ecli_namespace").on(table.ecli, table.namespace),
+  // Index on namespace for faster check queries
+  namespaceIdx: index("namespace_idx").on(table.namespace),
+}));
 
 // Zod schemas for database operations
 export const insertProcessedEcliSchema = createInsertSchema(processedEclis).omit({

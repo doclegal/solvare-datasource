@@ -121,13 +121,39 @@ export default function Home() {
       }
       
       
-      // Step 2: Immediately fetch full content for found ECLIs
+      // Step 2: Check which ECLIs are already processed
       const eclis = searchData.records.map((r: any) => r.ecli);
+      const namespace = 'ECLI_NL'; // Fixed namespace
       
+      const checkResponse = await apiRequest(
+        'POST',
+        '/api/processed-eclis/check',
+        { eclis, namespace }
+      );
+      const checkData = await checkResponse.json();
+      
+      // Filter out already processed ECLIs
+      const eclisToFetch = checkData.newEclis;
+      
+      if (eclisToFetch.length === 0) {
+        toast({
+          title: "Alle records al verwerkt",
+          description: `Alle ${eclis.length} gevonden records zijn al eerder verwerkt en geüpload naar Pinecone.`,
+        });
+        fetchLockRef.current = false; // Unlock before return
+        return;
+      }
+      
+      // Log duplicate info
+      if (checkData.alreadyProcessed > 0) {
+        addLog(`${checkData.alreadyProcessed} van ${checkData.total} ECLI's al verwerkt - worden overgeslagen`);
+      }
+      
+      // Step 3: Fetch full content for NEW ECLIs only
       const contentResponse = await apiRequest(
         'POST',
         '/api/rechtspraak/content',
-        { eclis }
+        { eclis: eclisToFetch }
       );
 
       const contentData = await contentResponse.json();
@@ -167,8 +193,11 @@ export default function Home() {
         console.log('[Fetch] No new unique records, offset not advanced');
       }
       
-      // Build toast message with filtering info
-      let description = `${contentData.successful} civiele uitspraken succesvol verwerkt.`;
+      // Build toast message with filtering and duplicate info
+      let description = `${contentData.successful} nieuwe civiele uitspraken verwerkt.`;
+      if (checkData.alreadyProcessed > 0) {
+        description += ` ${checkData.alreadyProcessed} al eerder verwerkt (overgeslagen).`;
+      }
       if (contentData.filtered && contentData.filtered > 0) {
         description += ` ${contentData.filtered} niet-civiele ${contentData.filtered === 1 ? 'uitspraak' : 'uitspraken'} uitgefilterd.`;
       }
@@ -375,6 +404,30 @@ export default function Home() {
               addLog(`Batch verwerkt: ${data.processedRecords}/${data.totalRecords} records (${data.successCount} succesvol, ${data.errorCount} fouten)`);
             } else if (data.type === 'complete') {
               addLog(`✓ Export voltooid! ${data.successCount} records succesvol geüpload.`);
+              
+              // Mark ECLIs as processed in database
+              // Only mark the records that were actually exported
+              try {
+                const actuallyExportedEclis = chunkedData 
+                  ? chunkedData.allChunks.map(c => c.ecli)
+                  : preparedRecords.map(r => r.ecli);
+                
+                // Deduplicate ECLI list (chunks may have multiple per ECLI)
+                const uniqueEclis = Array.from(new Set(actuallyExportedEclis));
+                const namespace = config.namespace || 'ECLI_NL';
+                
+                addLog('ECLI\'s markeren als verwerkt...');
+                const markResponse = await apiRequest(
+                  'POST',
+                  '/api/processed-eclis/mark',
+                  { eclis: uniqueEclis, namespace }
+                );
+                const markData = await markResponse.json();
+                addLog(`✓ ${markData.marked} ECLI's gemarkeerd als verwerkt`);
+              } catch (error: any) {
+                console.error('Failed to mark ECLIs as processed:', error);
+                addLog(`⚠ Waarschuwing: Kon ECLI's niet markeren als verwerkt - ${error.message}`);
+              }
               
               toast({
                 title: "Export voltooid",
