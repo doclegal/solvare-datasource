@@ -69,7 +69,8 @@ export async function upsertRecordsToPinecone(
       const inputs = batch.map(record => isChunkedRecord(record) ? record.text : record.inhoudsindicatie);
       const embeddingsResponse = await pc.inference.embed(
         'multilingual-e5-large',
-        inputs
+        inputs,
+        { inputType: 'passage' }
       );
       
       // Step 2: Prepare vectors with embeddings and metadata
