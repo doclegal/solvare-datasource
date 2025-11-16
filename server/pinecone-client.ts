@@ -67,7 +67,14 @@ export async function upsertRecordsToPinecone(
     
     try {
       // Step 1: Generate embeddings using Pinecone's Inference API
-      const inputs = batch.map(record => isChunkedRecord(record) ? record.text : record.inhoudsindicatie);
+      // For PreparedRecords: use AI inhoudsindicatie if available, otherwise official inhoudsindicatie
+      const inputs = batch.map(record => {
+        if (isChunkedRecord(record)) {
+          return record.text;
+        } else {
+          return record.ai_inhoudsindicatie || record.inhoudsindicatie;
+        }
+      });
       const embeddingsResponse = await pc.inference.embed(
         'multilingual-e5-large',
         inputs,
@@ -132,9 +139,12 @@ export async function upsertRecordsToPinecone(
             metadata,
           };
         } else {
-          // For metadata-only records: use ecli and metadata (inhoudsindicatie = summary)
+          // For metadata-only records: use ecli and metadata
+          // Use AI inhoudsindicatie for 'text' if available, otherwise official inhoudsindicatie
+          const textForMetadata = record.ai_inhoudsindicatie || record.inhoudsindicatie;
+          
           const metadata: Record<string, string | number | boolean> = {
-            text: record.inhoudsindicatie,
+            text: textForMetadata,
             ecli: record.ecli,
             title: record.title,
             court: record.court,

@@ -485,7 +485,7 @@ export default function Home() {
       return;
     }
 
-    addLog(`Start AI enrichment voor ${preparedRecords.length} records...`);
+    addLog(`🤖 Start AI enrichment voor ${preparedRecords.length} records...`);
 
     try {
       const eclis = preparedRecords.map(r => r.ecli);
@@ -511,7 +511,10 @@ export default function Home() {
       while (true) {
         const { done, value } = await reader.read();
         
-        if (done) break;
+        if (done) {
+          console.log('[AI Enrichment] Stream completed');
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
@@ -523,6 +526,8 @@ export default function Home() {
               const data = JSON.parse(line.slice(6));
               
               if (data.type === 'complete') {
+                console.log('[AI Enrichment] Received completion event with', data.records?.length, 'records');
+                
                 // Update prepared records with AI enriched data
                 setPreparedRecords(data.records || []);
                 accumulatedRecordsRef.current = data.records || [];
@@ -533,16 +538,23 @@ export default function Home() {
                   title: 'AI Enrichment Voltooid',
                   description: `${data.successful} records verrijkt met AI samenvattingen`,
                 });
+              } else if (data.type === 'error') {
+                addLog(`✗ Fout: ${data.message}`);
+                throw new Error(data.message || 'AI enrichment fout');
               } else if (data.message) {
                 addLog(data.message);
               }
-            } catch (e) {
-              console.error('Failed to parse SSE message:', e);
+            } catch (e: any) {
+              if (e.message && e.message.includes('AI enrichment fout')) {
+                throw e; // Re-throw known errors
+              }
+              console.error('[AI Enrichment] Failed to parse SSE message:', e, 'Line:', line);
             }
           }
         }
       }
     } catch (error: any) {
+      console.error('[AI Enrichment] Error:', error);
       addLog(`✗ AI enrichment mislukt: ${error.message}`);
       toast({
         title: 'Fout bij AI Enrichment',
