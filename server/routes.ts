@@ -424,14 +424,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }).optional(),
       }).parse(req.body);
       
-      // Set up SSE
+      // Set up SSE with proper headers to prevent buffering
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
       
       const sendProgress = (progress: DiscoveryProgress) => {
         console.log('[SSE] Sending progress:', progress.type, progress.message);
-        res.write(`data: ${JSON.stringify(progress)}\n\n`);
+        const data = `data: ${JSON.stringify(progress)}\n\n`;
+        res.write(data);
+        if ('flush' in res && typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
       };
       
       // Run discovery with section crawling
@@ -443,22 +449,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Send completion event with prepared records
-      res.write(`data: ${JSON.stringify({
+      const completionData = `data: ${JSON.stringify({
         type: 'discovery_complete',
         preparedRecords,
         results,
         totalRecords: preparedRecords.length,
-      })}\n\n`);
+      })}\n\n`;
+      res.write(completionData);
+      if ('flush' in res && typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
       
       res.end();
     } catch (error: any) {
       console.error('Error in ECLI discovery:', error);
       
       // Send error via SSE
-      res.write(`data: ${JSON.stringify({
+      const errorData = `data: ${JSON.stringify({
         type: 'error',
         message: error.message || 'Discovery failed',
-      })}\n\n`);
+      })}\n\n`;
+      res.write(errorData);
+      if ('flush' in res && typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
       
       res.end();
     }
