@@ -39,6 +39,12 @@ export default function PineconeExport({
   const [namespace, setNamespace] = useState("");
   const [batchSize, setBatchSize] = useState("100");
   
+  // Debug: Log the environment variable value
+  useEffect(() => {
+    console.log('[PineconeExport] VITE_PINECONE_INDEX_HOST:', import.meta.env.VITE_PINECONE_INDEX_HOST);
+    console.log('[PineconeExport] indexHost state:', indexHost);
+  }, [indexHost]);
+  
   // Auto-generate namespace from civil subcategory
   useEffect(() => {
     const generatedNamespace = getNamespaceFromSubcategory(civilSubcategory);
@@ -82,29 +88,20 @@ export default function PineconeExport({
         </Alert>
 
         <div className="space-y-4">
-          {import.meta.env.VITE_PINECONE_INDEX_HOST ? (
-            <div className="space-y-2">
-              <Label>Pinecone Index Host</Label>
-              <div className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-md">
-                ✓ Geconfigureerd via VITE_PINECONE_INDEX_HOST secret
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="index-host">Pinecone Index Host</Label>
-              <Input
-                id="index-host"
-                type="text"
-                placeholder="bijv., my-index-abc123.svc.apw5-4e34-81fa.pinecone.io"
-                value={indexHost}
-                onChange={(e) => setIndexHost(e.target.value)}
-                data-testid="input-index-host"
-              />
-              <p className="text-xs text-muted-foreground">
-                Te vinden in je Pinecone console onder Index → Connect
-              </p>
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="index-host">Pinecone Index Host</Label>
+            <Input
+              id="index-host"
+              type="text"
+              placeholder="bijv., rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io"
+              value={indexHost}
+              onChange={(e) => setIndexHost(e.target.value)}
+              data-testid="input-index-host"
+            />
+            <p className="text-xs text-muted-foreground">
+              Te vinden in je Pinecone console onder Index → Connect (ZONDER https://)
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label>Namespace</Label>
