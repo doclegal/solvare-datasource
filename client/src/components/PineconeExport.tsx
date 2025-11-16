@@ -28,7 +28,7 @@ export default function PineconeExport({
   isExporting = false,
   exportLogs = [],
 }: PineconeExportProps) {
-  const [indexHost, setIndexHost] = useState("");
+  const [indexHost, setIndexHost] = useState(import.meta.env.VITE_PINECONE_INDEX_HOST || "");
   const [namespace, setNamespace] = useState("");
   const [batchSize, setBatchSize] = useState("100");
 
@@ -56,10 +56,14 @@ export default function PineconeExport({
           <Info className="h-4 w-4" />
           <AlertDescription className="space-y-2">
             <p>
-              Zorg ervoor dat je <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> in je Replit Secrets hebt ingesteld voordat je exporteert.
+              Stel deze Replit Secrets in voordat je exporteert:
             </p>
+            <ul className="text-xs list-disc list-inside space-y-1">
+              <li><code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> - je Pinecone API key</li>
+              <li><code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">VITE_PINECONE_INDEX_HOST</code> - je index host (vult automatisch in)</li>
+            </ul>
             <p className="text-xs">
-              <strong>Let op:</strong> De app gebruikt Pinecone's Inference API (model: multilingual-e5-large) om automatisch embeddings te genereren uit de Inhoudsindicatie. Dit wordt meegerekend in je Pinecone usage.
+              <strong>Let op:</strong> De app gebruikt Pinecone's Inference API (model: multilingual-e5-large) om automatisch embeddings te genereren uit de Inhoudsindicatie.
             </p>
           </AlertDescription>
         </Alert>
