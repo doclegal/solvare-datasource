@@ -534,6 +534,39 @@ function extractTextFromNode(node: any): string {
   return text.trim();
 }
 
+/**
+ * Extract full judgment text from Rechtspraak XML
+ */
+export async function fetchFullText(ecli: string): Promise<string> {
+  const url = `${RECHTSPRAAK_BASE_URL}/content?id=${encodeURIComponent(ecli)}`;
+  
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'Accept': 'application/xml',
+      },
+      timeout: 30000,
+    });
+
+    const data = parser.parse(response.data);
+    
+    // Extract full text from uitspraak or conclusie sections
+    const uitspraak = data['open-rechtspraak']?.uitspraak || data['open-rechtspraak']?.conclusie || {};
+    
+    // Extract text recursively from the entire uitspraak/conclusie node
+    const fullText = extractTextFromNode(uitspraak);
+    
+    if (!fullText || fullText.length < 100) {
+      throw new Error('Volledige tekst niet gevonden of te kort');
+    }
+    
+    return fullText;
+  } catch (error: any) {
+    console.error(`Error fetching full text for ${ecli}:`, error.message);
+    throw new Error(`Fout bij ophalen volledige tekst voor ${ecli}: ${error.message}`);
+  }
+}
+
 // Helper function to get full court name from code
 function getCourtName(code: string): string {
   const courtNames: Record<string, string> = {

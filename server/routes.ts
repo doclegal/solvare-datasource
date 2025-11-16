@@ -1,13 +1,14 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { searchFiltersSchema, exportConfigSchema, preparedRecordSchema, insertProcessedEcliSchema, type PreparedRecord, type PreparedBatch } from "@shared/schema";
-import { searchDecisions, fetchDecisionContent } from "./rechtspraak-api";
+import { searchDecisions, fetchDecisionContent, fetchFullText } from "./rechtspraak-api";
 import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
 import { inArray, eq, and } from "drizzle-orm";
 import { discoverECLIs, type DiscoveryProgress } from "./discovery/service";
+import { generateAISummary } from "./openai-summary";
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -42,8 +43,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < eclis.length; i++) {
         const ecli = eclis[i];
         try {
+          // Step 1: Fetch metadata
           const record = await fetchDecisionContent(ecli);
-          results.push(record);
+          
+          // Step 2: Fetch full text
+          console.log(`[${ecli}] Downloading full text...`);
+          const fullText = await fetchFullText(ecli);
+          
+          // Step 3: Generate AI summary
+          console.log(`[${ecli}] Generating AI summary...`);
+          const aiSummary = await generateAISummary(fullText, ecli);
+          
+          // Step 4: Merge AI summary into record
+          const enrichedRecord: PreparedRecord = {
+            ...record,
+            ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+            ai_feiten: aiSummary.feiten,
+            ai_geschil: aiSummary.geschil,
+            ai_beslissing: aiSummary.beslissing,
+            ai_motivering: aiSummary.motivering,
+          };
+          
+          results.push(enrichedRecord);
+          console.log(`[${ecli}] ✓ Completed with AI summary`);
           
           // Small delay to avoid hammering the server
           if (i < eclis.length - 1) {

@@ -174,19 +174,13 @@ export async function discoverECLIs(
   
   // Step 4: Prepare records with alsoReadOn metadata (merged from all source URLs)
   validationResults.forEach(validation => {
-    if (validation.isValid && validation.metadata) {
+    if (validation.isValid && validation.enrichedRecord) {
       const sourceUrlsForECLI = Array.from(ecliToSources.get(validation.ecli) || []);
       
+      // Use the enrichedRecord which includes AI summary fields
       const preparedRecord: PreparedRecord = {
-        ecli: validation.ecli,
-        title: validation.metadata.title,
-        court: validation.metadata.court,
-        decisionDate: validation.metadata.decisionDate,
-        legalArea: validation.metadata.legalArea,
-        procedureType: validation.metadata.procedureType,
-        sourceUrl: validation.metadata.sourceUrl,
-        inhoudsindicatie: validation.metadata.inhoudsindicatie,
-        alsoReadOn: sourceUrlsForECLI,
+        ...validation.enrichedRecord,
+        alsoReadOn: sourceUrlsForECLI, // Add alsoReadOn metadata
       };
       
       allPreparedRecords.push(preparedRecord);

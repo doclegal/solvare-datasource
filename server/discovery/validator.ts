@@ -3,30 +3,24 @@
  * Validates ECLI numbers via Rechtspraak API
  */
 
-import { fetchDecisionContent } from '../rechtspraak-api';
+import { fetchDecisionContent, fetchFullText } from '../rechtspraak-api';
+import { generateAISummary } from '../openai-summary';
+import type { PreparedRecord } from '@shared/schema';
 
 export interface ValidationResult {
   ecli: string;
   isValid: boolean;
-  metadata?: {
-    title: string;
-    court: string;
-    decisionDate: string;
-    legalArea: string[];
-    procedureType: string;
-    inhoudsindicatie: string;
-    sourceUrl: string;
-  };
+  enrichedRecord?: PreparedRecord; // Now includes AI summary fields
   error?: string;
 }
 
 /**
  * Validate a single ECLI via Rechtspraak API
- * Returns validation result with metadata if valid
+ * Returns validation result with full metadata + AI summary
  */
 export async function validateECLI(ecli: string): Promise<ValidationResult> {
   try {
-    // fetchDecisionContent returns PreparedRecord directly or throws on error
+    // Step 1: Fetch metadata
     const record = await fetchDecisionContent(ecli);
     
     // Check if has valid Inhoudsindicatie (required)
@@ -39,18 +33,28 @@ export async function validateECLI(ecli: string): Promise<ValidationResult> {
       };
     }
     
+    // Step 2: Fetch full text
+    console.log(`[${ecli}] Downloading full text...`);
+    const fullText = await fetchFullText(ecli);
+    
+    // Step 3: Generate AI summary
+    console.log(`[${ecli}] Generating AI summary...`);
+    const aiSummary = await generateAISummary(fullText, ecli);
+    
+    // Step 4: Merge AI summary into record
+    const enrichedRecord: PreparedRecord = {
+      ...record,
+      ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+      ai_feiten: aiSummary.feiten,
+      ai_geschil: aiSummary.geschil,
+      ai_beslissing: aiSummary.beslissing,
+      ai_motivering: aiSummary.motivering,
+    };
+    
     return {
       ecli,
       isValid: true,
-      metadata: {
-        title: record.title,
-        court: record.court,
-        decisionDate: record.decisionDate,
-        legalArea: record.legalArea,
-        procedureType: record.procedureType,
-        inhoudsindicatie: record.inhoudsindicatie,
-        sourceUrl: record.sourceUrl,
-      },
+      enrichedRecord,
     };
   } catch (error: any) {
     return {

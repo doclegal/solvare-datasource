@@ -24,6 +24,13 @@ export const preparedRecordSchema = z.object({
   sourceUrl: z.string(),
   inhoudsindicatie: z.string(), // Official summary from Rechtspraak (required)
   alsoReadOn: z.array(z.string()).optional(), // URLs where this ECLI was discovered
+  
+  // AI-generated summary sections (generated from full text)
+  ai_inhoudsindicatie: z.string().optional(),
+  ai_feiten: z.string().optional(),
+  ai_geschil: z.string().optional(),
+  ai_beslissing: z.string().optional(),
+  ai_motivering: z.string().optional(),
 });
 
 export type PreparedRecord = z.infer<typeof preparedRecordSchema>;
