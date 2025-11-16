@@ -4,6 +4,7 @@ import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
 import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
+import { AiEnrichment } from "@/components/AiEnrichment";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -480,6 +481,8 @@ export default function Home() {
       <Header isConnected={true} />
       
       <main className="flex-1 max-w-7xl w-full mx-auto px-8 py-6 space-y-8">
+        <AiEnrichment />
+        
         <EcliDiscovery onRecordsDiscovered={handleRecordsDiscovered} />
         
         <FilterSection
