@@ -7,6 +7,8 @@ import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
 import { inArray, eq, and } from "drizzle-orm";
+import { discoverECLIs, type DiscoveryProgress } from "./discovery/service";
+import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Search Rechtspraak API
@@ -378,6 +380,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error marking ECLIs as processed:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ECLI Discovery endpoint
+  app.post('/api/ecli-discovery/ingest', async (req: Request, res: Response) => {
+    try {
+      const { sourceUrls, namespace } = z.object({
+        sourceUrls: z.array(z.string().url()),
+        namespace: z.string().default('ECLI_NL'),
+      }).parse(req.body);
+      
+      // Set up SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendProgress = (progress: DiscoveryProgress) => {
+        res.write(`data: ${JSON.stringify(progress)}\n\n`);
+      };
+      
+      // Run discovery
+      const { preparedRecords, results } = await discoverECLIs(
+        sourceUrls,
+        namespace,
+        sendProgress
+      );
+      
+      // Send completion event with prepared records
+      res.write(`data: ${JSON.stringify({
+        type: 'discovery_complete',
+        preparedRecords,
+        results,
+        totalRecords: preparedRecords.length,
+      })}\n\n`);
+      
+      res.end();
+    } catch (error: any) {
+      console.error('Error in ECLI discovery:', error);
+      
+      // Send error via SSE
+      res.write(`data: ${JSON.stringify({
+        type: 'error',
+        message: error.message || 'Discovery failed',
+      })}\n\n`);
+      
+      res.end();
     }
   });
 

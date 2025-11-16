@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
 import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
+import { EcliDiscovery } from "@/components/EcliDiscovery";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -460,11 +461,21 @@ export default function Home() {
     }
   };
 
+  const handleRecordsDiscovered = (discoveredRecords: PreparedRecord[]) => {
+    // Add discovered records to prepared records
+    setPreparedRecords(prev => [...prev, ...discoveredRecords]);
+    accumulatedRecordsRef.current = [...accumulatedRecordsRef.current, ...discoveredRecords];
+    
+    addLog(`✓ ${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`);
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header isConnected={true} />
       
       <main className="flex-1 max-w-7xl w-full mx-auto px-8 py-6 space-y-8">
+        <EcliDiscovery onRecordsDiscovered={handleRecordsDiscovered} />
+        
         <FilterSection
           onFetch={handleFetchDecisions}
           onReset={handleResetFilters}

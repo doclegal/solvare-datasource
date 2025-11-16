@@ -6,7 +6,7 @@
 import axios from 'axios';
 import RobotsParser from 'robots-parser';
 
-interface CrawlResult {
+export interface CrawlResult {
   url: string;
   html: string | null;
   error: string | null;
