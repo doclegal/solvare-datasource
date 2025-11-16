@@ -1,10 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { searchFiltersSchema, exportConfigSchema, preparedRecordSchema, type PreparedRecord, type PreparedBatch } from "@shared/schema";
+import { searchFiltersSchema, exportConfigSchema, preparedRecordSchema, insertProcessedEcliSchema, type PreparedRecord, type PreparedBatch } from "@shared/schema";
 import { searchDecisions, fetchDecisionContent } from "./rechtspraak-api";
 import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
+import { db, processedEclis } from "./db";
+import { inArray, eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Search Rechtspraak API
@@ -302,6 +304,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       deletedCount,
       message: `${deletedCount} oude batches verwijderd` 
     });
+  });
+
+  // Check which ECLIs are already processed
+  app.post('/api/processed-eclis/check', async (req: Request, res: Response) => {
+    try {
+      const { eclis, namespace } = req.body;
+      
+      if (!Array.isArray(eclis) || eclis.length === 0) {
+        return res.status(400).json({ error: 'ECLI lijst is vereist' });
+      }
+      
+      if (!namespace) {
+        return res.status(400).json({ error: 'Namespace is vereist' });
+      }
+      
+      // Query database for already processed ECLIs in this namespace
+      const processed = await db
+        .select({ ecli: processedEclis.ecli })
+        .from(processedEclis)
+        .where(
+          inArray(processedEclis.ecli, eclis)
+        );
+      
+      const processedEcliSet = new Set(processed.map(p => p.ecli));
+      const newEclis = eclis.filter(ecli => !processedEcliSet.has(ecli));
+      
+      res.json({
+        total: eclis.length,
+        alreadyProcessed: processed.length,
+        new: newEclis.length,
+        processedEclis: Array.from(processedEcliSet),
+        newEclis,
+      });
+    } catch (error: any) {
+      console.error('Error checking processed ECLIs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Mark ECLIs as processed after successful upload
+  app.post('/api/processed-eclis/mark', async (req: Request, res: Response) => {
+    try {
+      const { eclis, namespace } = req.body;
+      
+      if (!Array.isArray(eclis) || eclis.length === 0) {
+        return res.status(400).json({ error: 'ECLI lijst is vereist' });
+      }
+      
+      if (!namespace) {
+        return res.status(400).json({ error: 'Namespace is vereist' });
+      }
+      
+      // Insert processed ECLIs (ignore duplicates)
+      const values = eclis.map(ecli => ({ ecli, namespace }));
+      
+      // Use ON CONFLICT DO NOTHING to avoid duplicate key errors
+      const inserted = await db
+        .insert(processedEclis)
+        .values(values)
+        .onConflictDoNothing()
+        .returning();
+      
+      res.json({
+        success: true,
+        marked: inserted.length,
+        total: eclis.length,
+        message: `${inserted.length} nieuwe ECLI's gemarkeerd als verwerkt`,
+      });
+    } catch (error: any) {
+      console.error('Error marking ECLIs as processed:', error);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Health check endpoint
