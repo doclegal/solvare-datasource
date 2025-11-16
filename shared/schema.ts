@@ -23,6 +23,7 @@ export const preparedRecordSchema = z.object({
   procedureType: z.string(),
   sourceUrl: z.string(),
   inhoudsindicatie: z.string(), // Official summary from Rechtspraak (required)
+  alsoReadOn: z.array(z.string()).optional(), // URLs where this ECLI was discovered
 });
 
 export type PreparedRecord = z.infer<typeof preparedRecordSchema>;
@@ -81,6 +82,9 @@ export const chunkedRecordSchema = z.object({
   classification_confidence: z.number().min(0).max(1).optional(),
   llm_model: z.string().optional(),
   prompt_version: z.string().optional(),
+  
+  // Discovery metadata
+  also_read_on: z.array(z.string()).optional(), // URLs where this ECLI was discovered
 });
 
 export type ChunkedRecord = z.infer<typeof chunkedRecordSchema>;
