@@ -14,11 +14,17 @@ export interface ValidationResult {
   error?: string;
 }
 
+export type EnrichmentMode = 'metadata-only' | 'with-summary';
+
 /**
  * Validate a single ECLI via Rechtspraak API
- * Returns validation result with metadata (AI summary best-effort)
+ * @param ecli ECLI number to validate
+ * @param enrichmentMode 'metadata-only' (fast, for discovery) or 'with-summary' (slow, includes AI)
  */
-export async function validateECLI(ecli: string): Promise<ValidationResult> {
+export async function validateECLI(
+  ecli: string, 
+  enrichmentMode: EnrichmentMode = 'metadata-only'
+): Promise<ValidationResult> {
   try {
     // Step 1: Fetch metadata (required)
     const record = await fetchDecisionContent(ecli);
@@ -33,29 +39,33 @@ export async function validateECLI(ecli: string): Promise<ValidationResult> {
       };
     }
     
-    // Step 2 & 3: Fetch full text + AI summary (best-effort)
+    // Step 2 & 3: Fetch full text + AI summary (only if enrichment mode is 'with-summary')
     let enrichedRecord = record;
-    try {
-      console.log(`[${ecli}] Downloading full text...`);
-      const fullText = await fetchFullText(ecli);
-      
-      console.log(`[${ecli}] Generating AI summary...`);
-      const aiSummary = await generateAISummary(fullText, ecli);
-      
-      // Merge AI summary into record
-      enrichedRecord = {
-        ...record,
-        ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
-        ai_feiten: aiSummary.feiten,
-        ai_geschil: aiSummary.geschil,
-        ai_beslissing: aiSummary.beslissing,
-        ai_motivering: aiSummary.motivering,
-      };
-      
-      console.log(`[${ecli}] ✓ With AI summary`);
-    } catch (aiError: any) {
-      // Graceful degradation: continue with metadata-only record
-      console.warn(`[${ecli}] AI summary failed (keeping metadata): ${aiError.message}`);
+    if (enrichmentMode === 'with-summary') {
+      try {
+        console.log(`[${ecli}] Downloading full text...`);
+        const fullText = await fetchFullText(ecli);
+        
+        console.log(`[${ecli}] Generating AI summary...`);
+        const aiSummary = await generateAISummary(fullText, ecli);
+        
+        // Merge AI summary into record
+        enrichedRecord = {
+          ...record,
+          ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+          ai_feiten: aiSummary.feiten,
+          ai_geschil: aiSummary.geschil,
+          ai_beslissing: aiSummary.beslissing,
+          ai_motivering: aiSummary.motivering,
+        };
+        
+        console.log(`[${ecli}] ✓ With AI summary`);
+      } catch (aiError: any) {
+        // Graceful degradation: continue with metadata-only record
+        console.warn(`[${ecli}] AI summary failed (keeping metadata): ${aiError.message}`);
+      }
+    } else {
+      console.log(`[${ecli}] ✓ Metadata only (skipping AI summary)`);
     }
     
     return {
@@ -74,15 +84,17 @@ export async function validateECLI(ecli: string): Promise<ValidationResult> {
 
 /**
  * Validate multiple ECLIs with delay between requests
+ * @param enrichmentMode 'metadata-only' for fast discovery, 'with-summary' for full enrichment
  */
 export async function validateECLIs(
   eclis: string[],
-  onProgress?: (ecli: string, result: ValidationResult) => void
+  onProgress?: (ecli: string, result: ValidationResult) => void,
+  enrichmentMode: EnrichmentMode = 'metadata-only'
 ): Promise<ValidationResult[]> {
   const results: ValidationResult[] = [];
   
   for (const ecli of eclis) {
-    const result = await validateECLI(ecli);
+    const result = await validateECLI(ecli, enrichmentMode);
     results.push(result);
     
     if (onProgress) {
