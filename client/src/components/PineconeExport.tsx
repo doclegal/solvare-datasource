@@ -22,21 +22,9 @@ export interface ExportConfig {
   batchSize: number;
 }
 
-// Map civil subcategory to Pinecone namespace
+// Always use ECLI_NL namespace (regardless of civil subcategory)
 const getNamespaceFromSubcategory = (subcategory: string): string => {
-  const mapping: Record<string, string> = {
-    'all': 'CIVIEL_ALLE',
-    'arbeidsrecht': 'CIVIEL_ARBEIDSRECHT',
-    'europees': 'CIVIEL_EUROPEES',
-    'goederenrecht': 'CIVIEL_GOEDERENRECHT',
-    'insolventierecht': 'CIVIEL_INSOLVENTIERECHT',
-    'intellectueelEigendom': 'CIVIEL_INTELLECTUEEL_EIGENDOM',
-    'ondernemingsrecht': 'CIVIEL_ONDERNEMINGSRECHT',
-    'personen': 'CIVIEL_PERSONEN_FAMILIERECHT',
-    'verbintenissenrecht': 'CIVIEL_VERBINTENISSENRECHT',
-  };
-  
-  return mapping[subcategory] || 'CIVIEL_ALLE';
+  return 'ECLI_NL';
 };
 
 export default function PineconeExport({
@@ -124,7 +112,7 @@ export default function PineconeExport({
               {namespace}
             </div>
             <p className="text-xs text-muted-foreground">
-              Automatisch gegenereerd op basis van geselecteerd type civiele zaak
+              Standaard namespace voor alle ECLI records
             </p>
           </div>
 
