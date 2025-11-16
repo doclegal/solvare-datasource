@@ -2,6 +2,7 @@ import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import type { EcliRecord, PreparedRecord, SearchFilters } from '@shared/schema';
 import civilSubcategories from './data/civil-subcategories.json';
+import instanties from './data/instanties.json';
 
 const RECHTSPRAAK_BASE_URL = 'https://data.rechtspraak.nl/uitspraken';
 const parser = new XMLParser({
@@ -77,7 +78,11 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   params.append('type', 'Uitspraak');
   
   if (filters.court && filters.court !== 'all') {
-    params.append('creator', filters.court);
+    // Map court abbreviation to full URI
+    // The API requires the full URI, not the abbreviation
+    const court = instanties.find((inst: any) => inst.afkorting === filters.court);
+    const courtValue = court?.identifier || filters.court;
+    params.append('creator', courtValue);
   }
   
   // Add modified date filter if specified

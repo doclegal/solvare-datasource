@@ -1,0 +1,254 @@
+[
+  {
+    "naam": "Gerechtshof 's-Gravenhage",
+    "afkorting": "GHSGR",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_'s-Gravenhage"
+  },
+  {
+    "naam": "Gerechtshof 's-Hertogenbosch",
+    "afkorting": "GHSHE",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_'s-Hertogenbosch"
+  },
+  {
+    "naam": "Gerechtshof Amsterdam",
+    "afkorting": "GHAMS",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_Amsterdam"
+  },
+  {
+    "naam": "Gerechtshof Arnhem",
+    "afkorting": "GHARN",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_Arnhem"
+  },
+  {
+    "naam": "Gerechtshof Arnhem-Leeuwarden",
+    "afkorting": "GHARL",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_Arnhem-Leeuwarden"
+  },
+  {
+    "naam": "Gerechtshof Den Haag",
+    "afkorting": "GHDHA",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_Den_Haag"
+  },
+  {
+    "naam": "Gerechtshof Leeuwarden",
+    "afkorting": "GHLEE",
+    "type": "Gerechtshof",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Gerechtshof_Leeuwarden"
+  },
+  {
+    "naam": "Hoge Raad",
+    "afkorting": "HR",
+    "type": "TypeHr",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Hoge_Raad_der_Nederlanden"
+  },
+  {
+    "naam": "Rechtbank 's-Gravenhage",
+    "afkorting": "RBSGR",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_s-Gravenhage"
+  },
+  {
+    "naam": "Rechtbank 's-Hertogenbosch",
+    "afkorting": "RBSHE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_'s-Hertogenbosch"
+  },
+  {
+    "naam": "Rechtbank Alkmaar",
+    "afkorting": "RBALK",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Alkmaar"
+  },
+  {
+    "naam": "Rechtbank Almelo",
+    "afkorting": "RBALM",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Almelo"
+  },
+  {
+    "naam": "Rechtbank Amsterdam",
+    "afkorting": "RBAMS",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Amsterdam"
+  },
+  {
+    "naam": "Rechtbank Arnhem",
+    "afkorting": "RBARN",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Arnhem"
+  },
+  {
+    "naam": "Rechtbank Assen",
+    "afkorting": "RBASS",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Assen"
+  },
+  {
+    "naam": "Rechtbank Breda",
+    "afkorting": "RBBRE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Breda"
+  },
+  {
+    "naam": "Rechtbank Den Haag",
+    "afkorting": "RBDHA",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Den_Haag"
+  },
+  {
+    "naam": "Rechtbank Dordrecht",
+    "afkorting": "RBDOR",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Dordrecht"
+  },
+  {
+    "naam": "Rechtbank Gelderland",
+    "afkorting": "RBGEL",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Gelderland"
+  },
+  {
+    "naam": "Rechtbank Groningen",
+    "afkorting": "RBGRO",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Groningen"
+  },
+  {
+    "naam": "Rechtbank Haarlem",
+    "afkorting": "RBHAA",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Haarlem"
+  },
+  {
+    "naam": "Rechtbank Heerenveen",
+    "afkorting": "RBHRV",
+    "type": "Rechtbank",
+    "identifier": "http://psi.rechtspraak.nl/instantie/Kantongerecht/#RechtbankHeerenveen"
+  },
+  {
+    "naam": "Rechtbank Leeuwarden",
+    "afkorting": "RBLEE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Leeuwarden"
+  },
+  {
+    "naam": "Rechtbank Limburg",
+    "afkorting": "RBLIM",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Limburg"
+  },
+  {
+    "naam": "Rechtbank Maastricht",
+    "afkorting": "RBMAA",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Maastricht"
+  },
+  {
+    "naam": "Rechtbank Middelburg",
+    "afkorting": "RBMID",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Middelburg"
+  },
+  {
+    "naam": "Rechtbank Midden-Nederland",
+    "afkorting": "RBMNE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Midden-Nederland"
+  },
+  {
+    "naam": "Rechtbank Noord-Holland",
+    "afkorting": "RBNHO",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Noord-Holland"
+  },
+  {
+    "naam": "Rechtbank Noord-Nederland",
+    "afkorting": "RBNNE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Noord-Nederland"
+  },
+  {
+    "naam": "Rechtbank Oost-Brabant",
+    "afkorting": "RBOBR",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Oost-Brabant"
+  },
+  {
+    "naam": "Rechtbank Oost-Nederland",
+    "afkorting": "RBONE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Oost-Nederland"
+  },
+  {
+    "naam": "Rechtbank Overijssel",
+    "afkorting": "RBOVE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Overijssel"
+  },
+  {
+    "naam": "Rechtbank Roermond",
+    "afkorting": "RBROE",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Roermond"
+  },
+  {
+    "naam": "Rechtbank Rotterdam",
+    "afkorting": "RBROT",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Rotterdam"
+  },
+  {
+    "naam": "Rechtbank Tiel",
+    "afkorting": "RBTIE",
+    "type": "Rechtbank",
+    "identifier": "http://psi.rechtspraak.nl/instantie/Kantongerecht/#RechtbankTiel"
+  },
+  {
+    "naam": "Rechtbank Utrecht",
+    "afkorting": "RBUTR",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Utrecht"
+  },
+  {
+    "naam": "Rechtbank Winschoten",
+    "afkorting": "RBWIN",
+    "type": "Rechtbank",
+    "identifier": "http://psi.rechtspraak.nl/instantie/Kantongerecht/#RechtbankWinschoten"
+  },
+  {
+    "naam": "Rechtbank Zeeland-West-Brabant",
+    "afkorting": "RBZWB",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Zeeland-West-Brabant"
+  },
+  {
+    "naam": "Rechtbank Zierikzee",
+    "afkorting": "RBZIE",
+    "type": "Rechtbank",
+    "identifier": "http://psi.rechtspraak.nl/instantie/Kantongerecht/#RechtbankZierikzee"
+  },
+  {
+    "naam": "Rechtbank Zutphen",
+    "afkorting": "RBZUT",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Zutphen"
+  },
+  {
+    "naam": "Rechtbank Zwolle",
+    "afkorting": "RBZWO",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Zwolle"
+  },
+  {
+    "naam": "Rechtbank Zwolle-Lelystad",
+    "afkorting": "RBZLY",
+    "type": "Rechtbank",
+    "identifier": "http://standaarden.overheid.nl/owms/terms/Rechtbank_Zwolle-Lelystad"
+  }
+]
