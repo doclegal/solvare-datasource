@@ -67,12 +67,19 @@ export async function upsertRecordsToPinecone(
     
     try {
       // Step 1: Generate embeddings using Pinecone's Inference API
-      // For PreparedRecords: use AI inhoudsindicatie if available, otherwise official inhoudsindicatie
+      // For PreparedRecords: combine all AI summary fields for comprehensive embedding
       const inputs = batch.map(record => {
         if (isChunkedRecord(record)) {
           return record.text;
         } else {
-          return record.ai_inhoudsindicatie || record.inhoudsindicatie;
+          // Combine all text for better semantic search
+          const textParts: string[] = [record.inhoudsindicatie];
+          if (record.ai_inhoudsindicatie) textParts.push(record.ai_inhoudsindicatie);
+          if (record.ai_feiten) textParts.push(record.ai_feiten);
+          if (record.ai_geschil) textParts.push(record.ai_geschil);
+          if (record.ai_beslissing) textParts.push(record.ai_beslissing);
+          if (record.ai_motivering) textParts.push(record.ai_motivering);
+          return textParts.join('\n\n');
         }
       });
       const embeddingsResponse = await pc.inference.embed(
@@ -140,11 +147,24 @@ export async function upsertRecordsToPinecone(
           };
         } else {
           // For metadata-only records: use ecli and metadata
-          // Use AI inhoudsindicatie for 'text' if available, otherwise official inhoudsindicatie
-          const textForMetadata = record.ai_inhoudsindicatie || record.inhoudsindicatie;
+          // Combine all AI summary fields for better searchability
+          const textParts: string[] = [];
+          
+          // Start with official summary as base
+          textParts.push(record.inhoudsindicatie);
+          
+          // Add AI summary sections if available (for comprehensive search coverage)
+          if (record.ai_inhoudsindicatie) textParts.push(record.ai_inhoudsindicatie);
+          if (record.ai_feiten) textParts.push(record.ai_feiten);
+          if (record.ai_geschil) textParts.push(record.ai_geschil);
+          if (record.ai_beslissing) textParts.push(record.ai_beslissing);
+          if (record.ai_motivering) textParts.push(record.ai_motivering);
+          
+          // Combine with double newline for readability
+          const combinedText = textParts.join('\n\n');
           
           const metadata: Record<string, string | number | boolean> = {
-            text: textForMetadata,
+            text: combinedText,
             ecli: record.ecli,
             title: record.title,
             court: record.court,
@@ -154,7 +174,7 @@ export async function upsertRecordsToPinecone(
             source_url: record.sourceUrl,
           };
           
-          // Add AI summary sections if available
+          // Add AI summary sections as separate metadata fields for filtering
           if (record.ai_inhoudsindicatie) metadata.ai_inhoudsindicatie = record.ai_inhoudsindicatie;
           if (record.ai_feiten) metadata.ai_feiten = record.ai_feiten;
           if (record.ai_geschil) metadata.ai_geschil = record.ai_geschil;
