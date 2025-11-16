@@ -383,12 +383,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ECLI Discovery endpoint
+  // ECLI Discovery endpoint with breadth-first section crawling
   app.post('/api/ecli-discovery/ingest', async (req: Request, res: Response) => {
     try {
-      const { sourceUrls, namespace } = z.object({
+      const { sourceUrls, namespace, config } = z.object({
         sourceUrls: z.array(z.string().url()),
         namespace: z.string().default('ECLI_NL'),
+        config: z.object({
+          maxDepth: z.number().min(1).max(10).optional(),
+          maxPages: z.number().min(1).max(500).optional(),
+          delayMs: z.number().min(100).max(5000).optional(),
+        }).optional(),
       }).parse(req.body);
       
       // Set up SSE
@@ -400,10 +405,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.write(`data: ${JSON.stringify(progress)}\n\n`);
       };
       
-      // Run discovery
+      // Run discovery with section crawling
       const { preparedRecords, results } = await discoverECLIs(
         sourceUrls,
         namespace,
+        config || {},
         sendProgress
       );
       

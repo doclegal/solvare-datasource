@@ -1,48 +1,51 @@
 /**
  * ECLI Discovery Service
  * Orchestrates the complete discovery flow:
- * 1. Crawl URLs
- * 2. Extract ECLIs
+ * 1. Crawl sections (all pages under each root URL) using BFS
+ * 2. Extract ECLIs from all crawled pages
  * 3. Validate via Rechtspraak API
  * 4. Process through existing pipeline
  */
 
-import { crawlUrls, type CrawlResult } from './crawler';
-import { extractECLIs, type ExtractedECLI } from './extractor';
-import { validateECLIs, type ValidationResult } from './validator';
+import { crawlSection, type SectionCrawlProgress, type CrawlConfig } from './section-crawler';
+import { validateECLIs } from './validator';
 import { db, processedEclis } from '../db';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { PreparedRecord } from '@shared/schema';
 
 export interface DiscoveryResult {
   url: string;
-  crawled: boolean;
-  crawlError?: string;
+  pagesVisited: number;
   eclisFound: number;
   eclisValidated: number;
   eclisNew: number;
-  eclisProcessed: number;
   errors: string[];
 }
 
 export interface DiscoveryProgress {
-  type: 'crawl' | 'extract' | 'validate' | 'check_processed' | 'complete' | 'error';
+  type: 'section_crawl_start' | 'section_crawl_page' | 'section_crawl_complete' | 
+        'validate' | 'check_processed' | 'complete' | 'error';
   message: string;
   url?: string;
   eclisFound?: number;
   ecli?: string;
   totalUrls?: number;
   currentUrl?: number;
+  sectionRoot?: string;
+  currentDepth?: number;
+  queueSize?: number;
+  processedPages?: number;
   results?: DiscoveryResult[];
 }
 
 /**
- * Main discovery service
+ * Main discovery service with breadth-first section crawling
  * Returns prepared records ready for pipeline processing
  */
 export async function discoverECLIs(
   sourceUrls: string[],
   namespace: string = 'ECLI_NL',
+  config: Partial<CrawlConfig> = {},
   onProgress?: (progress: DiscoveryProgress) => void
 ): Promise<{
   preparedRecords: PreparedRecord[];
@@ -51,101 +54,76 @@ export async function discoverECLIs(
   const results: DiscoveryResult[] = [];
   const allPreparedRecords: PreparedRecord[] = [];
   
-  // Map to track source URLs per ECLI
+  // Global map to track all source URLs per ECLI (across all sections)
   const ecliToSources = new Map<string, Set<string>>();
   
-  // Step 1: Crawl all URLs
-  onProgress?.({
-    type: 'crawl',
-    message: `Crawling ${sourceUrls.length} URL(s)...`,
-    totalUrls: sourceUrls.length,
-  });
-  
-  const crawlResults = await crawlUrls(sourceUrls, (url, result) => {
+  // Step 1: Crawl each section (all pages under each root URL) using BFS
+  for (let i = 0; i < sourceUrls.length; i++) {
+    const rootUrl = sourceUrls[i];
+    
     onProgress?.({
-      type: 'crawl',
-      message: result.robotsAllowed 
-        ? `Crawled: ${url}` 
-        : `Blocked by robots.txt: ${url}`,
-      url,
-    });
-  });
-  
-  // Step 2: Extract ECLIs from each crawled page
-  const allExtractedECLIs: ExtractedECLI[] = [];
-  
-  for (let i = 0; i < crawlResults.length; i++) {
-    const crawlResult = crawlResults[i];
-    const sourceUrl = sourceUrls[i];
-    
-    const result: DiscoveryResult = {
-      url: sourceUrl,
-      crawled: crawlResult.robotsAllowed && crawlResult.html !== null,
-      crawlError: crawlResult.error || undefined,
-      eclisFound: 0,
-      eclisValidated: 0,
-      eclisNew: 0,
-      eclisProcessed: 0,
-      errors: [],
-    };
-    
-    if (!crawlResult.html) {
-      if (crawlResult.error) {
-        result.errors.push(crawlResult.error);
-      }
-      results.push(result);
-      continue;
-    }
-    
-    // Extract ECLIs from HTML
-    onProgress?.({
-      type: 'extract',
-      message: `Extracting ECLIs from: ${sourceUrl}`,
-      url: sourceUrl,
+      type: 'section_crawl_start',
+      sectionRoot: rootUrl,
+      message: `Starting section crawl ${i + 1}/${sourceUrls.length}: ${rootUrl}`,
       currentUrl: i + 1,
       totalUrls: sourceUrls.length,
     });
     
-    const extractedECLIs = extractECLIs(crawlResult.html, sourceUrl);
-    result.eclisFound = extractedECLIs.length;
+    // Progress handler for section crawler
+    const sectionProgressHandler = (sectionProgress: SectionCrawlProgress) => {
+      onProgress?.({
+        type: sectionProgress.type as any,
+        sectionRoot: sectionProgress.sectionRoot,
+        currentUrl: typeof sectionProgress.currentUrl === 'string' ? undefined : sectionProgress.currentUrl,
+        currentDepth: sectionProgress.currentDepth,
+        queueSize: sectionProgress.queueSize,
+        processedPages: sectionProgress.processedPages,
+        eclisFound: sectionProgress.eclisFound,
+        message: sectionProgress.message,
+        url: typeof sectionProgress.currentUrl === 'string' ? sectionProgress.currentUrl : undefined,
+      });
+    };
     
-    onProgress?.({
-      type: 'extract',
-      message: `Found ${extractedECLIs.length} ECLI(s) on: ${sourceUrl}`,
-      url: sourceUrl,
-      eclisFound: extractedECLIs.length,
-    });
+    // Crawl the entire section
+    const sectionResult = await crawlSection(rootUrl, config, sectionProgressHandler);
     
-    // Track source URLs for each ECLI
-    extractedECLIs.forEach(extracted => {
-      if (!ecliToSources.has(extracted.ecli)) {
-        ecliToSources.set(extracted.ecli, new Set());
+    // Merge ECLIs from this section into global map
+    sectionResult.eclisFound.forEach((sourceUrls, ecli) => {
+      if (!ecliToSources.has(ecli)) {
+        ecliToSources.set(ecli, new Set());
       }
-      ecliToSources.get(extracted.ecli)!.add(sourceUrl);
+      sourceUrls.forEach(url => ecliToSources.get(ecli)!.add(url));
     });
     
-    allExtractedECLIs.push(...extractedECLIs);
-    results.push(result);
+    // Create result summary for this section
+    results.push({
+      url: rootUrl,
+      pagesVisited: sectionResult.pagesVisited,
+      eclisFound: sectionResult.eclisFound.size,
+      eclisValidated: 0, // Will update after validation
+      eclisNew: 0, // Will update after validation
+      errors: sectionResult.errors,
+    });
   }
   
-  // Get unique ECLIs
-  const uniqueECLIs = Array.from(new Set(allExtractedECLIs.map(e => e.ecli)));
+  // Get unique ECLIs across all sections
+  const uniqueECLIs = Array.from(ecliToSources.keys());
   
   if (uniqueECLIs.length === 0) {
     onProgress?.({
       type: 'complete',
-      message: 'No ECLIs found on any of the URLs',
+      message: 'No ECLIs found in any section',
       results,
     });
     return { preparedRecords: [], results };
   }
   
   onProgress?.({
-    type: 'extract',
-    message: `Total unique ECLIs found: ${uniqueECLIs.length}`,
+    type: 'check_processed',
+    message: `Total unique ECLIs found across all sections: ${uniqueECLIs.length}`,
   });
   
-  // Step 3: Check which ECLIs are already processed
+  // Step 2: Check which ECLIs are already processed
   onProgress?.({
     type: 'check_processed',
     message: 'Checking for already processed ECLIs...',
@@ -178,7 +156,7 @@ export async function discoverECLIs(
     return { preparedRecords: [], results };
   }
   
-  // Step 4: Validate new ECLIs
+  // Step 3: Validate new ECLIs
   onProgress?.({
     type: 'validate',
     message: `Validating ${newECLIs.length} ECLI(s) via Rechtspraak API...`,
@@ -194,10 +172,10 @@ export async function discoverECLIs(
     });
   });
   
-  // Step 5: Prepare records with alsoReadOn metadata
+  // Step 4: Prepare records with alsoReadOn metadata (merged from all source URLs)
   validationResults.forEach(validation => {
     if (validation.isValid && validation.metadata) {
-      const sourceUrls = Array.from(ecliToSources.get(validation.ecli) || []);
+      const sourceUrlsForECLI = Array.from(ecliToSources.get(validation.ecli) || []);
       
       const preparedRecord: PreparedRecord = {
         ecli: validation.ecli,
@@ -208,26 +186,33 @@ export async function discoverECLIs(
         procedureType: validation.metadata.procedureType,
         sourceUrl: validation.metadata.sourceUrl,
         inhoudsindicatie: validation.metadata.inhoudsindicatie,
-        alsoReadOn: sourceUrls,
+        alsoReadOn: sourceUrlsForECLI,
       };
       
       allPreparedRecords.push(preparedRecord);
       
-      // Update result statistics
-      const firstSourceUrl = sourceUrls[0];
-      const result = results.find(r => r.url === firstSourceUrl);
-      if (result) {
-        result.eclisValidated++;
-        result.eclisNew++;
-      }
+      // Update statistics for sections where this ECLI was found
+      sourceUrlsForECLI.forEach(srcUrl => {
+        // Find the section result that contains this source URL
+        const sectionResult = results.find(r => 
+          srcUrl === r.url || srcUrl.startsWith(r.url)
+        );
+        if (sectionResult) {
+          sectionResult.eclisValidated++;
+          sectionResult.eclisNew++;
+        }
+      });
     } else {
       // Track validation errors
-      const sourceUrls = Array.from(ecliToSources.get(validation.ecli) || []);
-      const firstSourceUrl = sourceUrls[0];
-      const result = results.find(r => r.url === firstSourceUrl);
-      if (result && validation.error) {
-        result.errors.push(`${validation.ecli}: ${validation.error}`);
-      }
+      const sourceUrlsForECLI = Array.from(ecliToSources.get(validation.ecli) || []);
+      sourceUrlsForECLI.forEach(srcUrl => {
+        const sectionResult = results.find(r => 
+          srcUrl === r.url || srcUrl.startsWith(r.url)
+        );
+        if (sectionResult && validation.error) {
+          sectionResult.errors.push(`${validation.ecli}: ${validation.error}`);
+        }
+      });
     }
   });
   
