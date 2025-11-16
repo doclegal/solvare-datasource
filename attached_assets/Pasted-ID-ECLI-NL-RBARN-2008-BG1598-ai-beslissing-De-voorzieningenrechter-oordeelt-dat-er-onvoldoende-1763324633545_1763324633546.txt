@@ -1,0 +1,27 @@
+ID: ECLI:NL:RBARN:2008:BG1598
+
+ai_beslissing: "De voorzieningenrechter oordeelt dat er onvoldoende spoedeisend belang is voor een voorziening in kort geding. De gemeente wordt niet veroordeeld tot het nemen van maatregelen en [eiser] wordt in de proceskosten veroordeeld."
+
+ai_feiten: "- Sinds 1990 is [eiser] eigenaar van een perceel grond in [woonplaats].\n- Op 19 juli 1991 is aan [eiser] een bouwvergunning verleend voor een woning.\n- Een gemeenteambtenaar heeft na de bouwvergunning de peilhoogte van de woning vastgesteld op 52 cm lager dan de kruin van de weg.\n- Wateroverlast heeft schade aan de woning van [eiser] veroorzaakt, waarvoor de verzekeraar een vergoeding heeft uitgekeerd.\n- [eiser] heeft de gemeente aangesproken op het probleem en er zijn verschillende oplossingen besproken.\n- [eiser] stelt dat de gemeente onrechtmatig heeft gehandeld en vordert maatregelen om wateroverlast te voorkomen."
+
+ai_geschil: "[eiser] stelt dat de gemeente onrechtmatig heeft gehandeld door nalatig te zijn in het oplossen van de wateroverlast op zijn perceel. Hij vordert onder meer de plaatsing van een pompput en pomp in het gemeentelijke riool. De gemeente betwist de spoedeisendheid van de zaak en stelt dat [eiser] zelf nog geen schadebeperkende maatregelen heeft genomen."
+
+ai_inhoudsindicatie: "De zaak betreft een geschil tussen een eigenaar van een perceel grond en de gemeente Geldermalsen over wateroverlast en aansprakelijkheid voor schade als gevolg daarvan."
+
+ai_motivering: "- De gemeente betwist de spoedeisendheid van de zaak vanwege het uitblijven van schadebeperkende maatregelen door [eiser].\n- Het gemeentelijke rioleringstelsel vertoont geen gebreken, volgens een ingenieursbureau.\n- Het probleem bij [eiser] is dat zijn afvoerleidingen niet meer kunnen lozen op het gemeentelijke riool bij hoge waterstanden, vanwege een terugslagklep.\n- De voorzieningenrechter acht niet voldoende aannemelijk dat de gemeente een verwijt kan worden gemaakt betreffende de aangeboden rioleringaansluiting.\n- [eiser] wordt in het ongelijk gesteld en veroordeeld in de proceskosten.\nDe vordering van [eiser] wordt afgewezen vanwege het ontbreken van spoedeisend belang en het niet aannemelijk maken van onrechtmatig handelen door de gemeente."
+
+court: "Rechtbank Arnhem"
+
+decision_date: "2008-10-07"
+
+ecli: "ECLI:NL:RBARN:2008:BG1598"
+
+legal_area: "Civiel recht"
+
+procedure_type: "Kort geding"
+
+source_url: "https://uitspraken.rechtspraak.nl/details?id=ECLI:NL:RBARN:2008:BG1598"
+
+text: "Toezegging van de gemeente komt niet geheel overeen met wat eiser vordert."
+
+title: "Geen titel"
