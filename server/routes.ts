@@ -43,35 +43,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < eclis.length; i++) {
         const ecli = eclis[i];
         try {
-          // Step 1: Fetch metadata (required)
+          // Step 1: Fetch metadata only (AI enrichment is done separately via enrich-batch endpoint)
           const record = await fetchDecisionContent(ecli);
           
-          // Step 2 & 3: Fetch full text + AI summary (best-effort)
-          let enrichedRecord = record;
-          try {
-            console.log(`[${ecli}] Downloading full text...`);
-            const fullText = await fetchFullText(ecli);
-            
-            console.log(`[${ecli}] Generating AI summary...`);
-            const aiSummary = await generateAISummary(fullText, ecli);
-            
-            // Merge AI summary into record
-            enrichedRecord = {
-              ...record,
-              ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
-              ai_feiten: aiSummary.feiten,
-              ai_geschil: aiSummary.geschil,
-              ai_beslissing: aiSummary.beslissing,
-              ai_motivering: aiSummary.motivering,
-            };
-            
-            console.log(`[${ecli}] ✓ Completed with AI summary`);
-          } catch (aiError: any) {
-            // Graceful degradation: keep metadata record even if AI fails
-            console.warn(`[${ecli}] AI summary failed (keeping metadata): ${aiError.message}`);
-          }
+          console.log(`[${ecli}] ✓ Metadata only (skipping AI summary)`);
           
-          results.push(enrichedRecord);
+          results.push(record);
           
           // Small delay to avoid hammering the server
           if (i < eclis.length - 1) {
