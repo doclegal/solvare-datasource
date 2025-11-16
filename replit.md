@@ -4,6 +4,8 @@
 
 This project is a web application designed to retrieve and process Dutch judicial rulings from the Rechtspraak.nl Open Data API. Its primary purpose is to extract full-text content, apply quality filters, and prepare this data for storage as vector records in Pinecone, enabling semantic search capabilities. The application focuses on ingesting cases with valid "Inhoudsindicatie" (official summaries) and uses a PostgreSQL database for duplicate tracking, ensuring data quality and preventing redundant processing across different namespaces.
 
+**ECLI Discovery Feature**: The system includes a modular web crawling feature that discovers ECLI numbers on external legal websites. Users provide URLs, the system crawls them (respecting robots.txt and implementing rate limiting), extracts ECLI patterns via regex, validates them against the Rechtspraak API, and automatically adds them to the processing pipeline with `alsoReadOn` metadata tracking source URLs.
+
 ## User Preferences
 
 - All text and UI elements should be in Dutch.
@@ -32,6 +34,13 @@ The application follows a client-server architecture with a React-based frontend
 - **API Integration**: Handles XML data from Rechtspraak.nl using `fast-xml-parser` and interacts with Pinecone using its Node.js SDK. Axios is used for external API calls.
 - **Data Processing**:
     - **Metadata Retrieval**: Efficiently extracts metadata (Title, Court, Date, Legal Area, Procedure Type, Inhoudsindicatie, Source URL) for selected ECLIs without fetching full text initially.
+    - **ECLI Discovery System**: Modular architecture with four components:
+        - **Crawler** (`server/discovery/crawler.ts`): Fetches HTML from URLs with robots.txt compliance, host-level rate limiting (1s between requests to same host), and 1-hour robots.txt cache.
+        - **Extractor** (`server/discovery/extractor.ts`): Regex-based ECLI detection (`ECLI:[A-Z]{2}:[A-Z0-9]+:\d{4}:[A-Z0-9]+`), normalization to uppercase, and deduplication.
+        - **Validator** (`server/discovery/validator.ts`): Verifies ECLIs via Rechtspraak API, extracts metadata for valid cases.
+        - **Service** (`server/discovery/service.ts`): Orchestrates discovery flow, checks PostgreSQL for already-processed ECLIs, creates PreparedRecords with `alsoReadOn` metadata.
+        - **API Endpoint**: `/api/ecli-discovery/ingest` with SSE streaming for real-time progress feedback.
+        - **Frontend Component**: `EcliDiscovery.tsx` with dynamic URL inputs, live status updates, and automatic integration into preparation pipeline.
     - **Pinecone Export**: Uploads metadata records to a hardcoded Pinecone index (`rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`) within the `ECLI_NL` namespace. Embedding generation uses the `multilingual-e5-large` model.
     - **Chunking Engine (Optional)**: Features an advanced chunking engine with priority-based section detection, heading normalization, and preamble handling. It can automatically split long sections and extracts rich metadata (e.g., civil_domain, case_subtype, outcome, statutes). An experimental LLM-based semantic chunking method (using GPT-4o) with confidence tracking and automatic fallback is also available.
 - **Concurrency & Rate Limiting**: Implements a 200ms delay between Rechtspraak API requests and a 100ms delay between Pinecone batches to respect API limits.
