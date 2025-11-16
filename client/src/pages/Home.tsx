@@ -30,6 +30,7 @@ export default function Home() {
   const [chunkedData, setChunkedData] = useState<{ chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null>(null);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
+  const [currentCivilSubcategory, setCurrentCivilSubcategory] = useState<string>("all");
   const [isFetchingContent, setIsFetchingContent] = useState(false);
   const [isPreparingChunks, setIsPreparingChunks] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -61,6 +62,9 @@ export default function Home() {
     }
     
     setIsFetchingContent(true);
+    
+    // Track current civil subcategory for namespace generation
+    setCurrentCivilSubcategory(filters.civilSubcategory);
     
     try {
       // Detect filter changes and reset accumulation
@@ -428,6 +432,7 @@ export default function Home() {
         <PineconeExport
           recordCount={chunkedData?.allChunks?.length || preparedRecords.length}
           isChunked={!!chunkedData}
+          civilSubcategory={currentCivilSubcategory}
           onExport={handleExport}
           isExporting={isExporting}
           exportLogs={exportLogs}

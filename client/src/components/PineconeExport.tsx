@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Upload, Info } from "lucide-react";
 interface PineconeExportProps {
   recordCount: number;
   isChunked?: boolean;
+  civilSubcategory?: string;
   onExport: (config: ExportConfig) => void;
   isExporting?: boolean;
   exportLogs?: string[];
@@ -21,9 +22,27 @@ export interface ExportConfig {
   batchSize: number;
 }
 
+// Map civil subcategory to Pinecone namespace
+const getNamespaceFromSubcategory = (subcategory: string): string => {
+  const mapping: Record<string, string> = {
+    'all': 'CIVIEL_ALLE',
+    'arbeidsrecht': 'CIVIEL_ARBEIDSRECHT',
+    'europees': 'CIVIEL_EUROPEES',
+    'goederenrecht': 'CIVIEL_GOEDERENRECHT',
+    'insolventierecht': 'CIVIEL_INSOLVENTIERECHT',
+    'intellectueelEigendom': 'CIVIEL_INTELLECTUEEL_EIGENDOM',
+    'ondernemingsrecht': 'CIVIEL_ONDERNEMINGSRECHT',
+    'personen': 'CIVIEL_PERSONEN_FAMILIERECHT',
+    'verbintenissenrecht': 'CIVIEL_VERBINTENISSENRECHT',
+  };
+  
+  return mapping[subcategory] || 'CIVIEL_ALLE';
+};
+
 export default function PineconeExport({
   recordCount,
   isChunked = false,
+  civilSubcategory = 'all',
   onExport,
   isExporting = false,
   exportLogs = [],
@@ -31,6 +50,12 @@ export default function PineconeExport({
   const [indexHost, setIndexHost] = useState(import.meta.env.VITE_PINECONE_INDEX_HOST || "");
   const [namespace, setNamespace] = useState("");
   const [batchSize, setBatchSize] = useState("100");
+  
+  // Auto-generate namespace from civil subcategory
+  useEffect(() => {
+    const generatedNamespace = getNamespaceFromSubcategory(civilSubcategory);
+    setNamespace(generatedNamespace);
+  }, [civilSubcategory]);
 
   const handleExport = () => {
     onExport({
@@ -94,17 +119,12 @@ export default function PineconeExport({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="namespace">Namespace (optioneel)</Label>
-            <Input
-              id="namespace"
-              type="text"
-              placeholder="bijv., rechtspraak-uitspraken"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              data-testid="input-namespace"
-            />
+            <Label>Namespace</Label>
+            <div className="text-sm font-medium bg-muted px-3 py-2 rounded-md">
+              {namespace}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Gebruik namespaces om vectors binnen je index te organiseren
+              Automatisch gegenereerd op basis van geselecteerd type civiele zaak
             </p>
           </div>
 
