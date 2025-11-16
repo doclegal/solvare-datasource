@@ -17,12 +17,60 @@ interface DiscoveryProgress {
   totalRecords?: number;
 }
 
+interface UrlWithLabel {
+  url: string;
+  label: string;
+}
+
 interface Props {
   onRecordsDiscovered: (records: PreparedRecord[]) => void;
 }
 
+const DEFAULT_URLS: UrlWithLabel[] = [
+  {
+    url: 'https://www.avdr.nl/jurisprudentie/huurrecht/',
+    label: 'Huurrecht (civiel) - Academie voor de Rechtspraktijk'
+  },
+  {
+    url: 'https://cassatieblog.nl/',
+    label: 'Civiele cassatierechtspraak (breed) - cassatieblog.nl'
+  },
+  {
+    url: 'https://www.recht.nl/vakliteratuur/bhv/aflevering/39339/jurisprudentie-voorheen-journaal-huur-verhuur/2024/12',
+    label: 'Huur & verhuur (civiel) - recht.nl'
+  },
+  {
+    url: 'https://trip.nl/blogs/jurisprudentie-verhuur-onroerende-zaken-n-a-v-d-didam-arrest/',
+    label: 'Verhuur/onroerende zaken huurrecht (civiel) - TRIP Advocaten'
+  },
+  {
+    url: 'https://www.stibbe.com/nl/publications-and-insights/signaleringsblog-week-18-actuele-jurisprudentie-en-ontwikkelingen',
+    label: 'Bestuursrecht / omgevingsrecht - Stibbe'
+  },
+  {
+    url: 'https://www.ungernolet.nl/2023/03/23/blog-jurisprudentie-uitzend-/detacheringsovereenkomsten-nummer-3/',
+    label: 'Uitzend-/detacheringsovereenkomsten (arbeidsrecht) - Unger Nolet'
+  },
+  {
+    url: 'https://www.njb.nl/nieuws/uitspraak-hoge-raad-over-buy-now-pay-later-diensten/',
+    label: 'Consumentenkrediet/consumentenrecht - NJB'
+  },
+  {
+    url: 'https://www.benk.nl/actueel-blog-wat-in-het-verleden-normaal-was-hoeft-dat-vandaag-niet-meer-te-zijn/',
+    label: 'Huurrecht/verhuur (civiel) - Benk'
+  },
+  {
+    url: 'https://yspeert.nl/yspeert-learning/kennisbank/twee-rechterlijke-uitspraken-over-corona-en-huur-heeft-een-huurder-recht-op-huurprijsvermindering/',
+    label: 'Huurrecht verminderingsvordering (civiel) - Yspeert'
+  },
+  {
+    url: 'https://wijnenstael.nl/nl/updates/doorberekening-vastrecht-door-exploitant-wko-installatie-aan-huurders-woonruimte-houdt-stand',
+    label: 'Huurrecht/woonruimte (civiel) - Wijnenstael'
+  }
+];
+
 export function EcliDiscovery({ onRecordsDiscovered }: Props) {
-  const [sourceUrls, setSourceUrls] = useState<string[]>(['', '', '']);
+  const [sourceUrls, setSourceUrls] = useState<UrlWithLabel[]>(DEFAULT_URLS);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const { toast } = useToast();
@@ -32,7 +80,7 @@ export function EcliDiscovery({ onRecordsDiscovered }: Props) {
   };
   
   const addUrlField = () => {
-    setSourceUrls([...sourceUrls, '']);
+    setSourceUrls([...sourceUrls, { url: '', label: 'Aangepaste URL' }]);
   };
   
   const removeUrlField = (index: number) => {
@@ -40,17 +88,17 @@ export function EcliDiscovery({ onRecordsDiscovered }: Props) {
     setSourceUrls(sourceUrls.filter((_, i) => i !== index));
   };
   
-  const updateUrl = (index: number, value: string) => {
+  const updateUrl = (index: number, field: 'url' | 'label', value: string) => {
     const updated = [...sourceUrls];
-    updated[index] = value;
+    updated[index] = { ...updated[index], [field]: value };
     setSourceUrls(updated);
   };
   
   const handleDiscover = async () => {
     // Filter out empty URLs
-    const validUrls = sourceUrls.filter(url => url.trim() !== '');
+    const validUrlObjects = sourceUrls.filter(item => item.url.trim() !== '');
     
-    if (validUrls.length === 0) {
+    if (validUrlObjects.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Geen URLs',
@@ -60,9 +108,9 @@ export function EcliDiscovery({ onRecordsDiscovered }: Props) {
     }
     
     // Validate URL format
-    const invalidUrls = validUrls.filter(url => {
+    const invalidUrls = validUrlObjects.filter(item => {
       try {
-        new URL(url);
+        new URL(item.url);
         return false;
       } catch {
         return true;
@@ -77,6 +125,9 @@ export function EcliDiscovery({ onRecordsDiscovered }: Props) {
       });
       return;
     }
+    
+    // Extract just the URLs for the API call
+    const validUrls = validUrlObjects.map(item => item.url);
     
     setIsDiscovering(true);
     setLogs([]);
@@ -174,30 +225,34 @@ export function EcliDiscovery({ onRecordsDiscovered }: Props) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-3">
-          <Label>URL's om te crawlen</Label>
+          <Label>URL's om te crawlen ({sourceUrls.length} websites)</Label>
           
-          {sourceUrls.map((url, index) => (
-            <div key={index} className="flex gap-2">
+          {sourceUrls.map((item, index) => (
+            <div key={index} className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-muted-foreground">{item.label}</Label>
+                {sourceUrls.length > 1 && (
+                  <Button
+                    data-testid={`button-remove-url-${index}`}
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => removeUrlField(index)}
+                    disabled={isDiscovering}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
               <Input
                 data-testid={`input-url-${index}`}
                 type="url"
                 placeholder="https://www.voorbeeld.nl/uitspraken"
-                value={url}
-                onChange={(e) => updateUrl(index, e.target.value)}
+                value={item.url}
+                onChange={(e) => updateUrl(index, 'url', e.target.value)}
                 disabled={isDiscovering}
               />
-              {sourceUrls.length > 1 && (
-                <Button
-                  data-testid={`button-remove-url-${index}`}
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeUrlField(index)}
-                  disabled={isDiscovering}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
             </div>
           ))}
           
