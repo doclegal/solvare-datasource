@@ -9,10 +9,16 @@ import { apiRequest } from '@/lib/queryClient';
 import type { PreparedRecord } from '@shared/schema';
 
 interface DiscoveryProgress {
-  type: 'crawl' | 'extract' | 'validate' | 'check_processed' | 'discovery_complete' | 'error';
+  type: 'section_crawl_start' | 'section_crawl_page' | 'section_crawl_complete' | 
+        'validate' | 'check_processed' | 'discovery_complete' | 'error';
   message: string;
   url?: string;
   ecli?: string;
+  sectionRoot?: string;
+  currentDepth?: number;
+  queueSize?: number;
+  processedPages?: number;
+  eclisFound?: number;
   preparedRecords?: PreparedRecord[];
   totalRecords?: number;
 }

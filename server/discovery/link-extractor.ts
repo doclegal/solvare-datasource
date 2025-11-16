@@ -24,7 +24,11 @@ export function extractLinks(
     
     // Parse root URL to get domain and path prefix
     const rootParsed = new URL(rootUrl);
-    const rootPathPrefix = rootParsed.pathname.replace(/\/+$/, ''); // Remove trailing slashes
+    // Normalize path: ensure it has a trailing slash for proper matching
+    let rootPathPrefix = rootParsed.pathname;
+    if (!rootPathPrefix.endsWith('/')) {
+      rootPathPrefix += '/';
+    }
     
     // Extract all anchor tags
     $('a[href]').each((_, element) => {
@@ -35,13 +39,27 @@ export function extractLinks(
         // Normalize the URL (resolve relative URLs)
         const normalized = new URL(href, baseUrl);
         
+        // Normalize pathname for comparison
+        let normalizedPath = normalized.pathname;
+        if (!normalizedPath.endsWith('/') && !normalizedPath.includes('.')) {
+          // Add trailing slash to directories (but not files)
+          normalizedPath += '/';
+        }
+        
         // Filter criteria:
         // 1. Same origin (protocol + domain + port)
-        // 2. Path starts with root path prefix
+        // 2. Path starts with root path prefix (with proper segment boundary check)
+        //    - Either exact match: "/civil/" === "/civil/"
+        //    - Or proper prefix: "/civil/law/" starts with "/civil/"
+        //    - But NOT: "/civilian/" starts with "/civil/" (wrong!)
         // 3. HTTP or HTTPS only (no mailto:, javascript:, etc.)
+        const isSameSection = 
+          normalizedPath === rootPathPrefix || // Exact match (e.g., root page itself)
+          normalizedPath.startsWith(rootPathPrefix); // Proper prefix (e.g., /civil/law/ starts with /civil/)
+        
         if (
           normalized.origin === rootParsed.origin &&
-          normalized.pathname.startsWith(rootPathPrefix) &&
+          isSameSection &&
           (normalized.protocol === 'http:' || normalized.protocol === 'https:')
         ) {
           // Remove fragment identifier and normalize
