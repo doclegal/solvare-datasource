@@ -34,6 +34,7 @@ export default function Home() {
   const [currentCivilSubcategory, setCurrentCivilSubcategory] = useState<string>("all");
   const [isFetchingContent, setIsFetchingContent] = useState(false);
   const [isPreparingChunks, setIsPreparingChunks] = useState(false);
+  const [isEnrichingWithAI, setIsEnrichingWithAI] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
   const { toast } = useToast();
@@ -485,6 +486,7 @@ export default function Home() {
       return;
     }
 
+    setIsEnrichingWithAI(true);
     addLog(`🤖 Start AI enrichment voor ${preparedRecords.length} records...`);
 
     try {
@@ -561,6 +563,8 @@ export default function Home() {
         description: error.message || 'Er is een fout opgetreden',
         variant: 'destructive',
       });
+    } finally {
+      setIsEnrichingWithAI(false);
     }
   };
 
@@ -587,6 +591,7 @@ export default function Home() {
           onEnrichWithAI={handleEnrichWithAI}
           isLoading={isFetchingContent}
           isPreparingChunks={isPreparingChunks}
+          isEnrichingWithAI={isEnrichingWithAI}
         />
 
         <PineconeExport

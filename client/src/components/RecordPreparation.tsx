@@ -54,6 +54,7 @@ interface RecordPreparationProps {
   onEnrichWithAI?: () => void;
   isLoading?: boolean;
   isPreparingChunks?: boolean;
+  isEnrichingWithAI?: boolean;
 }
 
 const SECTION_TYPE_LABELS: Record<string, string> = {
@@ -84,6 +85,7 @@ export default function RecordPreparation({
   onEnrichWithAI,
   isLoading = false,
   isPreparingChunks = false,
+  isEnrichingWithAI = false,
 }: RecordPreparationProps) {
   const [expandedText, setExpandedText] = useState<Set<string>>(new Set());
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
@@ -140,9 +142,15 @@ export default function RecordPreparation({
           </div>
           <div className="flex gap-2">
             {preparedRecords.length > 0 && onEnrichWithAI && (
-              <Button variant="default" size="sm" onClick={onEnrichWithAI} data-testid="button-enrich-ai">
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={onEnrichWithAI} 
+                disabled={isEnrichingWithAI}
+                data-testid="button-enrich-ai"
+              >
                 <Sparkles className="mr-2 h-4 w-4" />
-                Genereer AI Samenvatting
+                {isEnrichingWithAI ? 'Bezig met verrijken...' : 'Genereer AI Samenvatting'}
               </Button>
             )}
             {preparedRecords.length > 0 && (
