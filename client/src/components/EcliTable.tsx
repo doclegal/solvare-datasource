@@ -11,6 +11,7 @@ export interface EcliRecord {
   title: string;
   court: string;
   decisionDate: string;
+  summary?: string;
 }
 
 interface EcliTableProps {
@@ -74,6 +75,7 @@ export default function EcliTable({
                     <TableHead>Titel</TableHead>
                     <TableHead className="w-[200px]">Instantie</TableHead>
                     <TableHead className="w-[120px]">Datum</TableHead>
+                    <TableHead className="w-[300px]">Inhoudsindicatie</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -83,6 +85,9 @@ export default function EcliTable({
                       <TableCell>{record.title}</TableCell>
                       <TableCell>{record.court}</TableCell>
                       <TableCell>{record.decisionDate}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[300px] truncate" title={record.summary}>
+                        {record.summary || '-'}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

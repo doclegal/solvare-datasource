@@ -150,34 +150,66 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
       entries = [entries];
     }
 
-    const records: EcliRecord[] = entries.map((entry: any) => {
-      const ecli = entry.id || '';
-      const title = entry.title?.['#text'] || entry.title || 'Geen titel';
-      const summary = entry.summary || '';
-      
-      // Extract court from ECLI (e.g., ECLI:NL:HR:2024:123 -> HR = Hoge Raad)
-      const ecliParts = ecli.split(':');
-      let court = 'Onbekend';
-      if (ecliParts.length >= 3) {
-        const courtCode = ecliParts[2];
-        court = getCourtName(courtCode);
-      }
-      
-      // Extract date
-      let decisionDate = '';
-      if (entry.updated) {
-        decisionDate = entry.updated.split('T')[0];
-      } else if (entry.published) {
-        decisionDate = entry.published.split('T')[0];
-      }
-      
-      return {
-        ecli,
-        title,
-        court,
-        decisionDate,
-      };
-    });
+    const records: EcliRecord[] = entries
+      .map((entry: any) => {
+        const ecli = entry.id || '';
+        const title = entry.title?.['#text'] || entry.title || 'Geen titel';
+        
+        // Extract summary (Inhoudsindicatie)
+        let summary = '';
+        if (entry.summary) {
+          if (typeof entry.summary === 'string') {
+            summary = entry.summary.trim();
+          } else if (entry.summary['#text']) {
+            summary = entry.summary['#text'].trim();
+          }
+        }
+        
+        // Extract court from ECLI (e.g., ECLI:NL:HR:2024:123 -> HR = Hoge Raad)
+        const ecliParts = ecli.split(':');
+        let court = 'Onbekend';
+        if (ecliParts.length >= 3) {
+          const courtCode = ecliParts[2];
+          court = getCourtName(courtCode);
+        }
+        
+        // Extract date
+        let decisionDate = '';
+        if (entry.updated) {
+          decisionDate = entry.updated.split('T')[0];
+        } else if (entry.published) {
+          decisionDate = entry.published.split('T')[0];
+        }
+        
+        return {
+          ecli,
+          title,
+          court,
+          decisionDate,
+          summary,
+        };
+      })
+      // CRITICAL FILTER: Only keep records with valid Inhoudsindicatie
+      // Filter out:
+      // - Empty summaries
+      // - Single dash "-" (indicates missing summary)
+      // - Whitespace-only summaries
+      .filter(record => {
+        const hasValidSummary = record.summary && 
+                               record.summary.trim() !== '' && 
+                               record.summary.trim() !== '-';
+        
+        if (!hasValidSummary) {
+          console.log(`[Rechtspraak API] Filtered out ${record.ecli} - no valid Inhoudsindicatie`);
+        }
+        
+        return hasValidSummary;
+      });
+    
+    const filteredCount = entries.length - records.length;
+    if (filteredCount > 0) {
+      console.log(`[Rechtspraak API] Filtered out ${filteredCount} records without valid Inhoudsindicatie`);
+    }
 
     return { records, totalResults };
   } catch (error: any) {

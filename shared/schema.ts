@@ -6,6 +6,7 @@ export const ecliRecordSchema = z.object({
   title: z.string(),
   court: z.string(),
   decisionDate: z.string(),
+  summary: z.string().optional(), // Inhoudsindicatie from <summary> tag
 });
 
 export type EcliRecord = z.infer<typeof ecliRecordSchema>;

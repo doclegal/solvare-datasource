@@ -6,6 +6,8 @@ Een web-applicatie voor het ophalen en verwerken van Nederlandse rechterlijke ui
 
 **Doel**: Uitspraken van Nederlandse rechtbanken ophalen, full-text extraheren, en uploaden naar Pinecone voor semantische zoekopdrachten.
 
+**BELANGRIJKE KWALITEITSFILTER**: Alleen zaken met een geldige **Inhoudsindicatie** (officiële samenvatting in `<summary>` veld) worden opgehaald. Zaken zonder inhoudsindicatie, met een lege inhoudsindicatie, of met alleen een "-" (streepje) worden automatisch uitgefilterd om datakwaliteit te waarborgen.
+
 ## Architectuur
 
 ### Frontend
@@ -351,6 +353,17 @@ Zie `attached_assets/` voor:
 - `API Pinecone_*.txt`: Pinecone API referentie
 
 ## Laatste Update
+
+16 november 2024 - Inhoudsindicatie Filtering (KRITISCH):
+- **KWALITEITSFILTER**: Alleen zaken met geldige Inhoudsindicatie worden opgehaald
+- Filter verwijdert automatisch:
+  - Lege summaries (empty string)
+  - Streepje-alleen summaries ("-")
+  - Whitespace-only summaries
+- Inhoudsindicaties beschikbaar sinds minstens 2006 in `<summary>` veld
+- UI toont nu Inhoudsindicatie kolom in ECLI tabel
+- Backend logt gefilterde records voor debugging
+- Court filter fix: HR (Hoge Raad) mapping naar volledige URI werkt nu correct
 
 14 november 2024 - LLM Semantic Chunking v2.0 (verbeterd):
 - **Upgraded Model**: GPT-4o (was GPT-4.1 Mini) voor betere reasoning
