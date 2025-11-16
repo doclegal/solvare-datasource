@@ -47,7 +47,7 @@ export default function PineconeExport({
         <CardDescription>
           {isChunked 
             ? `Verstuur intelligent gechunkte records naar Pinecone • ${recordCount} chunks klaar`
-            : `Verstuur voorbereide records naar je Pinecone vector database${recordCount > 0 ? ` • ${recordCount} records klaar` : ''}`
+            : `Verstuur metadata records naar Pinecone (elke Inhoudsindicatie = 1 vector)${recordCount > 0 ? ` • ${recordCount} records klaar` : ''}`
           }
         </CardDescription>
       </CardHeader>
@@ -59,7 +59,7 @@ export default function PineconeExport({
               Zorg ervoor dat je <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">PINECONE_API_KEY</code> in je Replit Secrets hebt ingesteld voordat je exporteert.
             </p>
             <p className="text-xs">
-              <strong>Let op:</strong> De app gebruikt Pinecone's Inference API (model: multilingual-e5-large) om automatisch embeddings te genereren. Dit wordt meegerekend in je Pinecone usage.
+              <strong>Let op:</strong> De app gebruikt Pinecone's Inference API (model: multilingual-e5-large) om automatisch embeddings te genereren uit de Inhoudsindicatie. Dit wordt meegerekend in je Pinecone usage.
             </p>
           </AlertDescription>
         </Alert>

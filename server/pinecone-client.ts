@@ -66,11 +66,13 @@ export async function upsertRecordsToPinecone(
     
     try {
       // Step 1: Generate embeddings using Pinecone's Inference API
-      const embeddingsResponse = await pc.inference.embed({
-        model: 'multilingual-e5-large',
-        inputs: batch.map(record => isChunkedRecord(record) ? record.text : record.fullText),
-        parameters: { inputType: 'passage' }
-      });
+      const embeddingsResponse = await pc.inference.embed(
+        'multilingual-e5-large',
+        {
+          inputs: batch.map(record => isChunkedRecord(record) ? record.text : record.inhoudsindicatie),
+          parameters: { inputType: 'passage' }
+        }
+      );
       
       // Step 2: Prepare vectors with embeddings and metadata
       const vectors = batch.map((record, idx) => {
@@ -130,12 +132,13 @@ export async function upsertRecordsToPinecone(
             metadata,
           };
         } else {
-          // For full records: use ecli and basic metadata
+          // For metadata-only records: use ecli and metadata (inhoudsindicatie = summary)
           return {
             id: record.ecli,
             values: embedding.values,
             metadata: {
-              text: record.fullText,
+              text: record.inhoudsindicatie,
+              ecli: record.ecli,
               title: record.title,
               court: record.court,
               decision_date: record.decisionDate,
