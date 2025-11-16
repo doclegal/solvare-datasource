@@ -133,19 +133,33 @@ export async function upsertRecordsToPinecone(
           };
         } else {
           // For metadata-only records: use ecli and metadata (inhoudsindicatie = summary)
+          const metadata: Record<string, string | number | boolean> = {
+            text: record.inhoudsindicatie,
+            ecli: record.ecli,
+            title: record.title,
+            court: record.court,
+            decision_date: record.decisionDate,
+            legal_area: record.legalArea.join(', '),
+            procedure_type: record.procedureType,
+            source_url: record.sourceUrl,
+          };
+          
+          // Add AI summary sections if available
+          if (record.ai_inhoudsindicatie) metadata.ai_inhoudsindicatie = record.ai_inhoudsindicatie;
+          if (record.ai_feiten) metadata.ai_feiten = record.ai_feiten;
+          if (record.ai_geschil) metadata.ai_geschil = record.ai_geschil;
+          if (record.ai_beslissing) metadata.ai_beslissing = record.ai_beslissing;
+          if (record.ai_motivering) metadata.ai_motivering = record.ai_motivering;
+          
+          // Add alsoReadOn if available (from discovery)
+          if (record.alsoReadOn && record.alsoReadOn.length > 0) {
+            metadata.also_read_on = record.alsoReadOn.join(', ');
+          }
+          
           return {
             id: record.ecli,
             values: embedding.values,
-            metadata: {
-              text: record.inhoudsindicatie,
-              ecli: record.ecli,
-              title: record.title,
-              court: record.court,
-              decision_date: record.decisionDate,
-              legal_area: record.legalArea.join(', '),
-              procedure_type: record.procedureType,
-              source_url: record.sourceUrl,
-            },
+            metadata,
           };
         }
       });
