@@ -8,46 +8,91 @@ interface SparseVector {
   values: number[];
 }
 
+/**
+ * Generate sparse vectors using term frequency for keyword-based retrieval
+ * This is a deterministic, simple approach that works well for Dutch legal text
+ * 
+ * IMPORTANT FOR QUERY-TIME USE:
+ * To perform hybrid search queries, you MUST use the exact same tokenization
+ * and hashing logic for your query text. The DJB2 hash function and tokenization
+ * rules (lowercase, NFD normalization, extended Latin split, min length 3) must
+ * be replicated exactly in your query pipeline.
+ * 
+ * Example query-time usage:
+ * ```typescript
+ * const queryText = "huurrecht bedrijfsruimte";
+ * const querySparseVector = generateSparseVector(queryText);
+ * 
+ * const results = await index.query({
+ *   vector: queryDenseEmbedding,      // from Pinecone inference API
+ *   sparseVector: querySparseVector,  // using THIS function
+ *   topK: 10
+ * });
+ * ```
+ */
 function generateSparseVector(text: string): SparseVector {
+  if (!text || text.trim().length === 0) {
+    return { indices: [], values: [] };
+  }
+  
+  // Tokenize: preserve Dutch characters, lowercase, split on whitespace/punctuation
   const tokens = text
     .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(t => t.length > 2);
+    .normalize('NFD') // Normalize diacritics for consistent handling
+    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritics after normalization
+    .split(/[^a-z0-9\u00C0-\u024F]+/i) // Split on non-alphanumeric (including extended Latin)
+    .filter(t => t.length >= 3); // Filter out very short tokens
   
-  const tokenFreq = new Map<string, number>();
+  if (tokens.length === 0) {
+    return { indices: [], values: [] };
+  }
+  
+  // Count term frequencies
+  const termFreq = new Map<string, number>();
   tokens.forEach(token => {
-    tokenFreq.set(token, (tokenFreq.get(token) || 0) + 1);
+    termFreq.set(token, (termFreq.get(token) || 0) + 1);
   });
   
-  const uniqueTokens = Array.from(tokenFreq.keys()).sort();
-  const indices: number[] = [];
-  const values: number[] = [];
+  // Build sparse vector using consistent hashing
+  const entries: Array<{ index: number; value: number }> = [];
+  const frequencies = Array.from(termFreq.values());
+  const maxFreq = Math.max(...frequencies);
   
-  uniqueTokens.forEach(token => {
-    const hash = hashToken(token);
-    const freq = tokenFreq.get(token)!;
-    const tf = freq / tokens.length;
-    const idf = Math.log(1 + 1 / (1 + freq));
-    const score = tf * idf;
+  termFreq.forEach((freq, term) => {
+    // Deterministic hash using DJB2 algorithm
+    const index = djb2Hash(term);
+    // Normalized term frequency (0-1 range)
+    const normalizedTF = freq / maxFreq;
     
-    if (score > 0.001) {
-      indices.push(hash);
-      values.push(score);
-    }
+    entries.push({ index, value: normalizedTF });
   });
   
-  return { indices, values };
+  // Sort by value (descending) to keep most informative terms
+  entries.sort((a, b) => b.value - a.value);
+  
+  // Limit to top 1000 highest-weighted terms (Pinecone's limit)
+  const topEntries = entries.slice(0, 1000);
+  
+  // Re-sort by index for consistent Pinecone format
+  topEntries.sort((a, b) => a.index - b.index);
+  
+  return {
+    indices: topEntries.map(e => e.index),
+    values: topEntries.map(e => e.value),
+  };
 }
 
-function hashToken(token: string): number {
-  let hash = 0;
-  for (let i = 0; i < token.length; i++) {
-    const char = token.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
+/**
+ * DJB2 hash function - deterministic and widely used
+ * Returns a positive integer suitable for Pinecone sparse indices
+ */
+function djb2Hash(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
   }
-  return Math.abs(hash) % 1000000;
+  // Ensure positive number within reasonable range
+  return Math.abs(hash) >>> 0; // Convert to unsigned 32-bit integer
 }
 
 function initializePinecone(): Pinecone {
