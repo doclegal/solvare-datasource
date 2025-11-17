@@ -135,9 +135,11 @@ export async function upsertSingleRecordToPinecone(
   namespace: string = ''
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log(`[Pinecone] Initializing upload for ${record.ecli}...`);
     const pc = initializePinecone();
     const indexName = indexHost.split('.')[0];
     const index = pc.index(indexName, indexHost);
+    console.log(`[Pinecone] Index initialized: ${indexName}`);
     
     // Generate text for embedding
     let textForEmbedding: string;
@@ -154,11 +156,13 @@ export async function upsertSingleRecordToPinecone(
     }
     
     // Generate embeddings (single record = batch of 1)
+    console.log(`[Pinecone] Generating embedding for ${record.ecli}...`);
     const embeddingsResponse = await pc.inference.embed(
       'multilingual-e5-large',
       [textForEmbedding],
       { inputType: 'passage' }
     );
+    console.log(`[Pinecone] Embedding generated for ${record.ecli}`);
     
     const embedding = embeddingsResponse.data[0];
     if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
@@ -231,12 +235,14 @@ export async function upsertSingleRecordToPinecone(
     }
     
     // Upsert single vector
+    console.log(`[Pinecone] Upserting ${record.ecli} to namespace ${namespace}...`);
     await index.namespace(namespace).upsert([{
       id: vectorId,
       values: embedding.values,
       sparseValues: sparseVector,
       metadata,
     }]);
+    console.log(`[Pinecone] ✅ Successfully uploaded ${record.ecli}`);
     
     return { success: true };
   } catch (error: any) {

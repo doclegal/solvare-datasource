@@ -204,6 +204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Step 4: AUTOMATIC Pinecone upload (truly parallel, fire-and-forget)
           console.log(`[Pinecone Upload] Starting upload for ${ecli}...`);
+          console.log(`[Pinecone Upload] IndexHost: ${PINECONE_INDEX_HOST}, Namespace: ${PINECONE_NAMESPACE}`);
           
           // Start upload immediately without awaiting to achieve real parallelism
           const uploadPromise = upsertSingleRecordToPinecone(
@@ -211,6 +212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             enrichedRecord,
             PINECONE_NAMESPACE
           ).then(result => {
+            console.log(`[Pinecone Upload] Promise resolved for ${ecli}, success: ${result.success}`);
             if (result.success) {
               pineconeUploaded++;
               // Fire-and-forget progress update (no await)
@@ -220,6 +222,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload mislukt: ${result.error}`, 'error').catch(() => {});
             }
           }).catch(err => {
+            console.error(`[Pinecone Upload] Promise rejected for ${ecli}:`, err);
             pineconeErrors++;
             sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload exception: ${err.message}`, 'error').catch(() => {});
           });
