@@ -971,13 +971,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Auto-cleanup old batches every 10 minutes
+  // Auto-cleanup old batches every hour (keep batches for 24 hours)
   setInterval(async () => {
-    const deletedCount = await storage.cleanupOldBatches(30 * 60 * 1000);
+    const deletedCount = await storage.cleanupOldBatches(24 * 60 * 60 * 1000); // 24 uur
     if (deletedCount > 0) {
-      console.log(`Auto-cleanup: ${deletedCount} oude batches verwijderd`);
+      console.log(`Auto-cleanup: ${deletedCount} oude batches verwijderd (ouder dan 24 uur)`);
     }
-  }, 10 * 60 * 1000);
+  }, 60 * 60 * 1000); // Check elk uur
 
   const httpServer = createServer(app);
   return httpServer;
