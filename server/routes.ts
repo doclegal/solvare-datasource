@@ -203,6 +203,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await sendProgress(`[${i + 1}/${eclis.length}] ✅ ${ecli} succesvol verrijkt`, 'success');
           
           // Step 4: AUTOMATIC Pinecone upload (truly parallel, fire-and-forget)
+          console.log(`[Pinecone Upload] Starting upload for ${ecli}...`);
+          
           // Start upload immediately without awaiting to achieve real parallelism
           const uploadPromise = upsertSingleRecordToPinecone(
             PINECONE_INDEX_HOST,
