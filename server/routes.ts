@@ -526,10 +526,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Re-upload existing Pinecone records with court_level metadata
-  // This will regenerate embeddings and cost ~$0.10-0.20 but gives clean solution
+  // Prioritizes AI-enriched versions to preserve expensive AI summaries
   app.post('/api/pinecone/update-court-levels', async (req: Request, res: Response) => {
     try {
       const { detectCourtLevel } = await import('./court-utils');
+      const { enrichedBatchRecords } = await import('@shared/schema');
       
       // Get all processed ECLIs from database
       const allProcessedEclis = await db
@@ -544,32 +545,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: 'Geen records om te updaten', updated: 0 });
       }
       
-      // Get the original records from enriched_batch_records table
-      const { enrichedBatchRecords } = await import('./db/schema');
-      const batchRecords = await db
+      // Get records from database, prioritizing AI-enriched versions
+      const allBatchRecords = await db
         .select()
         .from(enrichedBatchRecords)
         .where(inArray(
           enrichedBatchRecords.ecli,
           ecliList
-        ));
+        ))
+        .orderBy(enrichedBatchRecords.isEnriched); // false first, true last (so enriched overwrites)
       
-      console.log(`[Update Court Levels] Found ${batchRecords.length} records in database`);
+      console.log(`[Update Court Levels] Found ${allBatchRecords.length} total records in database`);
       
-      // Parse records and add court_level
-      const recordsToUpload: PreparedRecord[] = [];
-      for (const dbRecord of batchRecords) {
+      // Deduplicate: keep only the best version (AI-enriched if available) per ECLI
+      const recordMap = new Map<string, { record: PreparedRecord; isEnriched: boolean }>();
+      
+      for (const dbRecord of allBatchRecords) {
         const record = dbRecord.recordData as any as PreparedRecord;
+        const ecli = record.ecli;
         
-        // Add court_level if not present
-        if (record.court && !record.courtLevel) {
+        // ALWAYS recompute court_level to fix previously misclassified records
+        if (record.court) {
           record.courtLevel = detectCourtLevel(record.court);
         }
         
-        recordsToUpload.push(record);
+        // Only add/overwrite if this is enriched OR we don't have this ECLI yet
+        if (dbRecord.isEnriched || !recordMap.has(ecli)) {
+          recordMap.set(ecli, { record, isEnriched: dbRecord.isEnriched });
+        }
       }
       
-      console.log(`[Update Court Levels] Prepared ${recordsToUpload.length} records for re-upload`);
+      const recordsToUpload = Array.from(recordMap.values()).map(item => item.record);
+      
+      // Count enriched vs baseline AFTER deduplication
+      const enrichedCount = Array.from(recordMap.values()).filter(item => item.isEnriched).length;
+      const baselineCount = recordsToUpload.length - enrichedCount;
+      
+      console.log(`[Update Court Levels] Prepared ${recordsToUpload.length} records for re-upload:`);
+      console.log(`  - ${enrichedCount} AI-enriched records (preserving AI summaries)`);
+      console.log(`  - ${baselineCount} baseline records`);
       
       if (recordsToUpload.length === 0) {
         return res.json({ 
@@ -595,6 +609,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         message: `Successfully re-uploaded ${result.successCount} records with court_level metadata`,
         updated: result.successCount,
+        enriched: enrichedCount,
+        baseline: baselineCount,
         errors: result.errorCount,
         total: recordsToUpload.length,
       });

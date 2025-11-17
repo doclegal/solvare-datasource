@@ -23,8 +23,9 @@ export function detectCourtLevel(courtName: string): CourtLevel {
 
   const normalized = courtName.toLowerCase().trim();
 
-  // Check for Hoge Raad (exact match, not "Parket bij de Hoge Raad")
-  if (normalized === 'hoge raad') {
+  // Check for Hoge Raad (including "Hoge Raad der Nederlanden")
+  // But exclude "Parket bij de Hoge Raad" (Public Prosecution)
+  if (normalized.includes('hoge raad') && !normalized.includes('parket bij')) {
     return 'Hoge Raad';
   }
 
