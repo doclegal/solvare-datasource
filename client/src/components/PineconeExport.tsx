@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Upload, Info } from "lucide-react";
+import { Upload, Info, Trash2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface PineconeExportProps {
   recordCount: number;
@@ -38,6 +40,8 @@ export default function PineconeExport({
   const [indexHost, setIndexHost] = useState("rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io");
   const [namespace, setNamespace] = useState("");
   const [batchSize, setBatchSize] = useState("100");
+  const [isClearing, setIsClearing] = useState(false);
+  const { toast } = useToast();
   
   // Auto-generate namespace from civil subcategory
   useEffect(() => {
@@ -51,6 +55,31 @@ export default function PineconeExport({
       namespace,
       batchSize: parseInt(batchSize) || 100,
     });
+  };
+
+  const handleClearProcessedDatabase = async () => {
+    if (!confirm(`Weet je zeker dat je alle verwerkte ECLI's uit de ${namespace} namespace wilt verwijderen? Dit staat je toe om alle records opnieuw te uploaden.`)) {
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const response = await apiRequest('DELETE', '/api/processed-eclis/clear', { namespace });
+      const data = await response.json();
+      
+      toast({
+        title: "Database gewist",
+        description: `${data.deleted} verwerkte ECLI's verwijderd. Je kunt nu alle records opnieuw uploaden.`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij wissen database",
+        description: error.message,
+      });
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   return (
@@ -125,15 +154,28 @@ export default function PineconeExport({
           </div>
         </div>
 
-        <Button
-          onClick={handleExport}
-          disabled={recordCount === 0 || !indexHost || isExporting}
-          className="w-full md:w-auto"
-          data-testid="button-export"
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          {isExporting ? "Bezig met exporteren..." : `${recordCount} Records naar Pinecone Versturen`}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            onClick={handleExport}
+            disabled={recordCount === 0 || !indexHost || isExporting}
+            className="flex-1"
+            data-testid="button-export"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            {isExporting ? "Bezig met exporteren..." : `${recordCount} Records naar Pinecone Versturen`}
+          </Button>
+          
+          <Button
+            onClick={handleClearProcessedDatabase}
+            disabled={isClearing || isExporting}
+            variant="outline"
+            className="flex-1 sm:flex-none"
+            data-testid="button-clear-processed"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {isClearing ? "Wissen..." : "Wis Verwerkte ECLI's Database"}
+          </Button>
+        </div>
 
         {exportLogs.length > 0 && (
           <div className="space-y-2">
