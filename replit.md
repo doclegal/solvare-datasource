@@ -4,6 +4,14 @@
 
 This project is a web application designed to retrieve and process Dutch judicial rulings from the Rechtspraak.nl Open Data API. Its primary purpose is to extract full-text content, apply quality filters, and prepare this data for storage as vector records in Pinecone, enabling semantic search capabilities. The application focuses on ingesting cases with valid "Inhoudsindicatie" (official summaries) and uses a PostgreSQL database for duplicate tracking, ensuring data quality and preventing redundant processing across different namespaces.
 
+**AUTOMATED WORKFLOW (November 2025)**: The system now features a **fully automated AI enrichment and upload pipeline** with no manual intervention required:
+1. User starts AI enrichment for any number of records (no 96-record limit)
+2. Singleton auto-upload worker automatically starts in background
+3. Worker polls database every 5 minutes for new enriched records
+4. Enriched records automatically uploaded to Pinecone in batches of 25
+5. Mutex prevents concurrent uploads; observer pattern enables multiple SSE clients
+6. PostgreSQL `processed_eclis` table tracks uploaded records to prevent duplicates
+
 **ECLI Discovery Feature**: The system includes a modular web crawling feature that discovers ECLI numbers on external legal websites. Users provide URLs, the system crawls them (respecting robots.txt and implementing rate limiting), extracts ECLI patterns via regex, validates them against the Rechtspraak API, and automatically adds them to the processing pipeline.
 
 ## User Preferences
