@@ -576,6 +576,14 @@ export default function Home() {
     addLog(`✓ ${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`);
   };
 
+  // Count enriched records (records with AI-generated fields)
+  const countEnrichedRecords = (records: PreparedRecord[]): number => {
+    return records.filter(r => 
+      r.ai_title || r.ai_inhoudsindicatie || r.ai_feiten || 
+      r.ai_geschil || r.ai_beslissing || r.ai_motivering
+    ).length;
+  };
+
   const handleEnrichWithAI = async () => {
     if (preparedRecords.length === 0) {
       toast({
@@ -714,6 +722,7 @@ export default function Home() {
 
         <PineconeExport
           recordCount={chunkedData?.allChunks?.length || preparedRecords.length}
+          enrichedRecordCount={countEnrichedRecords(preparedRecords)}
           isChunked={!!chunkedData}
           civilSubcategory={currentCivilSubcategory}
           onExport={handleExport}

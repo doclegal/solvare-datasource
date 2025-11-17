@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 
 interface PineconeExportProps {
   recordCount: number;
+  enrichedRecordCount?: number; // Count of AI-enriched records
   isChunked?: boolean;
   civilSubcategory?: string;
   onExport: (config: ExportConfig) => void;
@@ -31,6 +32,7 @@ const getNamespaceFromSubcategory = (subcategory: string): string => {
 
 export default function PineconeExport({
   recordCount,
+  enrichedRecordCount = 0,
   isChunked = false,
   civilSubcategory = 'all',
   onExport,
@@ -94,6 +96,19 @@ export default function PineconeExport({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {!isChunked && enrichedRecordCount === 0 && recordCount > 0 && (
+          <Alert variant="destructive">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <p className="font-semibold">⚠️ Geen AI-verrijkte records gevonden</p>
+              <p className="text-sm mt-1">
+                Alleen records met AI-gegenereerde samenvattingen kunnen naar Pinecone worden verstuurd om database vervuiling te voorkomen. 
+                Gebruik eerst "AI Verrijking Toepassen" om je {recordCount} records te verrijken.
+              </p>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Alert>
           <Info className="h-4 w-4" />
           <AlertDescription className="space-y-2">
@@ -157,12 +172,17 @@ export default function PineconeExport({
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
             onClick={handleExport}
-            disabled={recordCount === 0 || !indexHost || isExporting}
+            disabled={recordCount === 0 || !indexHost || isExporting || (!isChunked && enrichedRecordCount === 0)}
             className="flex-1"
             data-testid="button-export"
           >
             <Upload className="mr-2 h-4 w-4" />
-            {isExporting ? "Bezig met exporteren..." : `${recordCount} Records naar Pinecone Versturen`}
+            {isExporting 
+              ? "Bezig met exporteren..." 
+              : isChunked 
+                ? `${recordCount} Records naar Pinecone Versturen`
+                : `${enrichedRecordCount} AI-Verrijkte Records naar Pinecone Versturen`
+            }
           </Button>
           
           <Button
