@@ -61,7 +61,7 @@ export default function Home() {
           
           // Check if we have AI enrichment batch ID saved but records don't have AI summaries
           const enrichmentBatchId = localStorage.getItem('rechtspraak_enrichment_batch_id');
-          const hasAISummaries = records.some((r: PreparedRecord) => r.ai_inhoudsindicatie || r.ai_feiten);
+          const hasAISummaries = records.some((r: PreparedRecord) => r.ai_title || r.ai_inhoudsindicatie || r.ai_feiten);
           
           if (enrichmentBatchId && !hasAISummaries && records.length > 0) {
             console.log('[AI Recovery] Found enrichment batch ID, attempting recovery:', enrichmentBatchId);

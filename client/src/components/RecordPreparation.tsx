@@ -18,6 +18,7 @@ export interface PreparedRecord {
   inhoudsindicatie: string; // Required - official summary
   
   // AI-generated summary sections
+  ai_title?: string; // AI-generated title (fallback when title is empty)
   ai_inhoudsindicatie?: string;
   ai_feiten?: string;
   ai_geschil?: string;
