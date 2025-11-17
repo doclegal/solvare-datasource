@@ -525,86 +525,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Update existing Pinecone records with court_level metadata
-  // Note: We update metadata by using Pinecone's setMetadata operation
+  // Re-upload existing Pinecone records with court_level metadata
+  // This will regenerate embeddings and cost ~$0.10-0.20 but gives clean solution
   app.post('/api/pinecone/update-court-levels', async (req: Request, res: Response) => {
     try {
-      const apiKey = process.env.PINECONE_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: 'PINECONE_API_KEY niet gevonden' });
-      }
-      
-      const { Pinecone } = await import('@pinecone-database/pinecone');
       const { detectCourtLevel } = await import('./court-utils');
-      const pc = new Pinecone({ apiKey });
       
-      const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
-      const indexName = indexHost.split('.')[0];
-      const index = pc.index(indexName, indexHost);
-      const ns = index.namespace('ECLI_NL');
-      
-      // Get all ECLIs from database that were processed
+      // Get all processed ECLIs from database
       const allProcessedEclis = await db
         .select({ ecli: processedEclis.ecli })
         .from(processedEclis)
         .where(eq(processedEclis.namespace, 'ECLI_NL'));
       
       const ecliList = allProcessedEclis.map(r => r.ecli);
-      console.log(`[Update Court Levels] Found ${ecliList.length} processed ECLIs`);
+      console.log(`[Update Court Levels] Found ${ecliList.length} processed ECLIs to re-upload`);
       
       if (ecliList.length === 0) {
         return res.json({ message: 'Geen records om te updaten', updated: 0 });
       }
       
-      let updatedCount = 0;
-      const batchSize = 100;
+      // Get the original records from enriched_batch_records table
+      const { enrichedBatchRecords } = await import('./db/schema');
+      const batchRecords = await db
+        .select()
+        .from(enrichedBatchRecords)
+        .where(inArray(
+          enrichedBatchRecords.ecli,
+          ecliList
+        ));
       
-      // Fetch and update in batches
-      for (let i = 0; i < ecliList.length; i += batchSize) {
-        const batch = ecliList.slice(i, i + batchSize);
-        console.log(`[Update Court Levels] Processing batch ${i / batchSize + 1} (${batch.length} ECLIs)`);
+      console.log(`[Update Court Levels] Found ${batchRecords.length} records in database`);
+      
+      // Parse records and add court_level
+      const recordsToUpload: PreparedRecord[] = [];
+      for (const dbRecord of batchRecords) {
+        const record = dbRecord.recordData as any as PreparedRecord;
         
-        // Fetch current records (metadata only)
-        const fetchResult = await ns.fetch(batch);
-        const records = fetchResult.records || {};
-        
-        // Update metadata for each record
-        for (const [ecli, record] of Object.entries(records)) {
-          if (record.metadata && record.metadata.court) {
-            const courtName = record.metadata.court as string;
-            const courtLevel = detectCourtLevel(courtName);
-            
-            try {
-              // Use Pinecone's setMetadata to update only metadata
-              await (ns as any).setMetadata({
-                id: ecli,
-                metadata: {
-                  court_level: courtLevel,
-                },
-              });
-              
-              updatedCount++;
-            } catch (metadataError: any) {
-              console.error(`[Update Court Levels] Error setting metadata for ${ecli}:`, metadataError.message);
-              // Continue with next record
-            }
-          }
+        // Add court_level if not present
+        if (record.court && !record.courtLevel) {
+          record.courtLevel = detectCourtLevel(record.court);
         }
         
-        if (updatedCount > 0 && updatedCount % 50 === 0) {
-          console.log(`[Update Court Levels] Progress: ${updatedCount}/${ecliList.length} records updated`);
-        }
-        
-        // Small delay to avoid rate limiting
-        if (i + batchSize < ecliList.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        recordsToUpload.push(record);
       }
       
+      console.log(`[Update Court Levels] Prepared ${recordsToUpload.length} records for re-upload`);
+      
+      if (recordsToUpload.length === 0) {
+        return res.json({ 
+          message: 'Geen records gevonden in database om te updaten', 
+          updated: 0,
+          total: ecliList.length 
+        });
+      }
+      
+      // Re-upload to Pinecone using existing upload function
+      const result = await upsertRecordsToPinecone(
+        'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io',
+        recordsToUpload,
+        'ECLI_NL',
+        96,
+        (progress) => {
+          if (progress.processedRecords % 50 === 0) {
+            console.log(`[Update Court Levels] Progress: ${progress.processedRecords}/${progress.totalRecords} records uploaded`);
+          }
+        }
+      );
+      
       res.json({
-        message: `Successfully updated ${updatedCount} records with court_level metadata`,
-        updated: updatedCount,
-        total: ecliList.length,
+        message: `Successfully re-uploaded ${result.successCount} records with court_level metadata`,
+        updated: result.successCount,
+        errors: result.errorCount,
+        total: recordsToUpload.length,
       });
     } catch (error: any) {
       console.error('Error updating court levels:', error);
