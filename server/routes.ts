@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { searchFiltersSchema, exportConfigSchema, preparedRecordSchema, insertProcessedEcliSchema, type PreparedRecord, type PreparedBatch } from "@shared/schema";
 import { searchDecisions, fetchDecisionContent, fetchFullText } from "./rechtspraak-api";
-import { upsertRecordsToPinecone, upsertSingleRecordToPinecone } from "./pinecone-client";
+import { upsertRecordsToPinecone, upsertSingleRecordToPinecone, searchPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
@@ -718,6 +718,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.end();
+    }
+  });
+
+  // Pinecone semantic search endpoint
+  app.post('/api/pinecone/search', async (req: Request, res: Response) => {
+    try {
+      const { query, minScore, maxScore, topK } = req.body;
+      
+      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return res.status(400).json({ error: 'Query is vereist' });
+      }
+      
+      // Enforce relevance threshold bounds (10-30%)
+      const minRelevance = Math.max(0.10, Math.min(0.30, minScore || 0.15));
+      const maxRelevance = Math.max(minRelevance, Math.min(0.30, maxScore || 0.30));
+      
+      const searchResult = await searchPinecone(
+        PINECONE_INDEX_HOST,
+        query.trim(),
+        {
+          namespace: PINECONE_NAMESPACE,
+          topK: topK || 50,
+          minScore: minRelevance,
+          maxScore: maxRelevance,
+        }
+      );
+      
+      if (!searchResult.success) {
+        return res.status(500).json({ error: searchResult.error });
+      }
+      
+      res.json({
+        success: true,
+        results: searchResult.results,
+        totalMatches: searchResult.totalMatches,
+        filteredMatches: searchResult.filteredMatches,
+        appliedThreshold: {
+          min: minRelevance,
+          max: maxRelevance,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error in /api/pinecone/search:', error);
+      res.status(500).json({ 
+        error: error.message || 'Fout bij zoeken in Pinecone' 
+      });
     }
   });
 

@@ -111,6 +111,92 @@ function initializePinecone(): Pinecone {
   return pineconeClient;
 }
 
+/**
+ * Search Pinecone using hybrid search (dense + sparse vectors)
+ * Filters results by relevance threshold (score between 0 and 1)
+ */
+export async function searchPinecone(
+  indexHost: string,
+  queryText: string,
+  options: {
+    namespace?: string;
+    topK?: number;
+    minScore?: number;
+    maxScore?: number;
+  } = {}
+): Promise<{
+  success: boolean;
+  results?: Array<{
+    id: string;
+    score: number;
+    metadata: Record<string, any>;
+  }>;
+  error?: string;
+  totalMatches?: number;
+  filteredMatches?: number;
+}> {
+  try {
+    const {
+      namespace = '',
+      topK = 50,
+      minScore = 0.10,
+      maxScore = 0.30,
+    } = options;
+    
+    const pc = initializePinecone();
+    const indexName = indexHost.split('.')[0];
+    const index = pc.index(indexName, indexHost);
+    
+    // Generate dense embedding for the query
+    const embeddingsResponse = await pc.inference.embed(
+      'multilingual-e5-large',
+      [queryText],
+      { inputType: 'query' }
+    );
+    
+    const embedding = embeddingsResponse.data[0];
+    if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
+      throw new Error('Failed to generate dense embedding for query');
+    }
+    
+    // Generate sparse vector for the query
+    const sparseVector = generateSparseVector(queryText);
+    
+    // Execute hybrid search
+    const queryResponse = await index.namespace(namespace).query({
+      vector: embedding.values,
+      sparseVector,
+      topK,
+      includeMetadata: true,
+    });
+    
+    // Filter by score threshold
+    const allMatches = queryResponse.matches || [];
+    const filteredMatches = allMatches.filter(
+      match => match.score !== undefined && match.score >= minScore && match.score <= maxScore
+    );
+    
+    const results = filteredMatches.map(match => ({
+      id: match.id,
+      score: match.score!,  // Safe because we filtered undefined scores above
+      metadata: match.metadata || {},
+    }));
+    
+    return {
+      success: true,
+      results,
+      totalMatches: allMatches.length,
+      filteredMatches: filteredMatches.length,
+    };
+  } catch (error: any) {
+    console.error('[Pinecone Search] Error:', error);
+    return {
+      success: false,
+      error: error.message || 'Onbekende fout bij zoeken',
+    };
+  }
+}
+
 interface UploadProgress {
   totalRecords: number;
   processedRecords: number;
