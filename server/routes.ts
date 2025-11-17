@@ -202,9 +202,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           await sendProgress(`[${i + 1}/${eclis.length}] ✅ ${ecli} succesvol verrijkt`, 'success');
           
-          // Step 4: AUTOMATIC Pinecone upload (parallel, non-blocking)
-          await sendProgress(`[${i + 1}/${eclis.length}] 📤 Uploaden naar Pinecone...`, 'info');
-          
+          // Step 4: AUTOMATIC Pinecone upload (truly parallel, fire-and-forget)
+          // Start upload immediately without awaiting to achieve real parallelism
           const uploadPromise = upsertSingleRecordToPinecone(
             PINECONE_INDEX_HOST,
             enrichedRecord,
@@ -212,17 +211,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ).then(result => {
             if (result.success) {
               pineconeUploaded++;
-              sendProgress(`[${i + 1}/${eclis.length}] 🚀 ${ecli} in Pinecone (${pineconeUploaded} uploaded)`, 'success');
+              // Fire-and-forget progress update (no await)
+              sendProgress(`[${i + 1}/${eclis.length}] 🚀 ${ecli} in Pinecone (${pineconeUploaded} uploaded)`, 'success').catch(() => {});
             } else {
               pineconeErrors++;
-              sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload mislukt: ${result.error}`, 'error');
+              sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload mislukt: ${result.error}`, 'error').catch(() => {});
             }
           }).catch(err => {
             pineconeErrors++;
-            sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload exception: ${err.message}`, 'error');
+            sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload exception: ${err.message}`, 'error').catch(() => {});
           });
           
           pendingUploads.push(uploadPromise);
+          
+          // Send initial upload notification (fire-and-forget)
+          sendProgress(`[${i + 1}/${eclis.length}] 📤 Uploaden naar Pinecone...`, 'info').catch(() => {});
           
           // Small delay to avoid hammering APIs
           if (i < eclis.length - 1) {
@@ -254,11 +257,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`[AI Enrichment] Final batch ${batch.batchId}: ${finalRecords.length} total records (${results.length} enriched, ${errors.length} failed)`);
       console.log(`[Pinecone Upload] ${pineconeUploaded} uploaded, ${pineconeErrors} failed`);
       
-      // Send completion event with batch ID and Pinecone stats
+      // Strip fullText from records to prevent SSE payload overflow
+      const recordsWithoutFullText = finalRecords.map(({ fullText, ...record }) => record);
+      
+      // Send completion event with batch ID and Pinecone stats (no fullText)
       const completionData = `data: ${JSON.stringify({
         type: 'complete',
-        records: finalRecords, // Send ALL records (enriched + original)
-        enrichedRecords: results, // Also send just enriched for stats
+        records: recordsWithoutFullText, // Send without fullText to avoid SSE overflow
         errors,
         total: eclis.length,
         successful: results.length,
