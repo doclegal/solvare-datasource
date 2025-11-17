@@ -152,14 +152,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let batch = await storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
       console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records in PostgreSQL`);
       
-      // START AUTO-UPLOAD WORKER (runs in background, uploads batches of 25 every 5 minutes)
-      const { AutoUploadWorker } = await import('./auto-upload-worker');
-      const uploadWorker = new AutoUploadWorker((progress) => {
-        console.log('[Auto-Upload]', progress.message);
-        // Optionally send upload progress via SSE (maar zou kunnen conflicteren met enrichment progress)
-      });
+      // START AUTO-UPLOAD WORKER (singleton - only one instance runs)
+      const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
+      const uploadWorker = getGlobalAutoUploadWorker();
       uploadWorker.start().catch(err => console.error('[Auto-Upload] Worker start failed:', err));
-      await sendProgress(`📤 Auto-upload worker gestart (upload batches van 25 elke 5 min)`, 'info');
+      await sendProgress(`📤 Auto-upload worker actief (upload batches van 25 elke 5 min)`, 'info');
       
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
@@ -282,25 +279,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
 
-      // Import auto-upload worker
-      const { AutoUploadWorker } = await import('./auto-upload-worker');
+      // Import singleton auto-upload worker
+      const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
       
-      // Create worker with progress callback
-      const worker = new AutoUploadWorker((progress) => {
-        sendProgress(progress);
-      });
+      // Get the singleton worker instance
+      const worker = getGlobalAutoUploadWorker();
 
-      // Start worker
+      // Register progress listener for SSE streaming
+      worker.addProgressListener(sendProgress);
+
+      // Start worker (idempotent - will not start if already running)
       await worker.start();
 
-      // Worker runs in background, close SSE connection after initial check
-      setTimeout(() => {
-        sendProgress({
-          type: 'info',
-          message: 'Auto-upload worker draait nu op de achtergrond en controleert elke 5 minuten...',
-        });
-        res.end();
-      }, 1000);
+      // Keep connection open for progress updates
+      req.on('close', () => {
+        // Cleanup: remove listener when client disconnects
+        worker.removeProgressListener(sendProgress);
+      });
 
     } catch (error: any) {
       console.error('Error in /api/pinecone/auto-upload-monitor:', error);

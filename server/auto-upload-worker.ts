@@ -21,16 +21,32 @@ interface UploadProgress {
 export class AutoUploadWorker {
   private isRunning = false;
   private intervalId: NodeJS.Timeout | null = null;
-  private progressCallback: ((progress: UploadProgress) => void) | null = null;
+  private progressCallbacks: Set<(progress: UploadProgress) => void> = new Set();
+  private isUploading = false; // Mutex to prevent concurrent uploads
 
-  constructor(progressCallback?: (progress: UploadProgress) => void) {
-    this.progressCallback = progressCallback || null;
+  constructor() {
+    // No-op constructor - use addProgressListener for callbacks
+  }
+
+  // Register a progress listener (for SSE streaming)
+  addProgressListener(callback: (progress: UploadProgress) => void): void {
+    this.progressCallbacks.add(callback);
+  }
+
+  // Unregister a progress listener
+  removeProgressListener(callback: (progress: UploadProgress) => void): void {
+    this.progressCallbacks.delete(callback);
   }
 
   private sendProgress(progress: UploadProgress) {
-    if (this.progressCallback) {
-      this.progressCallback(progress);
-    }
+    // Notify all registered listeners
+    this.progressCallbacks.forEach(callback => {
+      try {
+        callback(progress);
+      } catch (error) {
+        console.error('[Auto-Upload] Error in progress callback:', error);
+      }
+    });
     console.log('[Auto-Upload]', progress);
   }
 
@@ -68,6 +84,14 @@ export class AutoUploadWorker {
   }
 
   private async checkAndUpload(): Promise<void> {
+    // Mutex: prevent concurrent uploads
+    if (this.isUploading) {
+      console.log('[Auto-Upload] Upload already in progress, skipping...');
+      return;
+    }
+
+    this.isUploading = true;
+    
     try {
       // Get all enriched records that haven't been uploaded yet
       const enrichedRecords = await db
@@ -189,6 +213,9 @@ export class AutoUploadWorker {
         type: 'error',
         message: `Fout bij auto-upload: ${error.message}`,
       });
+    } finally {
+      // Release mutex
+      this.isUploading = false;
     }
   }
 
@@ -206,4 +233,15 @@ export class AutoUploadWorker {
       console.error('[Auto-Upload] Error marking as processed:', error);
     }
   }
+}
+
+// SINGLETON INSTANCE - Only one worker runs across the entire process
+let globalWorker: AutoUploadWorker | null = null;
+
+export function getGlobalAutoUploadWorker(): AutoUploadWorker {
+  if (!globalWorker) {
+    globalWorker = new AutoUploadWorker();
+    console.log('[Auto-Upload] Created singleton worker instance');
+  }
+  return globalWorker;
 }
