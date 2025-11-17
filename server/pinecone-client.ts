@@ -129,7 +129,7 @@ export async function upsertRecordsToPinecone(
   indexHost: string,
   records: ExportableRecord[],
   namespace: string = '',
-  batchSize: number = 100,
+  batchSize: number = 96,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadProgress> {
   const pc = initializePinecone();
@@ -146,6 +146,9 @@ export async function upsertRecordsToPinecone(
   const index = pc.index(indexName, indexHost);
   const targetNamespace = namespace || '';
   
+  // Enforce Pinecone Inference API limit for multilingual-e5-large model
+  const safeBatchSize = Math.min(batchSize, 96);
+  
   const progress: UploadProgress = {
     totalRecords: records.length,
     processedRecords: 0,
@@ -154,9 +157,9 @@ export async function upsertRecordsToPinecone(
     errors: [],
   };
   
-  // Process records in batches
-  for (let i = 0; i < records.length; i += batchSize) {
-    const batch = records.slice(i, i + batchSize);
+  // Process records in batches (max 96 per batch due to Pinecone Inference API limit)
+  for (let i = 0; i < records.length; i += safeBatchSize) {
+    const batch = records.slice(i, i + safeBatchSize);
     
     try {
       // Step 1: Generate embeddings using Pinecone's Inference API
