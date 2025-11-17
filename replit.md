@@ -45,6 +45,11 @@ The application follows a client-server architecture with a React-based frontend
         - **Frontend Component**: `EcliDiscovery.tsx` with dynamic URL inputs, live status updates (pages crawled, depth, queue size), and automatic integration into preparation pipeline.
         - **Default URLs**: Preconfigured with 10 legal websites covering various practice areas (huurrecht, arbeidsrecht, bestuursrecht, consumentenrecht) including Academie voor de Rechtspraktijk, cassatieblog.nl, recht.nl, TRIP Advocaten, Stibbe, Unger Nolet, NJB, Benk, Yspeert, and Wijnenstael.
     - **Pinecone Export**: Uploads metadata records to a hardcoded Pinecone index (`rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`) within the `ECLI_NL` namespace. Embedding generation uses the `multilingual-e5-large` model.
+    - **Hybrid Search**: All records are uploaded with both dense and sparse vectors for optimal retrieval:
+        - **Dense Vectors**: Generated via Pinecone's `multilingual-e5-large` embedding model for semantic similarity matching.
+        - **Sparse Vectors**: Deterministic term-frequency based vectors using DJB2 hashing (32-bit) with Dutch character preservation, Unicode normalization (NFD), and top 1000 highest-weighted terms. Enables precise keyword matching alongside semantic search.
+        - **Tokenization**: Lowercase conversion, NFD normalization, extended Latin character support (`\u00C0-\u024F`), minimum token length of 3 characters.
+        - **Query-time**: The same `generateSparseVector()` function must be used for queries to ensure hash consistency between indexed vectors and query vectors.
     - **Chunking Engine (Optional)**: Features an advanced chunking engine with priority-based section detection, heading normalization, and preamble handling. It can automatically split long sections and extracts rich metadata (e.g., civil_domain, case_subtype, outcome, statutes). An experimental LLM-based semantic chunking method (using GPT-4o) with confidence tracking and automatic fallback is also available.
 - **Concurrency & Rate Limiting**: Implements a 200ms delay between Rechtspraak API requests and a 100ms delay between Pinecone batches to respect API limits.
 - **Error Handling**: Includes graceful degradation, detailed error logging in the UI, and retry mechanisms where applicable.
