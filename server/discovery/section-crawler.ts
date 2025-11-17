@@ -48,7 +48,7 @@ const DEFAULT_CONFIG: CrawlConfig = {
 export async function crawlSection(
   rootUrl: string,
   config: Partial<CrawlConfig> = {},
-  onProgress?: (progress: SectionCrawlProgress) => void
+  onProgress?: (progress: SectionCrawlProgress) => void | Promise<void>
 ): Promise<SectionCrawlResult> {
   const finalConfig: CrawlConfig = { ...DEFAULT_CONFIG, ...config };
   
@@ -57,7 +57,7 @@ export async function crawlSection(
   const eclisFound = new Map<string, Set<string>>(); // ECLI -> Set of URLs where found
   const errors: string[] = [];
   
-  onProgress?.({
+  await onProgress?.({
     type: 'section_crawl_start',
     sectionRoot: rootUrl,
     queueSize: 1,
@@ -85,7 +85,7 @@ export async function crawlSection(
     // Mark as visited
     visited.add(current.url);
     
-    onProgress?.({
+    await onProgress?.({
       type: 'section_crawl_page',
       sectionRoot: rootUrl,
       currentUrl: current.url,
@@ -122,7 +122,7 @@ export async function crawlSection(
     } catch (error: any) {
       const errorMsg = `Failed to crawl ${current.url}: ${error.message}`;
       errors.push(errorMsg);
-      onProgress?.({
+      await onProgress?.({
         type: 'section_crawl_error',
         sectionRoot: rootUrl,
         currentUrl: current.url,
@@ -154,7 +154,7 @@ export async function crawlSection(
         eclisFound.get(extracted.ecli)!.add(current.url);
       });
       
-      onProgress?.({
+      await onProgress?.({
         type: 'section_crawl_page',
         sectionRoot: rootUrl,
         currentUrl: current.url,
@@ -179,7 +179,7 @@ export async function crawlSection(
       });
       
       if (newLinks.length > 0) {
-        onProgress?.({
+        await onProgress?.({
           type: 'section_crawl_page',
           sectionRoot: rootUrl,
           queueSize: queue.length,
@@ -192,7 +192,7 @@ export async function crawlSection(
   // Completion
   const totalEclis = Array.from(eclisFound.keys()).length;
   
-  onProgress?.({
+  await onProgress?.({
     type: 'section_crawl_complete',
     sectionRoot: rootUrl,
     processedPages: visited.size,

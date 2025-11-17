@@ -88,7 +88,7 @@ export async function validateECLI(
  */
 export async function validateECLIs(
   eclis: string[],
-  onProgress?: (ecli: string, result: ValidationResult) => void,
+  onProgress?: (ecli: string, result: ValidationResult) => void | Promise<void>,
   enrichmentMode: EnrichmentMode = 'metadata-only'
 ): Promise<ValidationResult[]> {
   const results: ValidationResult[] = [];
@@ -98,7 +98,7 @@ export async function validateECLIs(
     results.push(result);
     
     if (onProgress) {
-      onProgress(ecli, result);
+      await onProgress(ecli, result);
     }
     
     // 200ms delay to respect API rate limits

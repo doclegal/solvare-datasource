@@ -46,7 +46,7 @@ export async function discoverECLIs(
   sourceUrls: string[],
   namespace: string = 'ECLI_NL',
   config: Partial<CrawlConfig> = {},
-  onProgress?: (progress: DiscoveryProgress) => void
+  onProgress?: (progress: DiscoveryProgress) => void | Promise<void>
 ): Promise<{
   preparedRecords: PreparedRecord[];
   results: DiscoveryResult[];
@@ -61,7 +61,7 @@ export async function discoverECLIs(
   for (let i = 0; i < sourceUrls.length; i++) {
     const rootUrl = sourceUrls[i];
     
-    onProgress?.({
+    await onProgress?.({
       type: 'section_crawl_start',
       sectionRoot: rootUrl,
       message: `Starting section crawl ${i + 1}/${sourceUrls.length}: ${rootUrl}`,
@@ -70,8 +70,8 @@ export async function discoverECLIs(
     });
     
     // Progress handler for section crawler
-    const sectionProgressHandler = (sectionProgress: SectionCrawlProgress) => {
-      onProgress?.({
+    const sectionProgressHandler = async (sectionProgress: SectionCrawlProgress) => {
+      await onProgress?.({
         type: sectionProgress.type as any,
         sectionRoot: sectionProgress.sectionRoot,
         currentUrl: typeof sectionProgress.currentUrl === 'string' ? undefined : sectionProgress.currentUrl,
@@ -110,7 +110,7 @@ export async function discoverECLIs(
   const uniqueECLIs = Array.from(ecliToSources.keys());
   
   if (uniqueECLIs.length === 0) {
-    onProgress?.({
+    await onProgress?.({
       type: 'complete',
       message: 'No ECLIs found in any section',
       results,
@@ -118,13 +118,13 @@ export async function discoverECLIs(
     return { preparedRecords: [], results };
   }
   
-  onProgress?.({
+  await onProgress?.({
     type: 'check_processed',
     message: `Total unique ECLIs found across all sections: ${uniqueECLIs.length}`,
   });
   
   // Step 2: Check which ECLIs are already processed
-  onProgress?.({
+  await onProgress?.({
     type: 'check_processed',
     message: 'Checking for already processed ECLIs...',
   });
@@ -142,13 +142,13 @@ export async function discoverECLIs(
   const processedSet = new Set(processedECLIs.map(p => p.ecli));
   const newECLIs = uniqueECLIs.filter(ecli => !processedSet.has(ecli));
   
-  onProgress?.({
+  await onProgress?.({
     type: 'check_processed',
     message: `${newECLIs.length} new ECLIs (${processedSet.size} already processed)`,
   });
   
   if (newECLIs.length === 0) {
-    onProgress?.({
+    await onProgress?.({
       type: 'complete',
       message: 'All found ECLIs have already been processed',
       results,
@@ -157,13 +157,13 @@ export async function discoverECLIs(
   }
   
   // Step 3: Validate new ECLIs
-  onProgress?.({
+  await onProgress?.({
     type: 'validate',
     message: `Validating ${newECLIs.length} ECLI(s) via Rechtspraak API...`,
   });
   
-  const validationResults = await validateECLIs(newECLIs, (ecli, result) => {
-    onProgress?.({
+  const validationResults = await validateECLIs(newECLIs, async (ecli, result) => {
+    await onProgress?.({
       type: 'validate',
       message: result.isValid 
         ? `✓ Valid: ${ecli}` 
@@ -210,7 +210,7 @@ export async function discoverECLIs(
     }
   });
   
-  onProgress?.({
+  await onProgress?.({
     type: 'complete',
     message: `Discovery complete: ${allPreparedRecords.length} valid new ECLIs ready for processing`,
     results,

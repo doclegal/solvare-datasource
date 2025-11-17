@@ -98,42 +98,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'ECLI lijst is vereist' });
       }
 
-      // Set up SSE for real-time progress
+      // Set up SSE for real-time progress with NO buffering
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
+      
+      // Disable TCP buffering (Nagle's algorithm)
+      if (req.socket) {
+        req.socket.setNoDelay(true);
+      }
+      
       res.flushHeaders();
 
-      const sendProgress = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+      const sendProgress = async (message: string, type: 'info' | 'success' | 'error' = 'info') => {
         const data = `data: ${JSON.stringify({ type, message })}\n\n`;
         res.write(data);
+        
+        // Force flush to send immediately
         if ('flush' in res && typeof (res as any).flush === 'function') {
           (res as any).flush();
         }
+        
+        // Small delay to ensure browser has time to process
+        await new Promise(resolve => setImmediate(resolve));
       };
 
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
 
-      sendProgress(`Starten met verrijken van ${eclis.length} ECLI(s) met AI samenvattingen...`, 'info');
+      await sendProgress(`Starten met verrijken van ${eclis.length} ECLI(s) met AI samenvattingen...`, 'info');
 
       // Process each ECLI with AI enrichment
       for (let i = 0; i < eclis.length; i++) {
         const ecli = eclis[i];
         
         try {
-          sendProgress(`[${i + 1}/${eclis.length}] Ophalen ${ecli}...`, 'info');
+          await sendProgress(`[${i + 1}/${eclis.length}] Ophalen ${ecli}...`, 'info');
           
           // Step 1: Fetch metadata
           const record = await fetchDecisionContent(ecli);
           
           // Step 2: Fetch full text
-          sendProgress(`[${i + 1}/${eclis.length}] Volledige tekst ophalen voor ${ecli}...`, 'info');
+          await sendProgress(`[${i + 1}/${eclis.length}] Volledige tekst ophalen voor ${ecli}...`, 'info');
           const fullText = await fetchFullText(ecli);
           
           // Step 3: Generate AI summary
-          sendProgress(`[${i + 1}/${eclis.length}] AI samenvatting genereren voor ${ecli}...`, 'info');
+          await sendProgress(`[${i + 1}/${eclis.length}] AI samenvatting genereren voor ${ecli}...`, 'info');
           const aiSummary = await generateAISummary(fullText, ecli);
           
           // Merge everything
@@ -148,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
           
           results.push(enrichedRecord);
-          sendProgress(`[${i + 1}/${eclis.length}] ✓ ${ecli} succesvol verrijkt`, 'success');
+          await sendProgress(`[${i + 1}/${eclis.length}] ✓ ${ecli} succesvol verrijkt`, 'success');
           
           // Small delay to avoid hammering APIs
           if (i < eclis.length - 1) {
@@ -160,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ecli,
             error: error.message,
           });
-          sendProgress(`[${i + 1}/${eclis.length}] ✗ Fout bij ${ecli}: ${error.message}`, 'error');
+          await sendProgress(`[${i + 1}/${eclis.length}] ✗ Fout bij ${ecli}: ${error.message}`, 'error');
         }
       }
 
@@ -538,15 +549,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
+      
+      // Disable TCP buffering (Nagle's algorithm)
+      if (req.socket) {
+        req.socket.setNoDelay(true);
+      }
+      
       res.flushHeaders();
       
-      const sendProgress = (progress: DiscoveryProgress) => {
+      const sendProgress = async (progress: DiscoveryProgress) => {
         console.log('[SSE] Sending progress:', progress.type, progress.message);
         const data = `data: ${JSON.stringify(progress)}\n\n`;
         res.write(data);
+        
+        // Force flush to send immediately
         if ('flush' in res && typeof (res as any).flush === 'function') {
           (res as any).flush();
         }
+        
+        // Small delay to ensure browser has time to process
+        await new Promise(resolve => setImmediate(resolve));
       };
       
       // Run discovery with section crawling
