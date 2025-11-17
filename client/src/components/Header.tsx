@@ -60,6 +60,15 @@ export default function Header({ isConnected = true }: HeaderProps) {
         throw new Error(preview.error || 'Preview mislukt');
       }
 
+      // Check if there are any records to delete
+      if (preview.count === 0) {
+        toast({
+          title: 'Geen Records om te Verwijderen',
+          description: 'Alle records hebben al een AI samenvatting',
+        });
+        return;
+      }
+
       // Ask for confirmation
       const confirmed = window.confirm(
         `${preview.count} van ${preview.total} records hebben GEEN AI samenvatting.\n\n` +
@@ -89,10 +98,24 @@ export default function Header({ isConnected = true }: HeaderProps) {
         throw new Error(result.error || 'Delete mislukt');
       }
 
-      toast({
-        title: 'Records Verwijderd',
-        description: `${result.deleted} records zonder AI samenvatting verwijderd (${result.remaining} records over)`,
-      });
+      // Check if deletion was verified
+      if (!result.verified) {
+        toast({
+          title: 'Waarschuwing: Verificatie Mislukt',
+          description: `${result.deleted} records verwijderd maar verificatie faalde. Check server logs.`,
+          variant: 'destructive',
+        });
+      } else if (result.errors && result.errors.length > 0) {
+        toast({
+          title: 'Deels Gelukt',
+          description: `${result.deleted} records verwijderd met ${result.errors.length} errors. Check server logs.`,
+        });
+      } else {
+        toast({
+          title: 'Records Verwijderd',
+          description: `${result.deleted} records zonder AI samenvatting verwijderd (${result.remaining} records over)`,
+        });
+      }
     } catch (error: any) {
       console.error('[Delete Without AI] Error:', error);
       toast({

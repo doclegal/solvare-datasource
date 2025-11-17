@@ -683,14 +683,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete records in batches
       let deletedCount = 0;
       const deleteBatchSize = 100;
+      const errors: string[] = [];
       
       for (let i = 0; i < recordsToDelete.length; i += deleteBatchSize) {
         const batch = recordsToDelete.slice(i, i + deleteBatchSize);
-        await ns.deleteMany(batch);
-        deletedCount += batch.length;
         
-        if (deletedCount % 500 === 0) {
-          console.log(`[Delete Without AI] Progress: ${deletedCount}/${recordsToDelete.length} verwijderd`);
+        try {
+          await ns.deleteMany(batch);
+          deletedCount += batch.length;
+          
+          if (deletedCount % 500 === 0) {
+            console.log(`[Delete Without AI] Progress: ${deletedCount}/${recordsToDelete.length} verwijderd`);
+          }
+        } catch (error: any) {
+          console.error(`[Delete Without AI] Error deleting batch at index ${i}:`, error);
+          errors.push(`Batch ${i}-${i + batch.length}: ${error.message}`);
         }
         
         // Small delay to avoid rate limiting
@@ -699,13 +706,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log(`[Delete Without AI] Completed: ${deletedCount} records verwijderd`);
+      console.log(`[Delete Without AI] Completed: ${deletedCount} records verwijderd, ${errors.length} errors`);
+      
+      // Verify deletion by checking a sample (only if no errors occurred)
+      let verified = false;
+      if (errors.length === 0 && deletedCount > 0) {
+        const sampleSize = Math.min(10, deletedCount);
+        const sampleEclis = recordsToDelete.slice(0, sampleSize);
+        const verifyResult = await ns.fetch(sampleEclis);
+        const actuallyDeleted = sampleSize - Object.keys(verifyResult.records || {}).length;
+        verified = actuallyDeleted === sampleSize;
+        console.log(`[Delete Without AI] Verification: ${actuallyDeleted}/${sampleSize} sample records confirmed deleted`);
+      } else if (errors.length > 0) {
+        console.log(`[Delete Without AI] Skipping verification due to ${errors.length} batch errors`);
+      }
       
       res.json({
         message: `${deletedCount} records zonder AI samenvatting verwijderd`,
         deleted: deletedCount,
         total: ecliList.length,
         remaining: ecliList.length - deletedCount,
+        errors: errors.length > 0 ? errors : undefined,
+        verified,
       });
     } catch (error: any) {
       console.error('Error deleting records without AI:', error);
