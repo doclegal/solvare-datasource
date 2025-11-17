@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pgTable, serial, varchar, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, varchar, timestamp, uniqueIndex, index, text, jsonb, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Rechtspraak ECLI record schema
@@ -138,3 +138,48 @@ export const insertProcessedEcliSchema = createInsertSchema(processedEclis).omit
 
 export type InsertProcessedEcli = z.infer<typeof insertProcessedEcliSchema>;
 export type ProcessedEcli = typeof processedEclis.$inferSelect;
+
+// Database table: Enriched batches (persistent storage for AI-enriched records)
+export const enrichedBatches = pgTable("enriched_batches", {
+  id: serial("id").primaryKey(),
+  batchId: varchar("batch_id", { length: 255 }).notNull().unique(),
+  totalRecords: integer("total_records").notNull(),
+  enrichedRecords: integer("enriched_records").notNull().default(0),
+  failedRecords: integer("failed_records").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  batchIdIdx: index("batch_id_idx").on(table.batchId),
+}));
+
+// Database table: Individual enriched records within a batch
+export const enrichedBatchRecords = pgTable("enriched_batch_records", {
+  id: serial("id").primaryKey(),
+  batchId: varchar("batch_id", { length: 255 }).notNull(),
+  ecli: varchar("ecli", { length: 255 }).notNull(),
+  recordData: jsonb("record_data").notNull(), // Full PreparedRecord as JSON
+  isEnriched: boolean("is_enriched").notNull().default(false), // false = baseline, true = enriched
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueBatchEcli: uniqueIndex("unique_batch_ecli").on(table.batchId, table.ecli),
+  batchIdIdx: index("batch_id_idx_records").on(table.batchId),
+}));
+
+// Zod schemas for enriched batches
+export const insertEnrichedBatchSchema = createInsertSchema(enrichedBatches).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEnrichedBatchRecordSchema = createInsertSchema(enrichedBatchRecords).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertEnrichedBatch = z.infer<typeof insertEnrichedBatchSchema>;
+export type EnrichedBatch = typeof enrichedBatches.$inferSelect;
+export type InsertEnrichedBatchRecord = z.infer<typeof insertEnrichedBatchRecordSchema>;
+export type EnrichedBatchRecord = typeof enrichedBatchRecords.$inferSelect;

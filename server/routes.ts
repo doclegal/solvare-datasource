@@ -144,9 +144,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // This ensures complete data even if enrichment fails mid-stream
       const initialRecords: PreparedRecord[] = eclis.map(ecli => originalMap.get(ecli)!);
       
-      // Save initial batch immediately to prevent data loss
-      let batch = storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
-      console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records`);
+      // Save initial batch immediately to prevent data loss (PostgreSQL survives restarts)
+      let batch = await storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
+      console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records in PostgreSQL`);
       
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
@@ -188,12 +188,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           results.push(enrichedRecord);
           enrichedMap.set(ecli, enrichedRecord);
           
-          // Update batch INCREMENTALLY with a FULL snapshot (enriched + original)
-          // This ensures partial progress is saved even if process crashes
-          const updatedRecords = initialRecords.map(original => 
-            enrichedMap.get(original.ecli) || original
-          );
-          batch = storage.updateBatch(batch.batchId, updatedRecords);
+          // Upsert enriched record to PostgreSQL (incremental, survives crashes)
+          await storage.upsertEnrichedRecord(batch.batchId, enrichedRecord);
           
           await sendProgress(`[${i + 1}/${eclis.length}] ✓ ${ecli} succesvol verrijkt`, 'success');
           
@@ -276,15 +272,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let batch: PreparedBatch;
       if (existingBatchId) {
         try {
-          batch = storage.updateBatch(existingBatchId, records);
+          batch = await storage.updateBatch(existingBatchId, records);
           console.log(`Updated batch ${existingBatchId} with ${records.length} records`);
         } catch (error: any) {
           // If batch doesn't exist, create new one
-          batch = storage.createBatch(records);
+          batch = await storage.createBatch(records);
           console.log(`Batch ${existingBatchId} not found, created new batch ${batch.batchId} with ${records.length} records`);
         }
       } else {
-        batch = storage.createBatch(records);
+        batch = await storage.createBatch(records);
         console.log(`Created new batch ${batch.batchId} with ${records.length} records`);
       }
       
@@ -311,7 +307,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Retrieve records from server-side storage
-      const batch = storage.getBatch(batchId);
+      const batch = await storage.getBatch(batchId);
       if (!batch) {
         return res.status(404).json({ 
           error: 'Batch niet gevonden. Records zijn mogelijk verlopen of verwijderd.' 
@@ -366,7 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get batch from storage
-      const batch = storage.getBatch(batchId);
+      const batch = await storage.getBatch(batchId);
       if (!batch) {
         return res.status(404).json({ error: 'Batch niet gevonden' });
       }
@@ -459,10 +455,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get batch by ID (for AI enrichment recovery)
-  app.get('/api/rechtspraak/batch/:batchId', (req: Request, res: Response) => {
+  app.get('/api/rechtspraak/batch/:batchId', async (req: Request, res: Response) => {
     try {
       const { batchId } = req.params;
-      const batch = storage.getBatch(batchId);
+      const batch = await storage.getBatch(batchId);
       
       if (!batch) {
         return res.status(404).json({ error: 'Batch niet gevonden' });
@@ -480,16 +476,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cleanup batch (manual deletion)
-  app.delete('/api/rechtspraak/batch/:batchId', (req: Request, res: Response) => {
+  app.delete('/api/rechtspraak/batch/:batchId', async (req: Request, res: Response) => {
     const { batchId } = req.params;
-    storage.deleteBatch(batchId);
+    await storage.deleteBatch(batchId);
     res.json({ success: true, message: 'Batch verwijderd' });
   });
 
   // Cleanup old batches (manual trigger)
-  app.post('/api/rechtspraak/cleanup-batches', (req: Request, res: Response) => {
+  app.post('/api/rechtspraak/cleanup-batches', async (req: Request, res: Response) => {
     const maxAgeMs = req.body.maxAgeMs || 30 * 60 * 1000; // Default: 30 minutes
-    const deletedCount = storage.cleanupOldBatches(maxAgeMs);
+    const deletedCount = await storage.cleanupOldBatches(maxAgeMs);
     res.json({ 
       success: true, 
       deletedCount,
@@ -686,8 +682,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Auto-cleanup old batches every 10 minutes
-  setInterval(() => {
-    const deletedCount = storage.cleanupOldBatches(30 * 60 * 1000);
+  setInterval(async () => {
+    const deletedCount = await storage.cleanupOldBatches(30 * 60 * 1000);
     if (deletedCount > 0) {
       console.log(`Auto-cleanup: ${deletedCount} oude batches verwijderd`);
     }

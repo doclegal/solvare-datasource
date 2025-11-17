@@ -1,15 +1,21 @@
 import type { PreparedRecord, PreparedBatch } from '@shared/schema';
+import { enrichedBatches, enrichedBatchRecords } from '@shared/schema';
 import { randomUUID } from 'crypto';
+import { db } from './db';
+import { eq, and, sql } from 'drizzle-orm';
 
-// In-memory storage for prepared record batches
-// Prevents HTTP 413 errors by storing large payloads server-side
+// Storage interface for prepared record batches
+// Supports both in-memory (fast, temporary) and PostgreSQL (persistent) storage
 export interface IStorage {
   // Batch management
-  createBatch(records: PreparedRecord[]): PreparedBatch;
-  updateBatch(batchId: string, records: PreparedRecord[]): PreparedBatch;
-  getBatch(batchId: string): PreparedBatch | undefined;
-  deleteBatch(batchId: string): void;
-  cleanupOldBatches(maxAgeMs: number): number;
+  createBatch(records: PreparedRecord[]): Promise<PreparedBatch>;
+  updateBatch(batchId: string, records: PreparedRecord[]): Promise<PreparedBatch>;
+  getBatch(batchId: string): Promise<PreparedBatch | undefined>;
+  deleteBatch(batchId: string): Promise<void>;
+  cleanupOldBatches(maxAgeMs: number): Promise<number>;
+  
+  // Incremental enrichment methods (PostgreSQL-only)
+  upsertEnrichedRecord(batchId: string, record: PreparedRecord): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -17,7 +23,7 @@ export class MemStorage implements IStorage {
   
   constructor() {}
   
-  createBatch(records: PreparedRecord[]): PreparedBatch {
+  async createBatch(records: PreparedRecord[]): Promise<PreparedBatch> {
     const batch: PreparedBatch = {
       batchId: randomUUID(),
       records,
@@ -28,7 +34,7 @@ export class MemStorage implements IStorage {
     return batch;
   }
   
-  updateBatch(batchId: string, records: PreparedRecord[]): PreparedBatch {
+  async updateBatch(batchId: string, records: PreparedRecord[]): Promise<PreparedBatch> {
     const existingBatch = this.batches.get(batchId);
     if (!existingBatch) {
       throw new Error(`Batch ${batchId} niet gevonden`);
@@ -44,15 +50,15 @@ export class MemStorage implements IStorage {
     return updatedBatch;
   }
   
-  getBatch(batchId: string): PreparedBatch | undefined {
+  async getBatch(batchId: string): Promise<PreparedBatch | undefined> {
     return this.batches.get(batchId);
   }
   
-  deleteBatch(batchId: string): void {
+  async deleteBatch(batchId: string): Promise<void> {
     this.batches.delete(batchId);
   }
   
-  cleanupOldBatches(maxAgeMs: number = 30 * 60 * 1000): number {
+  async cleanupOldBatches(maxAgeMs: number = 30 * 60 * 1000): Promise<number> {
     const now = Date.now();
     let deletedCount = 0;
     
@@ -66,6 +72,130 @@ export class MemStorage implements IStorage {
     
     return deletedCount;
   }
+  
+  async upsertEnrichedRecord(batchId: string, record: PreparedRecord): Promise<void> {
+    // MemStorage doesn't support incremental updates
+    throw new Error('MemStorage does not support incremental enrichment updates');
+  }
 }
 
-export const storage = new MemStorage();
+// PostgreSQL-backed storage for enriched batches (survives workflow restarts)
+export class PgStorage implements IStorage {
+  async createBatch(records: PreparedRecord[]): Promise<PreparedBatch> {
+    const batchId = randomUUID();
+    
+    // Insert batch metadata
+    await db.insert(enrichedBatches).values({
+      batchId,
+      totalRecords: records.length,
+      enrichedRecords: 0,
+      failedRecords: 0,
+    });
+    
+    // Insert baseline records (immutable snapshot)
+    const recordRows = records.map(record => ({
+      batchId,
+      ecli: record.ecli,
+      recordData: record as unknown as Record<string, unknown>,
+      isEnriched: false,
+    }));
+    
+    await db.insert(enrichedBatchRecords).values(recordRows);
+    
+    return {
+      batchId,
+      records,
+      createdAt: new Date(),
+    };
+  }
+  
+  async updateBatch(batchId: string, records: PreparedRecord[]): Promise<PreparedBatch> {
+    // For PgStorage, use upsertEnrichedRecord instead for incremental updates
+    throw new Error('Use upsertEnrichedRecord for incremental updates in PgStorage');
+  }
+  
+  async getBatch(batchId: string): Promise<PreparedBatch | undefined> {
+    const batchMeta = await db
+      .select()
+      .from(enrichedBatches)
+      .where(eq(enrichedBatches.batchId, batchId))
+      .limit(1);
+    
+    if (batchMeta.length === 0) {
+      return undefined;
+    }
+    
+    const recordRows = await db
+      .select()
+      .from(enrichedBatchRecords)
+      .where(eq(enrichedBatchRecords.batchId, batchId));
+    
+    const records = recordRows.map(row => row.recordData as unknown as PreparedRecord);
+    
+    return {
+      batchId,
+      records,
+      createdAt: batchMeta[0].createdAt,
+    };
+  }
+  
+  async deleteBatch(batchId: string): Promise<void> {
+    await db.delete(enrichedBatchRecords).where(eq(enrichedBatchRecords.batchId, batchId));
+    await db.delete(enrichedBatches).where(eq(enrichedBatches.batchId, batchId));
+  }
+  
+  async cleanupOldBatches(maxAgeMs: number): Promise<number> {
+    const cutoffDate = new Date(Date.now() - maxAgeMs);
+    
+    const oldBatches = await db
+      .select()
+      .from(enrichedBatches)
+      .where(sql`${enrichedBatches.createdAt} < ${cutoffDate}`);
+    
+    for (const batch of oldBatches) {
+      await this.deleteBatch(batch.batchId);
+    }
+    
+    return oldBatches.length;
+  }
+  
+  async upsertEnrichedRecord(batchId: string, record: PreparedRecord): Promise<void> {
+    // Check if record has AI fields (enriched)
+    const hasAiFields = !!(
+      record.ai_inhoudsindicatie ||
+      record.ai_feiten ||
+      record.ai_geschil ||
+      record.ai_beslissing ||
+      record.ai_motivering
+    );
+    
+    // Upsert record with enriched data
+    await db
+      .insert(enrichedBatchRecords)
+      .values({
+        batchId,
+        ecli: record.ecli,
+        recordData: record as unknown as Record<string, unknown>,
+        isEnriched: hasAiFields,
+      })
+      .onConflictDoUpdate({
+        target: [enrichedBatchRecords.batchId, enrichedBatchRecords.ecli],
+        set: {
+          recordData: record as unknown as Record<string, unknown>,
+          isEnriched: hasAiFields,
+          updatedAt: new Date(),
+        },
+      });
+    
+    // Update batch metadata
+    await db
+      .update(enrichedBatches)
+      .set({
+        enrichedRecords: sql`${enrichedBatches.enrichedRecords} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(enrichedBatches.batchId, batchId));
+  }
+}
+
+export const storage = new PgStorage();
