@@ -5,6 +5,7 @@ const openai = new OpenAI({
 });
 
 export interface AISummary {
+  title: string;
   inhoudsindicatie: string;
   feiten: string;
   geschil: string;
@@ -26,6 +27,9 @@ export async function generateAISummary(fullText: string, ecli: string): Promise
     console.log(`[${ecli}] Generating AI summary with GPT-3.5-Turbo...`);
     
     const prompt = `Je bent een juridische AI-assistent die Nederlandse rechtspraak samenvat. Analyseer de volgende uitspraak en maak een gestructureerde samenvatting in de volgende secties:
+
+##Titel
+Maak een korte, pakkende titel (max 10 woorden) die de essentie van de zaak weergeeft. Begin NIET met "Uitspraak over" of "Zaak over". Gebruik actieve taal, bijvoorbeeld: "Ontslag wegens diefstal terecht", "Huurverlaging na gebreken woning", "Schadevergoeding na verkeersongeval afgewezen".
 
 ##Inhoudsindicatie
 Korte samenvatting (2-3 zinnen) van waar de zaak over gaat.
@@ -90,6 +94,7 @@ BELANGRIJK:
  */
 function parseAISummaryResponse(response: string): AISummary {
   const sections: AISummary = {
+    title: '',
     inhoudsindicatie: '',
     feiten: '',
     geschil: '',
@@ -115,7 +120,9 @@ function parseAISummaryResponse(response: string): AISummary {
       
       // Identify new section
       const header = trimmed.toLowerCase();
-      if (header.includes('inhoudsindicatie')) {
+      if (header.includes('titel')) {
+        currentSection = 'title';
+      } else if (header.includes('inhoudsindicatie')) {
         currentSection = 'inhoudsindicatie';
       } else if (header.includes('feiten')) {
         currentSection = 'feiten';

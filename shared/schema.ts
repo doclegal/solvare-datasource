@@ -27,6 +27,7 @@ export const preparedRecordSchema = z.object({
   fullText: z.string().optional(), // Full text of judgment (for AI enrichment)
   
   // AI-generated summary sections (generated from full text)
+  ai_title: z.string().optional(), // AI-generated title (fallback when title is empty)
   ai_inhoudsindicatie: z.string().optional(),
   ai_feiten: z.string().optional(),
   ai_geschil: z.string().optional(),

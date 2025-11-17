@@ -381,10 +381,15 @@ export async function upsertRecordsToPinecone(
           // Combine with double newline for readability
           const combinedText = textParts.join('\n\n');
           
+          // Use AI-generated title as fallback when original title is empty
+          const effectiveTitle = record.title && record.title !== 'Geen titel' 
+            ? record.title 
+            : (record.ai_title || record.title);
+
           const metadata: Record<string, string | number | boolean> = {
             text: combinedText,
             ecli: record.ecli,
-            title: record.title,
+            title: effectiveTitle,
             court: record.court,
             court_level: record.courtLevel || detectCourtLevel(record.court),
             decision_date: record.decisionDate,
@@ -393,15 +398,14 @@ export async function upsertRecordsToPinecone(
             source_url: record.sourceUrl,
           };
           
+          // Store AI title if present (useful for search result display)
+          if (record.ai_title) {
+            metadata.ai_title = record.ai_title;
+          }
+          
           // Note: AI summary sections are already included in the embeddings via combinedText
           // and in the 'text' field above. We don't store them as separate metadata fields
           // to avoid exceeding Pinecone's 40KB metadata limit per vector.
-          
-          // Add flag to indicate AI enrichment status
-          if (record.ai_inhoudsindicatie || record.ai_feiten || record.ai_geschil || 
-              record.ai_beslissing || record.ai_motivering) {
-            metadata.has_ai_summary = true;
-          }
           
           return {
             id: record.ecli,

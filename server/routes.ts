@@ -178,10 +178,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await sendProgress(`[${i + 1}/${eclis.length}] 🤖 AI samenvatting genereren voor ${ecli}...`, 'info');
           const aiSummary = await generateAISummary(fullText, ecli);
           
-          // Merge everything
+          // Merge everything including AI title
           const enrichedRecord: PreparedRecord = {
             ...record,
             fullText,
+            ai_title: aiSummary.title,
             ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
             ai_feiten: aiSummary.feiten,
             ai_geschil: aiSummary.geschil,
@@ -660,9 +661,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const fetchResult = await ns.fetch(batch);
         const records = fetchResult.records || {};
         
-        // Find records without has_ai_summary flag
+        // Find records without AI enrichment
+        // Check for AI title (new format) OR legacy has_ai_summary flag
         for (const [ecli, record] of Object.entries(records)) {
-          if (!record.metadata?.has_ai_summary) {
+          const hasAITitle = !!record.metadata?.ai_title;
+          const hasLegacyFlag = record.metadata?.has_ai_summary === true;
+          
+          // Keep records that have either the new AI title or the legacy flag
+          if (!hasAITitle && !hasLegacyFlag) {
             recordsToDelete.push(ecli);
           }
         }
