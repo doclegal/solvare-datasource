@@ -442,6 +442,26 @@ export default function Home() {
     const dataToExport = chunkedData?.allChunks || preparedRecords;
     const exportType = chunkedData ? 'chunks' : 'records';
     
+    // CRITICAL: Check for AI-enriched records (only for non-chunked exports)
+    if (!chunkedData) {
+      const enrichedCount = countEnrichedRecords(preparedRecords);
+      if (enrichedCount === 0) {
+        setIsExporting(false);
+        toast({
+          variant: "destructive",
+          title: "⚠️ Geen AI-verrijkte records",
+          description: `Je hebt ${preparedRecords.length} records, maar geen enkele is AI-verrijkt. Gebruik eerst "AI Verrijking Toepassen".`,
+        });
+        return;
+      }
+      
+      const notEnrichedCount = preparedRecords.length - enrichedCount;
+      if (notEnrichedCount > 0) {
+        addLog(`⚠️ ${notEnrichedCount} niet-verrijkte records worden automatisch uitgefilterd`);
+        addLog(`✓ ${enrichedCount} AI-verrijkte records worden verstuurd`);
+      }
+    }
+    
     addLog('Export naar Pinecone gestart...');
     addLog(`Type: ${chunkedData ? 'Chunks (intelligent sections)' : 'Full records'}`);
     addLog(`Index host: ${config.indexHost}`);
