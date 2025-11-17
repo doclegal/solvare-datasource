@@ -525,6 +525,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update existing Pinecone records with court_level metadata
+  // Note: We update metadata by using Pinecone's setMetadata operation
+  app.post('/api/pinecone/update-court-levels', async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.PINECONE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'PINECONE_API_KEY niet gevonden' });
+      }
+      
+      const { Pinecone } = await import('@pinecone-database/pinecone');
+      const { detectCourtLevel } = await import('./court-utils');
+      const pc = new Pinecone({ apiKey });
+      
+      const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
+      const indexName = indexHost.split('.')[0];
+      const index = pc.index(indexName, indexHost);
+      const ns = index.namespace('ECLI_NL');
+      
+      // Get all ECLIs from database that were processed
+      const allProcessedEclis = await db
+        .select({ ecli: processedEclis.ecli })
+        .from(processedEclis)
+        .where(eq(processedEclis.namespace, 'ECLI_NL'));
+      
+      const ecliList = allProcessedEclis.map(r => r.ecli);
+      console.log(`[Update Court Levels] Found ${ecliList.length} processed ECLIs`);
+      
+      if (ecliList.length === 0) {
+        return res.json({ message: 'Geen records om te updaten', updated: 0 });
+      }
+      
+      let updatedCount = 0;
+      const batchSize = 100;
+      
+      // Fetch and update in batches
+      for (let i = 0; i < ecliList.length; i += batchSize) {
+        const batch = ecliList.slice(i, i + batchSize);
+        console.log(`[Update Court Levels] Processing batch ${i / batchSize + 1} (${batch.length} ECLIs)`);
+        
+        // Fetch current records (metadata only)
+        const fetchResult = await ns.fetch(batch);
+        const records = fetchResult.records || {};
+        
+        // Update metadata for each record
+        for (const [ecli, record] of Object.entries(records)) {
+          if (record.metadata && record.metadata.court) {
+            const courtName = record.metadata.court as string;
+            const courtLevel = detectCourtLevel(courtName);
+            
+            try {
+              // Use Pinecone's setMetadata to update only metadata
+              await (ns as any).setMetadata({
+                id: ecli,
+                metadata: {
+                  court_level: courtLevel,
+                },
+              });
+              
+              updatedCount++;
+            } catch (metadataError: any) {
+              console.error(`[Update Court Levels] Error setting metadata for ${ecli}:`, metadataError.message);
+              // Continue with next record
+            }
+          }
+        }
+        
+        if (updatedCount > 0 && updatedCount % 50 === 0) {
+          console.log(`[Update Court Levels] Progress: ${updatedCount}/${ecliList.length} records updated`);
+        }
+        
+        // Small delay to avoid rate limiting
+        if (i + batchSize < ecliList.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      res.json({
+        message: `Successfully updated ${updatedCount} records with court_level metadata`,
+        updated: updatedCount,
+        total: ecliList.length,
+      });
+    } catch (error: any) {
+      console.error('Error updating court levels:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get batch by ID (for AI enrichment recovery)
   app.get('/api/rechtspraak/batch/:batchId', async (req: Request, res: Response) => {
     try {
