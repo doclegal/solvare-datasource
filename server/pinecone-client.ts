@@ -125,6 +125,126 @@ function isChunkedRecord(record: ExportableRecord): record is ChunkedRecord {
   return 'chunk_id' in record && 'section_type' in record;
 }
 
+/**
+ * Upload a single record to Pinecone immediately (for real-time enrichment)
+ * Returns true on success, false on failure
+ */
+export async function upsertSingleRecordToPinecone(
+  indexHost: string,
+  record: ExportableRecord,
+  namespace: string = ''
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const pc = initializePinecone();
+    const indexName = indexHost.split('.')[0];
+    const index = pc.index(indexName, indexHost);
+    
+    // Generate text for embedding
+    let textForEmbedding: string;
+    if (isChunkedRecord(record)) {
+      textForEmbedding = record.text;
+    } else {
+      const textParts: string[] = [record.inhoudsindicatie];
+      if (record.ai_inhoudsindicatie) textParts.push(record.ai_inhoudsindicatie);
+      if (record.ai_feiten) textParts.push(record.ai_feiten);
+      if (record.ai_geschil) textParts.push(record.ai_geschil);
+      if (record.ai_beslissing) textParts.push(record.ai_beslissing);
+      if (record.ai_motivering) textParts.push(record.ai_motivering);
+      textForEmbedding = textParts.join('\n\n');
+    }
+    
+    // Generate embeddings (single record = batch of 1)
+    const embeddingsResponse = await pc.inference.embed(
+      'multilingual-e5-large',
+      [textForEmbedding],
+      { inputType: 'passage' }
+    );
+    
+    const embedding = embeddingsResponse.data[0];
+    if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
+      throw new Error(`Failed to generate dense embedding for ECLI: ${record.ecli}`);
+    }
+    
+    // Generate sparse vector
+    const sparseVector = generateSparseVector(textForEmbedding);
+    
+    // Prepare metadata (same logic as batch upload)
+    let metadata: Record<string, string | number | boolean>;
+    let vectorId: string;
+    
+    if (isChunkedRecord(record)) {
+      vectorId = record.chunk_id;
+      metadata = {
+        text: record.text,
+        ecli: record.ecli,
+        chunk_id: record.chunk_id,
+        section_type: record.section_type,
+        title: record.title,
+        court_name: record.court_name,
+        decision_date: record.decision_date,
+        source_url: record.source_url,
+        is_civil: record.is_civil,
+      };
+      // Add optional fields
+      if (record.decision_year !== undefined) metadata.decision_year = record.decision_year;
+      if (record.is_kanton_case !== undefined) metadata.is_kanton_case = record.is_kanton_case;
+      if (record.civil_domain) metadata.civil_domain = record.civil_domain;
+      if (record.case_subtype) metadata.case_subtype = record.case_subtype;
+      if (record.procedure_type) metadata.procedure_type = record.procedure_type;
+      if (record.court_level) metadata.court_level = record.court_level;
+      if (record.outcome) metadata.outcome = record.outcome;
+      if (record.party_1_type) metadata.party_1_type = record.party_1_type;
+      if (record.party_2_type) metadata.party_2_type = record.party_2_type;
+      if (record.claim_types && record.claim_types.length > 0) {
+        metadata.claim_types = record.claim_types.join(', ');
+      }
+      if (record.burden_of_proof_on) metadata.burden_of_proof_on = record.burden_of_proof_on;
+      if (record.legal_issue) metadata.legal_issue = record.legal_issue;
+      if (record.key_facts_tags && record.key_facts_tags.length > 0) {
+        metadata.key_facts_tags = record.key_facts_tags.join(', ');
+      }
+    } else {
+      vectorId = record.ecli;
+      metadata = {
+        ecli: record.ecli,
+        title: record.title,
+        court: record.court,
+        decision_date: record.decisionDate,
+        source_url: record.sourceUrl,
+        inhoudsindicatie: record.inhoudsindicatie,
+        procedure_type: record.procedureType,
+      };
+      // Add legalArea as comma-separated string
+      if (record.legalArea && record.legalArea.length > 0) {
+        metadata.legal_area = record.legalArea.join(', ');
+      }
+      // Add AI fields if present
+      if (record.ai_inhoudsindicatie) metadata.ai_inhoudsindicatie = record.ai_inhoudsindicatie;
+      if (record.ai_feiten) metadata.ai_feiten = record.ai_feiten;
+      if (record.ai_geschil) metadata.ai_geschil = record.ai_geschil;
+      if (record.ai_beslissing) metadata.ai_beslissing = record.ai_beslissing;
+      if (record.ai_motivering) metadata.ai_motivering = record.ai_motivering;
+      // Add optional source URLs
+      if (record.alsoReadOn && record.alsoReadOn.length > 0) {
+        metadata.also_read_on = record.alsoReadOn.join(', ');
+      }
+    }
+    
+    // Upsert single vector
+    await index.namespace(namespace).upsert([{
+      id: vectorId,
+      values: embedding.values,
+      sparseValues: sparseVector,
+      metadata,
+    }]);
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error(`[Pinecone] Failed to upload ${record.ecli}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function upsertRecordsToPinecone(
   indexHost: string,
   records: ExportableRecord[],
