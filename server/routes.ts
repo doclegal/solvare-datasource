@@ -620,6 +620,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete Pinecone records without AI summaries
+  app.post('/api/pinecone/delete-without-ai', async (req: Request, res: Response) => {
+    try {
+      const { confirm } = req.body;
+      
+      const apiKey = process.env.PINECONE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'PINECONE_API_KEY niet gevonden' });
+      }
+      
+      const { Pinecone } = await import('@pinecone-database/pinecone');
+      const pc = new Pinecone({ apiKey });
+      
+      const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
+      const indexName = indexHost.split('.')[0];
+      const index = pc.index(indexName, indexHost);
+      const ns = index.namespace('ECLI_NL');
+      
+      // Get all ECLIs from processed_eclis table
+      const allProcessedEclis = await db
+        .select({ ecli: processedEclis.ecli })
+        .from(processedEclis)
+        .where(eq(processedEclis.namespace, 'ECLI_NL'));
+      
+      const ecliList = allProcessedEclis.map(r => r.ecli);
+      console.log(`[Delete Without AI] Found ${ecliList.length} processed ECLIs to check`);
+      
+      if (ecliList.length === 0) {
+        return res.json({ message: 'Geen records gevonden', deleted: 0 });
+      }
+      
+      // Fetch all records and check for AI summaries
+      const recordsToDelete: string[] = [];
+      const batchSize = 100;
+      
+      for (let i = 0; i < ecliList.length; i += batchSize) {
+        const batch = ecliList.slice(i, i + batchSize);
+        const fetchResult = await ns.fetch(batch);
+        const records = fetchResult.records || {};
+        
+        // Find records without has_ai_summary flag
+        for (const [ecli, record] of Object.entries(records)) {
+          if (!record.metadata?.has_ai_summary) {
+            recordsToDelete.push(ecli);
+          }
+        }
+      }
+      
+      console.log(`[Delete Without AI] Found ${recordsToDelete.length} records without AI summaries`);
+      
+      // If not confirmed, just return the count
+      if (!confirm) {
+        return res.json({
+          message: `Gevonden: ${recordsToDelete.length} records zonder AI samenvatting`,
+          count: recordsToDelete.length,
+          total: ecliList.length,
+          preview: recordsToDelete.slice(0, 10), // Show first 10
+        });
+      }
+      
+      // Delete records in batches
+      let deletedCount = 0;
+      const deleteBatchSize = 100;
+      
+      for (let i = 0; i < recordsToDelete.length; i += deleteBatchSize) {
+        const batch = recordsToDelete.slice(i, i + deleteBatchSize);
+        await ns.deleteMany(batch);
+        deletedCount += batch.length;
+        
+        if (deletedCount % 500 === 0) {
+          console.log(`[Delete Without AI] Progress: ${deletedCount}/${recordsToDelete.length} verwijderd`);
+        }
+        
+        // Small delay to avoid rate limiting
+        if (i + deleteBatchSize < recordsToDelete.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      console.log(`[Delete Without AI] Completed: ${deletedCount} records verwijderd`);
+      
+      res.json({
+        message: `${deletedCount} records zonder AI samenvatting verwijderd`,
+        deleted: deletedCount,
+        total: ecliList.length,
+        remaining: ecliList.length - deletedCount,
+      });
+    } catch (error: any) {
+      console.error('Error deleting records without AI:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get batch by ID (for AI enrichment recovery)
   app.get('/api/rechtspraak/batch/:batchId', async (req: Request, res: Response) => {
     try {
