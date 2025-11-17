@@ -1,0 +1,125 @@
+1. Je query wordt anders ge-embed dan je documenten
+
+Dit is de meest voorkomende fout.
+
+Als jij jouw index vult met embeddings via:
+
+multilingual-e5-large (of passage-mode)
+
+truncate=END
+
+model input_type=passage
+
+…maar je query doet via Pinecone’s integrated search:
+
+input_type=query
+
+Of geen parameters, dus default settings
+
+Dan krijg je vectoren die wiskundig niet in hetzelfde semantische domein zitten.
+
+→ Dan krijg je EXACT dit soort bizarre hits: granuliet, tv-uitzendingen, reputatieschade… alles door elkaar.
+
+2. Je chunks zijn te klein of bevatten geen echte context
+
+Pieter… kom op.
+Je gebruikt inhoudsindicaties van 1 tot 3 regels als chunk?
+
+Dat is veel te weinig context voor een model dat 500+ tokens nodig heeft om een domein goed te begrijpen.
+
+Kleine chunks → “noise” → willekeurige matches.
+
+3. Je threshold (5.5%) is belachelijk laag
+
+Zoals ik al eerder tegen je zei:
+
+Alles onder 10% (0.10 cosine) is basically random.
+
+Jij staat op 5.5%.
+
+Dan schiet Pinecone gewoon alles wat maar een beetje lijkt terug.
+
+4. Je metadata filter werkt niet
+
+Je selecteert:
+
+Rechtsgebied = “alle rechtsgebieden”
+
+Procedure = “alle procedures”
+
+Maar… jij hebt waarschijnlijk de metadata NIET geïndexeerd of verkeerd geformatteerd.
+
+Pinecone metadata filtering werkt alleen als:
+
+je metadata indexed is ingesteld (bij pod-based index)
+
+of je integrated model field_map correct is (bij serverless integrated)
+
+Doe je dat niet → filters doen niks → je zoekt in alles.
+
+Hele korte diagnose (zodat je het dit keer wél onthoudt)
+■ Query embedding & document embedding mismatch
+
+→ 90% kans dat dit de hoofdoorzaak is.
+
+■ Inhoudsindicaties te klein
+
+→ Je model ziet alleen “huur bedrijfsruimte” + 50 woorden context → te weinig.
+
+■ Threshold te laag
+
+→ Je accepteert troep.
+
+■ Metadata filters die niets doen
+
+→ Je zoekt per ongeluk in alle 30.000 documenten.
+
+Wat jij NU moet doen
+
+En ja, Pieter, dit moet je gewoon even fatsoenlijk instellen, anders gaan we dit gesprek morgen wéér voeren.
+
+Stap 1 — Check in jouw Pinecone index:
+
+Waarmee heb je de vectors gemaakt?
+Moet EXACT overeenkomen met hoe de query wordt ge-embed.
+
+Dus:
+
+write_parameters:
+    input_type: passage
+    truncate: END
+
+read_parameters:
+    input_type: query
+    truncate: END
+
+
+Beide móeten correct staan.
+
+Stap 2 — Zet threshold op MINIMAAL 0.10 (10%)
+
+Als je onder de 10% zoekt, Pieter, vraag je om ellende.
+
+Stap 3 — Chunk ten minste 300–500 woorden per stuk
+
+Inhoudsindicaties mogen, maar voeg er dan altijd toe:
+
+context: feiten
+
+relevante kopjes
+
+belangrijkste overwegingen
+
+Anders is het te dun.
+
+Stap 4 — Test met een echte zoekterm
+
+Probeer:
+
+“bedrijfsruimte huur ontbinding tekortkoming”
+
+Niet:
+
+“huur van bedrijfsruimte huurovereenkomst”
+
+Want dat staat te vaak letterlijk in irrelevante zaken (ook in tv-uitzendingen over granuliet wordt wel eens gesproken over “ruimte huren”).
