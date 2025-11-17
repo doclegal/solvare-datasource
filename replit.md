@@ -4,7 +4,7 @@
 
 This project is a web application designed to retrieve and process Dutch judicial rulings from the Rechtspraak.nl Open Data API. Its primary purpose is to extract full-text content, apply quality filters, and prepare this data for storage as vector records in Pinecone, enabling semantic search capabilities. The application focuses on ingesting cases with valid "Inhoudsindicatie" (official summaries) and uses a PostgreSQL database for duplicate tracking, ensuring data quality and preventing redundant processing across different namespaces.
 
-**ECLI Discovery Feature**: The system includes a modular web crawling feature that discovers ECLI numbers on external legal websites. Users provide URLs, the system crawls them (respecting robots.txt and implementing rate limiting), extracts ECLI patterns via regex, validates them against the Rechtspraak API, and automatically adds them to the processing pipeline with `alsoReadOn` metadata tracking source URLs.
+**ECLI Discovery Feature**: The system includes a modular web crawling feature that discovers ECLI numbers on external legal websites. Users provide URLs, the system crawls them (respecting robots.txt and implementing rate limiting), extracts ECLI patterns via regex, validates them against the Rechtspraak API, and automatically adds them to the processing pipeline.
 
 ## User Preferences
 
@@ -40,7 +40,7 @@ The application follows a client-server architecture with a React-based frontend
         - **Base Crawler** (`server/discovery/crawler.ts`): Fetches HTML from URLs with robots.txt compliance, host-level rate limiting (1s between requests to same host), and 1-hour robots.txt cache.
         - **Extractor** (`server/discovery/extractor.ts`): Regex-based ECLI detection (`ECLI:[A-Z]{2}:[A-Z0-9]+:\d{4}:[A-Z0-9]+`), normalization to uppercase, and deduplication.
         - **Validator** (`server/discovery/validator.ts`): Verifies ECLIs via Rechtspraak API, extracts metadata for valid cases.
-        - **Service** (`server/discovery/service.ts`): Orchestrates breadth-first section crawling per root URL. Maintains global ECLI → Set<sourceUrls> map for metadata merging. Sequential section processing. Creates PreparedRecords with merged `alsoReadOn` metadata from multiple sources.
+        - **Service** (`server/discovery/service.ts`): Orchestrates breadth-first section crawling per root URL. Maintains global ECLI → Set<sourceUrls> map for deduplication. Sequential section processing. Creates PreparedRecords from validated ECLI data.
         - **API Endpoint**: `/api/ecli-discovery/ingest` with SSE streaming for real-time progress feedback. Accepts optional config: `maxDepth` (1-10), `maxPages` (1-500), `delayMs` (100-5000ms).
         - **Frontend Component**: `EcliDiscovery.tsx` with dynamic URL inputs, live status updates (pages crawled, depth, queue size), and automatic integration into preparation pipeline.
         - **Default URLs**: Preconfigured with 10 legal websites covering various practice areas (huurrecht, arbeidsrecht, bestuursrecht, consumentenrecht) including Academie voor de Rechtspraktijk, cassatieblog.nl, recht.nl, TRIP Advocaten, Stibbe, Unger Nolet, NJB, Benk, Yspeert, and Wijnenstael.

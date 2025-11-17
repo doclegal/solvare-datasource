@@ -172,22 +172,15 @@ export async function discoverECLIs(
     });
   });
   
-  // Step 4: Prepare records with alsoReadOn metadata (merged from all source URLs)
+  // Step 4: Prepare records from validation results and update statistics
   validationResults.forEach(validation => {
     if (validation.isValid && validation.enrichedRecord) {
-      const sourceUrlsForECLI = Array.from(ecliToSources.get(validation.ecli) || []);
-      
-      // Use the enrichedRecord which includes AI summary fields
-      const preparedRecord: PreparedRecord = {
-        ...validation.enrichedRecord,
-        alsoReadOn: sourceUrlsForECLI, // Add alsoReadOn metadata
-      };
-      
-      allPreparedRecords.push(preparedRecord);
+      // Add prepared record to results
+      allPreparedRecords.push(validation.enrichedRecord);
       
       // Update statistics for sections where this ECLI was found
+      const sourceUrlsForECLI = Array.from(ecliToSources.get(validation.ecli) || []);
       sourceUrlsForECLI.forEach(srcUrl => {
-        // Find the section result that contains this source URL
         const sectionResult = results.find(r => 
           srcUrl === r.url || srcUrl.startsWith(r.url)
         );

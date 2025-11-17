@@ -23,8 +23,6 @@ export interface PreparedRecord {
   ai_geschil?: string;
   ai_beslissing?: string;
   ai_motivering?: string;
-  
-  alsoReadOn?: string[]; // Discovery metadata
 }
 
 interface ChunkedRecord {
@@ -341,19 +339,6 @@ export default function RecordPreparation({
                         <p className="text-sm text-muted-foreground">{record.procedureType}</p>
                       </div>
                     </div>
-
-                    {record.alsoReadOn && record.alsoReadOn.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium mb-1">Ook gevonden op</p>
-                        <div className="flex flex-wrap gap-1">
-                          {record.alsoReadOn.map((url, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
-                              {new URL(url).hostname}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     <div>
                       <p className="text-sm font-medium mb-1">Bron</p>

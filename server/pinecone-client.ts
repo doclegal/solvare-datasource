@@ -225,10 +225,6 @@ export async function upsertSingleRecordToPinecone(
       if (record.ai_geschil) metadata.ai_geschil = record.ai_geschil;
       if (record.ai_beslissing) metadata.ai_beslissing = record.ai_beslissing;
       if (record.ai_motivering) metadata.ai_motivering = record.ai_motivering;
-      // Add optional source URLs
-      if (record.alsoReadOn && record.alsoReadOn.length > 0) {
-        metadata.also_read_on = record.alsoReadOn.join(', ');
-      }
     }
     
     // Upsert single vector
@@ -400,11 +396,6 @@ export async function upsertRecordsToPinecone(
           // Note: AI summary sections are already included in the embeddings via combinedText
           // and in the 'text' field above. We don't store them as separate metadata fields
           // to avoid exceeding Pinecone's 40KB metadata limit per vector.
-          
-          // Add alsoReadOn if available (from discovery)
-          if (record.alsoReadOn && record.alsoReadOn.length > 0) {
-            metadata.also_read_on = record.alsoReadOn.join(', ');
-          }
           
           // Add flag to indicate AI enrichment status
           if (record.ai_inhoudsindicatie || record.ai_feiten || record.ai_geschil || 
