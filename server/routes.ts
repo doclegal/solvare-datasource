@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { searchFiltersSchema, exportConfigSchema, preparedRecordSchema, insertProcessedEcliSchema, type PreparedRecord, type PreparedBatch } from "@shared/schema";
 import { searchDecisions, fetchDecisionContent, fetchFullText } from "./rechtspraak-api";
-import { upsertRecordsToPinecone, upsertSingleRecordToPinecone } from "./pinecone-client";
+import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
@@ -157,13 +157,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Track enriched records by ECLI for incremental updates
       const enrichedMap = new Map<string, PreparedRecord>();
-      
-      // Track Pinecone uploads
-      let pineconeUploaded = 0;
-      let pineconeErrors = 0;
-      const pendingUploads: Promise<void>[] = [];
 
-      await sendProgress(`🤖 Starten met AI verrijking + automatische Pinecone upload voor ${eclis.length} ECLI(s)...`, 'info');
+      await sendProgress(`🤖 Starten met AI verrijking voor ${eclis.length} ECLI(s)...`, 'info');
 
       // Process each ECLI with AI enrichment + AUTOMATIC Pinecone upload
       for (let i = 0; i < eclis.length; i++) {
@@ -202,36 +197,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           await sendProgress(`[${i + 1}/${eclis.length}] ✅ ${ecli} succesvol verrijkt`, 'success');
           
-          // Step 4: AUTOMATIC Pinecone upload (truly parallel, fire-and-forget)
-          console.log(`[Pinecone Upload] Starting upload for ${ecli}...`);
-          console.log(`[Pinecone Upload] IndexHost: ${PINECONE_INDEX_HOST}, Namespace: ${PINECONE_NAMESPACE}`);
-          
-          // Start upload immediately without awaiting to achieve real parallelism
-          const uploadPromise = upsertSingleRecordToPinecone(
-            PINECONE_INDEX_HOST,
-            enrichedRecord,
-            PINECONE_NAMESPACE
-          ).then(result => {
-            console.log(`[Pinecone Upload] Promise resolved for ${ecli}, success: ${result.success}`);
-            if (result.success) {
-              pineconeUploaded++;
-              // Fire-and-forget progress update (no await)
-              sendProgress(`[${i + 1}/${eclis.length}] 🚀 ${ecli} in Pinecone (${pineconeUploaded} uploaded)`, 'success').catch(() => {});
-            } else {
-              pineconeErrors++;
-              sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload mislukt: ${result.error}`, 'error').catch(() => {});
-            }
-          }).catch(err => {
-            console.error(`[Pinecone Upload] Promise rejected for ${ecli}:`, err);
-            pineconeErrors++;
-            sendProgress(`[${i + 1}/${eclis.length}] ⚠️  Upload exception: ${err.message}`, 'error').catch(() => {});
-          });
-          
-          pendingUploads.push(uploadPromise);
-          
-          // Send initial upload notification (fire-and-forget)
-          sendProgress(`[${i + 1}/${eclis.length}] 📤 Uploaden naar Pinecone...`, 'info').catch(() => {});
-          
           // Small delay to avoid hammering APIs
           if (i < eclis.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -245,13 +210,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await sendProgress(`[${i + 1}/${eclis.length}] ❌ Fout bij ${ecli}: ${error.message}`, 'error');
         }
       }
-      
-      // Wait for all pending Pinecone uploads to complete
-      if (pendingUploads.length > 0) {
-        await sendProgress(`⏳ Wachten op ${pendingUploads.length} Pinecone uploads...`, 'info');
-        await Promise.all(pendingUploads);
-        await sendProgress(`✅ Alle Pinecone uploads voltooid: ${pineconeUploaded} succesvol, ${pineconeErrors} mislukt`, 'success');
-      }
 
       // Build final merged records (enriched + original)
       const finalRecords = initialRecords.map(original => 
@@ -260,12 +218,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Batch is already up-to-date thanks to incremental updates during enrichment
       console.log(`[AI Enrichment] Final batch ${batch.batchId}: ${finalRecords.length} total records (${results.length} enriched, ${errors.length} failed)`);
-      console.log(`[Pinecone Upload] ${pineconeUploaded} uploaded, ${pineconeErrors} failed`);
       
       // Strip fullText from records to prevent SSE payload overflow
       const recordsWithoutFullText = finalRecords.map(({ fullText, ...record }) => record);
       
-      // Send completion event with batch ID and Pinecone stats (no fullText)
+      // Send completion event with batch ID (no fullText)
       const completionData = `data: ${JSON.stringify({
         type: 'complete',
         records: recordsWithoutFullText, // Send without fullText to avoid SSE overflow
@@ -274,11 +231,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         successful: results.length,
         failed: errors.length,
         batchId: batch.batchId,
-        pinecone: {
-          uploaded: pineconeUploaded,
-          errors: pineconeErrors,
-          namespace: PINECONE_NAMESPACE,
-        },
       })}\n\n`;
       res.write(completionData);
       if ('flush' in res && typeof (res as any).flush === 'function') {
