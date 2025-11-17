@@ -229,6 +229,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Batch is already up-to-date thanks to incremental updates during enrichment
       console.log(`[AI Enrichment] Final batch ${batch.batchId}: ${finalRecords.length} total records (${results.length} enriched, ${errors.length} failed)`);
       
+      // TRIGGER IMMEDIATE UPLOAD after enrichment completes
+      if (results.length > 0) {
+        await sendProgress(`📤 Starten met upload van ${results.length} verrijkte records naar Pinecone...`, 'info');
+        
+        // Get the singleton worker and trigger immediate upload check
+        uploadWorker.checkAndUpload().catch(err => {
+          console.error('[Auto-Upload] Immediate upload failed:', err);
+        });
+      }
+      
       // Strip fullText from records to prevent SSE payload overflow
       const recordsWithoutFullText = finalRecords.map(({ fullText, ...record }) => record);
       

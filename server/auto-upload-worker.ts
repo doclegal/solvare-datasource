@@ -83,7 +83,7 @@ export class AutoUploadWorker {
     });
   }
 
-  private async checkAndUpload(): Promise<void> {
+  async checkAndUpload(): Promise<void> {
     // Mutex: prevent concurrent uploads
     if (this.isUploading) {
       console.log('[Auto-Upload] Upload already in progress, skipping...');
