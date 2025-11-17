@@ -453,35 +453,44 @@ export default function Home() {
             } else if (data.type === 'complete') {
               addLog(`✓ Export voltooid! ${data.successCount} records succesvol geüpload.`);
               
-              // Mark ECLIs as processed in database
-              // Only mark the records that were actually exported
-              try {
-                const actuallyExportedEclis = chunkedData 
-                  ? chunkedData.allChunks.map(c => c.ecli)
-                  : preparedRecords.map(r => r.ecli);
+              // Only clear records and mark as processed if upload was successful
+              if (data.successCount > 0) {
+                // Mark ECLIs as processed in database
+                try {
+                  const actuallyExportedEclis = chunkedData 
+                    ? chunkedData.allChunks.map(c => c.ecli)
+                    : preparedRecords.map(r => r.ecli);
+                  
+                  // Deduplicate ECLI list (chunks may have multiple per ECLI)
+                  const uniqueEclis = Array.from(new Set(actuallyExportedEclis));
+                  const namespace = config.namespace || 'ECLI_NL';
+                  
+                  addLog('ECLI\'s markeren als verwerkt...');
+                  const markResponse = await apiRequest(
+                    'POST',
+                    '/api/processed-eclis/mark',
+                    { eclis: uniqueEclis, namespace }
+                  );
+                  const markData = await markResponse.json();
+                  addLog(`✓ ${markData.marked} ECLI's gemarkeerd als verwerkt`);
+                } catch (error: any) {
+                  console.error('Failed to mark ECLIs as processed:', error);
+                  addLog(`⚠ Waarschuwing: Kon ECLI's niet markeren als verwerkt - ${error.message}`);
+                }
                 
-                // Deduplicate ECLI list (chunks may have multiple per ECLI)
-                const uniqueEclis = Array.from(new Set(actuallyExportedEclis));
-                const namespace = config.namespace || 'ECLI_NL';
+                // Clear prepared records and chunks ONLY after successful upload
+                setPreparedRecords([]);
+                setChunkedData(null);
+                accumulatedRecordsRef.current = [];
                 
-                addLog('ECLI\'s markeren als verwerkt...');
-                const markResponse = await apiRequest(
-                  'POST',
-                  '/api/processed-eclis/mark',
-                  { eclis: uniqueEclis, namespace }
-                );
-                const markData = await markResponse.json();
-                addLog(`✓ ${markData.marked} ECLI's gemarkeerd als verwerkt`);
-              } catch (error: any) {
-                console.error('Failed to mark ECLIs as processed:', error);
-                addLog(`⚠ Waarschuwing: Kon ECLI's niet markeren als verwerkt - ${error.message}`);
+                // Clear localStorage too
+                localStorage.removeItem('rechtspraak_prepared_records');
+                console.log('[localStorage] Cleared records after successful upload');
+                
+                addLog('✓ Metadata Records tabel geleegd');
+              } else {
+                addLog('⚠ Geen records succesvol geüpload - Metadata Records blijven behouden');
               }
-              
-              // Clear prepared records and chunks after successful upload
-              setPreparedRecords([]);
-              setChunkedData(null);
-              accumulatedRecordsRef.current = [];
-              addLog('✓ Metadata Records tabel geleegd');
               
               toast({
                 title: "Export voltooid",
