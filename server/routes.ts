@@ -494,6 +494,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear processed ECLIs database (useful for re-uploading all records)
+  app.delete('/api/processed-eclis/clear', async (req: Request, res: Response) => {
+    try {
+      const { namespace } = req.body;
+      
+      if (!namespace) {
+        return res.status(400).json({ error: 'Namespace is vereist' });
+      }
+      
+      // Delete all processed ECLIs for the given namespace
+      const deleted = await db
+        .delete(processedEclis)
+        .where(eq(processedEclis.namespace, namespace))
+        .returning();
+      
+      res.json({
+        success: true,
+        deleted: deleted.length,
+        message: `${deleted.length} ECLI's verwijderd uit verwerkte database`,
+      });
+    } catch (error: any) {
+      console.error('Error clearing processed ECLIs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ECLI Discovery endpoint with breadth-first section crawling
   app.post('/api/ecli-discovery/ingest', async (req: Request, res: Response) => {
     try {
