@@ -82,6 +82,9 @@ BELANGRIJK:
     // Parse the response into structured sections
     const summary = parseAISummaryResponse(response);
     
+    // Debug: Log the parsed title
+    console.log(`[${ecli}] Parsed AI title: "${summary.title}"`);
+    
     return summary;
   } catch (error: any) {
     console.error(`[${ecli}] Error generating AI summary:`, error.message);

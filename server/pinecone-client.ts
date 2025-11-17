@@ -386,6 +386,9 @@ export async function upsertRecordsToPinecone(
             ? record.title 
             : (record.ai_title || record.title);
 
+          // Debug logging
+          console.log(`[${record.ecli}] Pinecone upload - ai_title: "${record.ai_title}", effectiveTitle: "${effectiveTitle}"`);
+
           const metadata: Record<string, string | number | boolean> = {
             text: combinedText,
             ecli: record.ecli,
@@ -401,6 +404,9 @@ export async function upsertRecordsToPinecone(
           // Store AI title if present (useful for search result display)
           if (record.ai_title) {
             metadata.ai_title = record.ai_title;
+            console.log(`[${record.ecli}] ✓ Added ai_title to metadata: "${record.ai_title}"`);
+          } else {
+            console.log(`[${record.ecli}] ⚠ No ai_title found in record`);
           }
           
           // Note: AI summary sections are already included in the embeddings via combinedText

@@ -190,6 +190,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ai_motivering: aiSummary.motivering,
           };
           
+          // Debug: Log enriched record to verify ai_title is set
+          console.log(`[${ecli}] Enriched record ai_title: "${enrichedRecord.ai_title}"`);
+          
           results.push(enrichedRecord);
           enrichedMap.set(ecli, enrichedRecord);
           
