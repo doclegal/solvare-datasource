@@ -3,6 +3,53 @@ import type { PreparedRecord, ChunkedRecord } from '@shared/schema';
 
 let pineconeClient: Pinecone | null = null;
 
+interface SparseVector {
+  indices: number[];
+  values: number[];
+}
+
+function generateSparseVector(text: string): SparseVector {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 2);
+  
+  const tokenFreq = new Map<string, number>();
+  tokens.forEach(token => {
+    tokenFreq.set(token, (tokenFreq.get(token) || 0) + 1);
+  });
+  
+  const uniqueTokens = Array.from(tokenFreq.keys()).sort();
+  const indices: number[] = [];
+  const values: number[] = [];
+  
+  uniqueTokens.forEach(token => {
+    const hash = hashToken(token);
+    const freq = tokenFreq.get(token)!;
+    const tf = freq / tokens.length;
+    const idf = Math.log(1 + 1 / (1 + freq));
+    const score = tf * idf;
+    
+    if (score > 0.001) {
+      indices.push(hash);
+      values.push(score);
+    }
+  });
+  
+  return { indices, values };
+}
+
+function hashToken(token: string): number {
+  let hash = 0;
+  for (let i = 0; i < token.length; i++) {
+    const char = token.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash) % 1000000;
+}
+
 function initializePinecone(): Pinecone {
   const apiKey = process.env.PINECONE_API_KEY;
   
@@ -46,9 +93,10 @@ export async function upsertRecordsToPinecone(
   // Format: index-name-abc123.svc.region.pinecone.io
   const indexName = indexHost.split('.')[0];
   
-  // This implementation uses Pinecone's Inference API to generate embeddings
+  // This implementation uses Pinecone's Inference API to generate dense embeddings
   // using the 'multilingual-e5-large' model, which supports Dutch text well.
-  // The embeddings are then uploaded to your Pinecone index.
+  // Additionally, it generates sparse vectors (BM25-like) for hybrid search support.
+  // Both vector types are uploaded to your Pinecone index for optimal retrieval.
   // Use the full host URL to bypass index lookup
   const index = pc.index(indexName, indexHost);
   const targetNamespace = namespace || '';
@@ -88,9 +136,13 @@ export async function upsertRecordsToPinecone(
         { inputType: 'passage' }
       );
       
-      // Step 2: Prepare vectors with embeddings and metadata
+      // Step 2: Generate sparse vectors (BM25-like) for hybrid search
+      const sparseVectors = inputs.map(text => generateSparseVector(text));
+      
+      // Step 3: Prepare vectors with embeddings and metadata
       const vectors = batch.map((record, idx) => {
         const embedding = embeddingsResponse.data[idx];
+        const sparseVector = sparseVectors[idx];
         
         // Type guard: ensure we have a dense embedding with values
         if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
@@ -143,6 +195,7 @@ export async function upsertRecordsToPinecone(
           return {
             id: record.chunk_id,
             values: embedding.values,
+            sparseValues: sparseVector,
             metadata,
           };
         } else {
@@ -189,12 +242,13 @@ export async function upsertRecordsToPinecone(
           return {
             id: record.ecli,
             values: embedding.values,
+            sparseValues: sparseVector,
             metadata,
           };
         }
       });
       
-      // Step 3: Upsert vectors with embeddings to Pinecone
+      // Step 4: Upsert hybrid vectors (dense + sparse) to Pinecone
       await index.namespace(targetNamespace).upsert(vectors);
       
       progress.processedRecords += batch.length;
