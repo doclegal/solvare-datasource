@@ -1,5 +1,6 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import type { PreparedRecord, ChunkedRecord } from '@shared/schema';
+import { detectCourtLevel } from './court-utils';
 
 let pineconeClient: Pinecone | null = null;
 
@@ -389,6 +390,7 @@ export async function upsertRecordsToPinecone(
             ecli: record.ecli,
             title: record.title,
             court: record.court,
+            court_level: record.courtLevel || detectCourtLevel(record.court),
             decision_date: record.decisionDate,
             legal_area: record.legalArea.join(', '),
             procedure_type: record.procedureType,

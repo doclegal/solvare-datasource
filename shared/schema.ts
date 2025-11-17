@@ -18,6 +18,7 @@ export const preparedRecordSchema = z.object({
   ecli: z.string(),
   title: z.string(),
   court: z.string(),
+  courtLevel: z.enum(['Hoge Raad', 'Gerechtshof', 'Rechtbank', 'Overig']).optional(),
   decisionDate: z.string(),
   legalArea: z.array(z.string()),
   procedureType: z.string(),
