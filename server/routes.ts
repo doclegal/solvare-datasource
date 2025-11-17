@@ -411,6 +411,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('Geen records of chunks om te exporteren');
       }
       
+      // CRITICAL: Only allow AI-enriched records to prevent database pollution
+      if (config.records && config.records.length > 0) {
+        const isEnriched = (record: any) => {
+          return !!(record.ai_title || record.ai_inhoudsindicatie || record.ai_feiten || 
+                   record.ai_geschil || record.ai_beslissing || record.ai_motivering);
+        };
+        
+        const enrichedRecords = config.records.filter(isEnriched);
+        const notEnrichedCount = config.records.length - enrichedRecords.length;
+        
+        if (enrichedRecords.length === 0) {
+          throw new Error('Geen AI-verrijkte records gevonden. Gebruik eerst "AI Verrijking Toepassen".');
+        }
+        
+        if (notEnrichedCount > 0) {
+          console.log(`[Pinecone Export] ${notEnrichedCount} niet-verrijkte records uitgefilterd`);
+        }
+        
+        // Replace with only enriched records
+        config.records = enrichedRecords;
+      }
+      
       // Set up SSE (Server-Sent Events) for streaming progress
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
