@@ -1,0 +1,234 @@
+Start discovery op 1 URL(s)...
+Starting section crawl 1/1: https://ie-forum.nl
+Starting section crawl: https://ie-forum.nl
+Crawling (depth 0): https://ie-forum.nl
+✓ Found 7 ECLI(s) on https://ie-forum.nl
+→ Queued 34 new link(s) from https://ie-forum.nl
+Crawling (depth 1): https://ie-forum.nl/
+✓ Found 7 ECLI(s) on https://ie-forum.nl/
+Crawling (depth 1): https://ie-forum.nl/congressen
+Crawling (depth 1): https://ie-forum.nl/dossiers
+→ Queued 16 new link(s) from https://ie-forum.nl/dossiers
+Crawling (depth 1): https://ie-forum.nl/dossiers/ie-forum/klassiekers
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers
+→ Queued 24 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers
+Crawling (depth 1): https://ie-forum.nl/adverteren
+Crawling (depth 1): https://ie-forum.nl/sponsors
+Crawling (depth 1): https://ie-forum.nl/over-ie-forum
+Crawling (depth 1): https://ie-forum.nl/contact
+Crawling (depth 1): https://ie-forum.nl/artikelen/verzoeker-krijgt-gedeeltelijke-inzage-in-incidentenrapport-na-parachutesprong
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/verzoeker-krijgt-gedeeltelijke-inzage-in-incidentenrapport-na-parachutesprong
+Crawling (depth 1): https://ie-forum.nl/artikelen/bengh-geen-merkinbreuk-op-bob-coteaux-d-aix-en-provence-door-sex-en-provence
+Crawling (depth 1): https://ie-forum.nl/artikelen/scapino-maakt-inbreuk-op-de-auteursrechten-van-birkenstock
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/scapino-maakt-inbreuk-op-de-auteursrechten-van-birkenstock
+Crawling (depth 1): https://ie-forum.nl/dossiers/ie-forum/overige
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/overige
+→ Queued 31 new link(s) from https://ie-forum.nl/dossiers/ie-forum/overige
+Crawling (depth 1): https://ie-forum.nl/dossiers/ie-forum/merkenrecht
+✓ Found 8 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/merkenrecht
+→ Queued 20 new link(s) from https://ie-forum.nl/dossiers/ie-forum/merkenrecht
+Crawling (depth 1): https://ie-forum.nl/artikelen/bundesgerichtshof-stelt-prejudiciele-vragen-in-auteursrechtzaak
+Crawling (depth 1): https://ie-forum.nl/documents/ecli/54446a2c-b885-4b29-9c6b-629985a0c2fd.pdf
+Crawling (depth 1): https://ie-forum.nl/dossiers/ie-forum/auteursrecht
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/auteursrecht
+→ Queued 10 new link(s) from https://ie-forum.nl/dossiers/ie-forum/auteursrecht
+Crawling (depth 1): https://ie-forum.nl/artikelen/memorization-is-geen-zuivere-koffie-en-ook-geen-tdm-een-eerste-reactie-op-openai-v-gema
+Crawling (depth 1): https://ie-forum.nl/artikelen/ie-klassieker-kluwer-lamoth
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-kluwer-lamoth
+Crawling (depth 1): https://ie-forum.nl/artikelen/ie-klassieker-hyster-karry-krane
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-hyster-karry-krane
+Crawling (depth 1): https://ie-forum.nl/dossiers/ie-forum/slaafse-nabootsing
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/slaafse-nabootsing
+→ Queued 20 new link(s) from https://ie-forum.nl/dossiers/ie-forum/slaafse-nabootsing
+Crawling (depth 1): https://ie-forum.nl/artikelen/ie-klassieker-caferadio
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-caferadio
+Crawling (depth 1): https://ie-forum.nl/artikelen/ie-klassieker-hille-buma
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-hille-buma
+Crawling (depth 1): https://ie-forum.nl/artikelen/ie-klassieker-bigott-en-batco-doucal
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-bigott-en-batco-doucal
+Crawling (depth 1): https://ie-forum.nl/?page=2
+✓ Found 8 ECLI(s) on https://ie-forum.nl/?page=2
+→ Queued 3 new link(s) from https://ie-forum.nl/?page=2
+Crawling (depth 1): https://ie-forum.nl/?page=3
+✓ Found 8 ECLI(s) on https://ie-forum.nl/?page=3
+→ Queued 5 new link(s) from https://ie-forum.nl/?page=3
+Crawling (depth 1): https://ie-forum.nl/?page=4
+✓ Found 18 ECLI(s) on https://ie-forum.nl/?page=4
+→ Queued 8 new link(s) from https://ie-forum.nl/?page=4
+Crawling (depth 1): https://ie-forum.nl/?page=5
+✓ Found 5 ECLI(s) on https://ie-forum.nl/?page=5
+→ Queued 9 new link(s) from https://ie-forum.nl/?page=5
+Crawling (depth 1): https://ie-forum.nl/?page=6
+✓ Found 8 ECLI(s) on https://ie-forum.nl/?page=6
+→ Queued 9 new link(s) from https://ie-forum.nl/?page=6
+Crawling (depth 1): https://ie-forum.nl/?page=7
+✓ Found 10 ECLI(s) on https://ie-forum.nl/?page=7
+→ Queued 11 new link(s) from https://ie-forum.nl/?page=7
+Crawling (depth 1): https://ie-forum.nl/?page=8
+✓ Found 6 ECLI(s) on https://ie-forum.nl/?page=8
+→ Queued 13 new link(s) from https://ie-forum.nl/?page=8
+Crawling (depth 1): https://ie-forum.nl/?page=9
+✓ Found 8 ECLI(s) on https://ie-forum.nl/?page=9
+→ Queued 7 new link(s) from https://ie-forum.nl/?page=9
+Crawling (depth 1): https://ie-forum.nl/www.liaiseadvocaten.nl
+Crawling (depth 1): https://ie-forum.nl/www.hgf.com
+Crawling (depth 1): https://ie-forum.nl/over-ie-forum/kort-nieuws
+→ Queued 8 new link(s) from https://ie-forum.nl/over-ie-forum/kort-nieuws
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/auteursrechtdebat
+✓ Found 4 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/auteursrechtdebat
+→ Queued 27 new link(s) from https://ie-forum.nl/dossiers/ie-forum/auteursrechtdebat
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/databankenrecht
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/databankenrecht
+→ Queued 22 new link(s) from https://ie-forum.nl/dossiers/ie-forum/databankenrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/domeinnaamrecht
+✓ Found 6 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/domeinnaamrecht
+→ Queued 22 new link(s) from https://ie-forum.nl/dossiers/ie-forum/domeinnaamrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/handelsnaamrecht
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/handelsnaamrecht
+→ Queued 19 new link(s) from https://ie-forum.nl/dossiers/ie-forum/handelsnaamrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/kwekersrecht
+✓ Found 11 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/kwekersrecht
+→ Queued 22 new link(s) from https://ie-forum.nl/dossiers/ie-forum/kwekersrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/mediarecht
+✓ Found 12 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/mediarecht
+→ Queued 15 new link(s) from https://ie-forum.nl/dossiers/ie-forum/mediarecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/modellenrecht
+✓ Found 11 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/modellenrecht
+→ Queued 18 new link(s) from https://ie-forum.nl/dossiers/ie-forum/modellenrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/naburige-rechten
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/naburige-rechten
+→ Queued 22 new link(s) from https://ie-forum.nl/dossiers/ie-forum/naburige-rechten
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/octrooirecht
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/octrooirecht
+→ Queued 18 new link(s) from https://ie-forum.nl/dossiers/ie-forum/octrooirecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/portretrecht
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/portretrecht
+→ Queued 20 new link(s) from https://ie-forum.nl/dossiers/ie-forum/portretrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/procesrecht
+✓ Found 11 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/procesrecht
+→ Queued 21 new link(s) from https://ie-forum.nl/dossiers/ie-forum/procesrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/reclamerecht
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/reclamerecht
+→ Queued 24 new link(s) from https://ie-forum.nl/dossiers/ie-forum/reclamerecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/kamerstukken-eu
+→ Queued 18 new link(s) from https://ie-forum.nl/dossiers/ie-forum/kamerstukken-eu
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/publicaties-noten
+✓ Found 1 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/publicaties-noten
+→ Queued 22 new link(s) from https://ie-forum.nl/dossiers/ie-forum/publicaties-noten
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/studiedagen
+✓ Found 1 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/studiedagen
+→ Queued 18 new link(s) from https://ie-forum.nl/dossiers/ie-forum/studiedagen
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/diversen
+✓ Found 2 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/diversen
+→ Queued 21 new link(s) from https://ie-forum.nl/dossiers/ie-forum/diversen
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/octrooirecht
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers/octrooirecht
+→ Queued 11 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/octrooirecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/auteursrecht
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers/auteursrecht
+→ Queued 3 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/auteursrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/merkenrecht
+✓ Found 8 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers/merkenrecht
+→ Queued 10 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/merkenrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/handelsnaamrecht
+→ Queued 22 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/handelsnaamrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/modellenrecht
+✓ Found 2 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers/modellenrecht
+→ Queued 19 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/modellenrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/databankenrecht
+✓ Found 4 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers/databankenrecht
+→ Queued 5 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/databankenrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/naburige-rechten
+→ Queued 2 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/naburige-rechten
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/europees-recht
+→ Queued 3 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/europees-recht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers/kwekersrecht
+→ Queued 8 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers/kwekersrecht
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/slaafse-nabootsing/rechtspraak
+✓ Found 8 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/slaafse-nabootsing/rechtspraak
+→ Queued 13 new link(s) from https://ie-forum.nl/dossiers/ie-forum/slaafse-nabootsing/rechtspraak
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/auteursrecht/alle-rechtspraak
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/auteursrecht/alle-rechtspraak
+→ Queued 11 new link(s) from https://ie-forum.nl/dossiers/ie-forum/auteursrecht/alle-rechtspraak
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-damave-trouw
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-damave-trouw
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-t-schaep-met-de-vijf-pooten
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-t-schaep-met-de-vijf-pooten
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-buma-de-zon
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-buma-de-zon
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-willem-dreeshuis
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-willem-dreeshuis
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-barbie-sindy
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-barbie-sindy
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-ferdi-e
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-ferdi-e
+Crawling (depth 2): https://ie-forum.nl/artikelen/ie-klassieker-decaux-mediamax
+✓ Found 1 ECLI(s) on https://ie-forum.nl/artikelen/ie-klassieker-decaux-mediamax
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=2
+✓ Found 10 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=2
+→ Queued 2 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=2
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=3
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=3
+→ Queued 3 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=3
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=4
+✓ Found 9 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=4
+→ Queued 6 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=4
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=5
+✓ Found 4 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=5
+→ Queued 84 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=5
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=6
+✓ Found 1 ECLI(s) on https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=6
+→ Queued 105 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=6
+Crawling (depth 2): https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=7
+→ Queued 25 new link(s) from https://ie-forum.nl/dossiers/ie-forum/klassiekers?page=7
+✓ Section crawl complete: 75 pages visited, 195 unique ECLIs found
+Total unique ECLIs found across all sections: 195
+Checking for already processed ECLIs...
+44 new ECLIs (151 already processed)
+Validating 44 ECLI(s) via Rechtspraak API...
+✓ Valid: ECLI:NL:RBZWB:2025:7551
+✗ Invalid: ECLI:EU:T:2025:163 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:163: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:765 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:765: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:976 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:976: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:825 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:825: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:956 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:956: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:960 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:960: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:946 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:946: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:660 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:660: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:267 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:267: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:141 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:141: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:895 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:895: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:619 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:619: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2023:218 (Fout bij ophalen inhoud voor ECLI:EU:C:2023:218: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2022:847 (Fout bij ophalen inhoud voor ECLI:EU:C:2022:847: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:815 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:815: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:813 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:813: Request failed with status code 404)
+✗ Invalid: ECLI:EU:T:2025:814 (Fout bij ophalen inhoud voor ECLI:EU:T:2025:814: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:330 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:330: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:452 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:452: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2025:644 (Fout bij ophalen inhoud voor ECLI:EU:C:2025:644: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2015:477 (Fout bij ophalen inhoud voor ECLI:EU:C:2015:477: Request failed with status code 404)
+✗ Invalid: ECLI:NL:HR:1989:AD0607 (No valid Inhoudsindicatie)
+✗ Invalid: ECLI:EU:C:2006:764 (Fout bij ophalen inhoud voor ECLI:EU:C:2006:764: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:1997:528 (Fout bij ophalen inhoud voor ECLI:EU:C:1997:528: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2004:384 (Fout bij ophalen inhoud voor ECLI:EU:C:2004:384: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2005:432 (Fout bij ophalen inhoud voor ECLI:EU:C:2005:432: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2003:244 (Fout bij ophalen inhoud voor ECLI:EU:C:2003:244: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2020:118 (Fout bij ophalen inhoud voor ECLI:EU:C:2020:118: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2010:516 (Fout bij ophalen inhoud voor ECLI:EU:C:2010:516: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2002:377 (Fout bij ophalen inhoud voor ECLI:EU:C:2002:377: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2021:434 (Fout bij ophalen inhoud voor ECLI:EU:C:2021:434: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2004:695 (Fout bij ophalen inhoud voor ECLI:EU:C:2004:695: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2012:115 (Fout bij ophalen inhoud voor ECLI:EU:C:2012:115: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2015:735 (Fout bij ophalen inhoud voor ECLI:EU:C:2015:735: Request failed with status code 404)
+✗ Invalid: ECLI:NL:RBMNE:2024:3827 (Fout bij ophalen inhoud voor ECLI:NL:RBMNE:2024:3827: Niet-civiele zaak: Geen rechtsgebied gevonden)
+✗ Invalid: ECLI:EU:C:2009:465 (Fout bij ophalen inhoud voor ECLI:EU:C:2009:465: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2019:721 (Fout bij ophalen inhoud voor ECLI:EU:C:2019:721: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2012:407 (Fout bij ophalen inhoud voor ECLI:EU:C:2012:407: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2015:27 (Fout bij ophalen inhoud voor ECLI:EU:C:2015:27: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2018:899 (Fout bij ophalen inhoud voor ECLI:EU:C:2018:899: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:1999:323 (Fout bij ophalen inhoud voor ECLI:EU:C:1999:323: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:2020:461 (Fout bij ophalen inhoud voor ECLI:EU:C:2020:461: Request failed with status code 404)
+✗ Invalid: ECLI:EU:C:1999:230 (Fout bij ophalen inhoud voor ECLI:EU:C:1999:230: Request failed with status code 404)
+Discovery complete: 1 valid new ECLIs ready for processing
+✓ Discovery voltooid: 1 records gevonden

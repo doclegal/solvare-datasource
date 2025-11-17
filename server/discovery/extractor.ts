@@ -1,9 +1,13 @@
 /**
  * ECLI Extractor Module
  * Extracts and normalizes ECLI numbers from HTML content
+ * 
+ * NOTE: Only matches Dutch ECLIs (ECLI:NL:...) because:
+ * - Rechtspraak.nl API only contains Dutch case law
+ * - EU ECLIs (ECLI:EU:C:, ECLI:EU:T:) return 404 errors
  */
 
-const ECLI_REGEX = /ECLI:[A-Z]{2}:[A-Z0-9]+:\d{4}:[A-Z0-9]+/gi;
+const ECLI_REGEX = /ECLI:NL:[A-Z0-9]+:\d{4}:[A-Z0-9]+/gi;
 
 export interface ExtractedECLI {
   ecli: string;
