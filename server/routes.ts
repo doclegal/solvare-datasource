@@ -460,6 +460,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug: Get Pinecone index stats
+  app.get('/api/pinecone/stats', async (req: Request, res: Response) => {
+    try {
+      const apiKey = process.env.PINECONE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'PINECONE_API_KEY niet gevonden' });
+      }
+      
+      const { Pinecone } = await import('@pinecone-database/pinecone');
+      const pc = new Pinecone({ apiKey });
+      
+      const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
+      const indexName = indexHost.split('.')[0];
+      const index = pc.index(indexName, indexHost);
+      
+      const stats = await index.describeIndexStats();
+      
+      res.json({
+        indexName,
+        indexHost,
+        totalVectors: stats.totalRecordCount,
+        namespaces: stats.namespaces,
+      });
+    } catch (error: any) {
+      console.error('Error getting Pinecone stats:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Debug: Fetch specific ECLI from Pinecone
+  app.post('/api/pinecone/fetch', async (req: Request, res: Response) => {
+    try {
+      const { eclis, namespace } = req.body;
+      
+      if (!Array.isArray(eclis) || eclis.length === 0) {
+        return res.status(400).json({ error: 'ECLI lijst is vereist' });
+      }
+      
+      const apiKey = process.env.PINECONE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'PINECONE_API_KEY niet gevonden' });
+      }
+      
+      const { Pinecone } = await import('@pinecone-database/pinecone');
+      const pc = new Pinecone({ apiKey });
+      
+      const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
+      const indexName = indexHost.split('.')[0];
+      const index = pc.index(indexName, indexHost);
+      const ns = index.namespace(namespace || 'ECLI_NL');
+      
+      const result = await ns.fetch(eclis);
+      
+      res.json({
+        namespace: namespace || 'ECLI_NL',
+        requested: eclis,
+        found: Object.keys(result.records || {}).length,
+        records: result.records,
+      });
+    } catch (error: any) {
+      console.error('Error fetching from Pinecone:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get batch by ID (for AI enrichment recovery)
   app.get('/api/rechtspraak/batch/:batchId', async (req: Request, res: Response) => {
     try {
