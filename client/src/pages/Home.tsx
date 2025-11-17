@@ -614,17 +614,9 @@ export default function Home() {
       return;
     }
 
-    // Warn if exceeding Pinecone batch limit (96 records for embedding API)
-    if (preparedRecords.length > 96) {
-      toast({
-        title: 'Let op: Pinecone limiet',
-        description: `Je hebt ${preparedRecords.length} records geselecteerd. Voor optimale upload naar Pinecone wordt aanbevolen max 96 records tegelijk te verrijken.`,
-        variant: 'default',
-      });
-    }
-
     setIsEnrichingWithAI(true);
     addLog(`🤖 Start AI enrichment voor ${preparedRecords.length} records...`);
+    addLog(`📤 Auto-upload naar Pinecone start automatisch in batches van 25...`);
 
     try {
       const eclis = preparedRecords.map(r => r.ecli);

@@ -152,6 +152,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let batch = await storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
       console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records in PostgreSQL`);
       
+      // START AUTO-UPLOAD WORKER (runs in background, uploads batches of 25 every 5 minutes)
+      const { AutoUploadWorker } = await import('./auto-upload-worker');
+      const uploadWorker = new AutoUploadWorker((progress) => {
+        console.log('[Auto-Upload]', progress.message);
+        // Optionally send upload progress via SSE (maar zou kunnen conflicteren met enrichment progress)
+      });
+      uploadWorker.start().catch(err => console.error('[Auto-Upload] Worker start failed:', err));
+      await sendProgress(`📤 Auto-upload worker gestart (upload batches van 25 elke 5 min)`, 'info');
+      
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
       
@@ -255,6 +264,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.end();
+    }
+  });
+
+  // Auto-upload enriched records to Pinecone (streaming progress via SSE)
+  app.post('/api/pinecone/auto-upload-monitor', async (req: Request, res: Response) => {
+    try {
+      // Set up SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      const sendProgress = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        if ('flush' in res && typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+      };
+
+      // Import auto-upload worker
+      const { AutoUploadWorker } = await import('./auto-upload-worker');
+      
+      // Create worker with progress callback
+      const worker = new AutoUploadWorker((progress) => {
+        sendProgress(progress);
+      });
+
+      // Start worker
+      await worker.start();
+
+      // Worker runs in background, close SSE connection after initial check
+      setTimeout(() => {
+        sendProgress({
+          type: 'info',
+          message: 'Auto-upload worker draait nu op de achtergrond en controleert elke 5 minuten...',
+        });
+        res.end();
+      }, 1000);
+
+    } catch (error: any) {
+      console.error('Error in /api/pinecone/auto-upload-monitor:', error);
+      
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({
+          type: 'error',
+          message: error.message || 'Fout bij auto-upload monitoring'
+        })}\n\n`);
+        res.end();
+      } else {
+        res.status(500).json({ 
+          error: error.message || 'Fout bij auto-upload monitoring' 
+        });
+      }
     }
   });
 
