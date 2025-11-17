@@ -92,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enrich ECLIs with AI summaries (batch processing with SSE progress)
   app.post('/api/rechtspraak/enrich-batch', async (req: Request, res: Response) => {
     try {
-      const { eclis } = req.body;
+      const { eclis, originalRecords } = req.body;
       
       if (!Array.isArray(eclis) || eclis.length === 0) {
         return res.status(400).json({ error: 'ECLI lijst is vereist' });
@@ -124,12 +124,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await new Promise(resolve => setImmediate(resolve));
       };
 
+      // Validate that originalRecords covers all ECLIs
+      if (!originalRecords || !Array.isArray(originalRecords)) {
+        throw new Error('originalRecords is vereist voor AI enrichment');
+      }
+      
+      const originalMap = new Map<string, PreparedRecord>();
+      originalRecords.forEach((record: PreparedRecord) => {
+        originalMap.set(record.ecli, record);
+      });
+      
+      // Validate 1:1 mapping
+      const missingEclis = eclis.filter(ecli => !originalMap.has(ecli));
+      if (missingEclis.length > 0) {
+        throw new Error(`Originele records ontbreken voor ECLIs: ${missingEclis.slice(0, 5).join(', ')}${missingEclis.length > 5 ? '...' : ''}`);
+      }
+      
+      // Initialize IMMUTABLE baseline of original records
+      // This ensures complete data even if enrichment fails mid-stream
+      const initialRecords: PreparedRecord[] = eclis.map(ecli => originalMap.get(ecli)!);
+      
+      // Save initial batch immediately to prevent data loss
+      let batch = storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
+      console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records`);
+      
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
+      
+      // Track enriched records by ECLI for incremental updates
+      const enrichedMap = new Map<string, PreparedRecord>();
 
       await sendProgress(`Starten met verrijken van ${eclis.length} ECLI(s) met AI samenvattingen...`, 'info');
 
-      // Process each ECLI with AI enrichment
+      // Process each ECLI with AI enrichment and UPDATE batch incrementally
       for (let i = 0; i < eclis.length; i++) {
         const ecli = eclis[i];
         
@@ -159,6 +186,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
           
           results.push(enrichedRecord);
+          enrichedMap.set(ecli, enrichedRecord);
+          
+          // Update batch INCREMENTALLY with a FULL snapshot (enriched + original)
+          // This ensures partial progress is saved even if process crashes
+          const updatedRecords = initialRecords.map(original => 
+            enrichedMap.get(original.ecli) || original
+          );
+          batch = storage.updateBatch(batch.batchId, updatedRecords);
+          
           await sendProgress(`[${i + 1}/${eclis.length}] ✓ ${ecli} succesvol verrijkt`, 'success');
           
           // Small delay to avoid hammering APIs
@@ -175,14 +211,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Send completion event
+      // Build final merged records (enriched + original)
+      const finalRecords = initialRecords.map(original => 
+        enrichedMap.get(original.ecli) || original
+      );
+      
+      // Batch is already up-to-date thanks to incremental updates during enrichment
+      console.log(`[AI Enrichment] Final batch ${batch.batchId}: ${finalRecords.length} total records (${results.length} enriched, ${errors.length} failed)`);
+      
+      // Send completion event with batch ID
       const completionData = `data: ${JSON.stringify({
         type: 'complete',
-        records: results,
+        records: finalRecords, // Send ALL records (enriched + original)
+        enrichedRecords: results, // Also send just enriched for stats
         errors,
         total: eclis.length,
         successful: results.length,
         failed: errors.length,
+        batchId: batch.batchId,
       })}\n\n`;
       res.write(completionData);
       if ('flush' in res && typeof (res as any).flush === 'function') {
@@ -409,6 +455,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: error.message || 'Fout bij exporteren naar Pinecone' 
         });
       }
+    }
+  });
+
+  // Get batch by ID (for AI enrichment recovery)
+  app.get('/api/rechtspraak/batch/:batchId', (req: Request, res: Response) => {
+    try {
+      const { batchId } = req.params;
+      const batch = storage.getBatch(batchId);
+      
+      if (!batch) {
+        return res.status(404).json({ error: 'Batch niet gevonden' });
+      }
+      
+      res.json({ 
+        success: true, 
+        batch,
+        message: `Batch met ${batch.records.length} records opgehaald` 
+      });
+    } catch (error: any) {
+      console.error('Error fetching batch:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 

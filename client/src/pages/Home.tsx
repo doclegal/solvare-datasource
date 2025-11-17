@@ -47,21 +47,66 @@ export default function Home() {
   const fetchLockRef = useRef(false);
   const activeFiltersRef = useRef<string | null>(null);
 
-  // Load prepared records from localStorage on mount
+  // Load prepared records from localStorage on mount and check for AI enrichment recovery
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const records = JSON.parse(stored);
-        setPreparedRecords(records);
-        accumulatedRecordsRef.current = records;
-        setTotalResults(records.length);
-        console.log(`[localStorage] Loaded ${records.length} records from storage`);
+    const loadRecords = async () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const records = JSON.parse(stored);
+          setPreparedRecords(records);
+          accumulatedRecordsRef.current = records;
+          setTotalResults(records.length);
+          console.log(`[localStorage] Loaded ${records.length} records from storage`);
+          
+          // Check if we have AI enrichment batch ID saved but records don't have AI summaries
+          const enrichmentBatchId = localStorage.getItem('rechtspraak_enrichment_batch_id');
+          const hasAISummaries = records.some((r: PreparedRecord) => r.ai_inhoudsindicatie || r.ai_feiten);
+          
+          if (enrichmentBatchId && !hasAISummaries && records.length > 0) {
+            console.log('[AI Recovery] Found enrichment batch ID, attempting recovery:', enrichmentBatchId);
+            
+            // Try to fetch the enriched batch from server
+            try {
+              const response = await fetch(`/api/rechtspraak/batch/${enrichmentBatchId}`);
+              if (response.ok) {
+                const batchData = await response.json();
+                if (batchData.batch && batchData.batch.records) {
+                  const enrichedRecords = batchData.batch.records;
+                  console.log('[AI Recovery] Successfully recovered', enrichedRecords.length, 'enriched records');
+                  
+                  // Merge enriched records with existing records (preserve all records, update with AI data)
+                  const enrichedMap = new Map(enrichedRecords.map((r: PreparedRecord) => [r.ecli, r]));
+                  const mergedRecords = records.map((r: PreparedRecord) => {
+                    const enriched = enrichedMap.get(r.ecli);
+                    return enriched || r; // Use enriched version if available, otherwise keep original
+                  });
+                  
+                  setPreparedRecords(mergedRecords);
+                  accumulatedRecordsRef.current = mergedRecords;
+                  
+                  const enrichedCount = mergedRecords.filter((r: PreparedRecord) => r.ai_inhoudsindicatie).length;
+                  toast({
+                    title: 'AI Verrijking Hersteld',
+                    description: `${enrichedCount} van ${mergedRecords.length} records hebben AI samenvattingen`,
+                  });
+                }
+              } else {
+                console.log('[AI Recovery] Batch not found on server, may have expired');
+                localStorage.removeItem('rechtspraak_enrichment_batch_id');
+              }
+            } catch (error) {
+              console.error('[AI Recovery] Failed to recover enriched batch:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[localStorage] Failed to load records:', error);
       }
-    } catch (error) {
-      console.error('[localStorage] Failed to load records:', error);
-    }
-  }, []);
+    };
+    
+    loadRecords();
+  }, [toast]);
 
   // Save prepared records to localStorage whenever they change
   useEffect(() => {
@@ -550,7 +595,10 @@ export default function Home() {
       const response = await fetch('/api/rechtspraak/enrich-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eclis }),
+        body: JSON.stringify({ 
+          eclis,
+          originalRecords: preparedRecords // Send original records for fallback
+        }),
       });
 
       if (!response.ok) {
@@ -584,6 +632,12 @@ export default function Home() {
               
               if (data.type === 'complete') {
                 console.log('[AI Enrichment] Received completion event with', data.records?.length, 'records');
+                
+                // Save batch ID for recovery if completion event is lost
+                if (data.batchId) {
+                  localStorage.setItem('rechtspraak_enrichment_batch_id', data.batchId);
+                  console.log('[AI Enrichment] Saved batch ID for recovery:', data.batchId);
+                }
                 
                 // Update prepared records with AI enriched data
                 setPreparedRecords(data.records || []);
