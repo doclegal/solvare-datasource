@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
-import UploadedEcliList from "@/components/UploadedEcliList";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -138,9 +137,11 @@ export default function Home() {
         accumulatedRecordsRef.current = [];
         currentOffsetRef.current = 0;
         setBatchId(null);
+        setChunkedData(null);
         setPreparedRecords([]);
         setCurrentOffset(0);
         setTotalResults(0);
+        setExportLogs([]);
         activeFiltersRef.current = serializedFilters;
         
         // Clear localStorage on filter change
@@ -151,6 +152,9 @@ export default function Home() {
           console.error('[Filter change] Failed to clear localStorage:', error);
         }
       }
+      
+      // Clear chunks when fetching new records
+      setChunkedData(null);
       
       // Use ref for current offset (atomic)
       const offsetToUse = currentOffsetRef.current;
@@ -197,6 +201,11 @@ export default function Home() {
         });
         fetchLockRef.current = false; // Unlock before return
         return;
+      }
+      
+      // Log duplicate info
+      if (checkData.alreadyProcessed > 0) {
+        addLog(`${checkData.alreadyProcessed} van ${checkData.total} ECLI's al verwerkt - worden overgeslagen`);
       }
       
       // Step 3: Fetch full content for NEW ECLIs only
@@ -409,36 +418,9 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('[AI Enrichment] Error:', error);
-      
-      // Try to recover enriched records from batch ID in localStorage
-      const batchId = localStorage.getItem('rechtspraak_enrichment_batch_id');
-      if (batchId) {
-        console.log('[AI Enrichment] Attempting recovery from batch ID:', batchId);
-        try {
-          const recoveryResponse = await fetch(`/api/rechtspraak/batch/${batchId}/enriched`);
-          if (recoveryResponse.ok) {
-            const recoveryData = await recoveryResponse.json();
-            if (recoveryData.records && recoveryData.records.length > 0) {
-              console.log('[AI Enrichment] Successfully recovered', recoveryData.records.length, 'enriched records');
-              setPreparedRecords(recoveryData.records);
-              accumulatedRecordsRef.current = recoveryData.records;
-              localStorage.removeItem('rechtspraak_enrichment_batch_id');
-              
-              toast({
-                title: 'AI Enrichment Voltooid',
-                description: `${recoveryData.records.length} records verrijkt (hersteld na onderbreking). Automatische upload naar Pinecone is gestart.`,
-              });
-              return; // Exit without showing error
-            }
-          }
-        } catch (recoveryError) {
-          console.error('[AI Enrichment] Recovery failed:', recoveryError);
-        }
-      }
-      
       toast({
         title: 'Fout bij AI Enrichment',
-        description: error.message || 'Er is een fout opgetreden. Probeer het opnieuw.',
+        description: error.message || 'Er is een fout opgetreden',
         variant: 'destructive',
       });
     } finally {
@@ -459,19 +441,14 @@ export default function Home() {
           isLoading={isFetchingContent}
         />
 
-        <div className="flex gap-6">
-          <div className="flex-1">
-            <RecordPreparation
-              preparedRecords={preparedRecords}
-              onClear={handleClearRecords}
-              onEnrichWithAI={handleEnrichWithAI}
-              isEnrichingWithAI={isEnrichingWithAI}
-            />
-          </div>
-          <div className="w-80">
-            <UploadedEcliList />
-          </div>
-        </div>
+        <RecordPreparation
+          ecliCount={preparedRecords.length}
+          preparedRecords={preparedRecords}
+          onClear={handleClearRecords}
+          onEnrichWithAI={handleEnrichWithAI}
+          isLoading={isFetchingContent}
+          isEnrichingWithAI={isEnrichingWithAI}
+        />
       </main>
     </div>
   );

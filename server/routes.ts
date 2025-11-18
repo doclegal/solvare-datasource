@@ -6,7 +6,7 @@ import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
-import { inArray, eq, and, desc } from "drizzle-orm";
+import { inArray, eq, and } from "drizzle-orm";
 import { discoverECLIs, type DiscoveryProgress } from "./discovery/service";
 import { generateAISummary } from "./openai-summary";
 import { z } from "zod";
@@ -271,30 +271,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.end();
-    }
-  });
-
-  // Get enriched records from a batch (for recovery after SSE interruption)
-  app.get('/api/rechtspraak/batch/:batchId/enriched', async (req: Request, res: Response) => {
-    try {
-      const { batchId } = req.params;
-      
-      const batch = await storage.getBatch(batchId);
-      if (!batch) {
-        return res.status(404).json({ error: 'Batch niet gevonden' });
-      }
-      
-      // Return records without fullText to keep payload small
-      const recordsWithoutFullText = batch.records.map(({ fullText, ...record }: any) => record);
-      
-      res.json({
-        records: recordsWithoutFullText,
-        batchId: batch.batchId,
-        total: batch.records.length,
-      });
-    } catch (error: any) {
-      console.error('Error fetching batch enriched records:', error);
-      res.status(500).json({ error: error.message || 'Fout bij ophalen van batch records' });
     }
   });
 
@@ -643,16 +619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Re-upload existing Pinecone records with court_level metadata
   // Prioritizes AI-enriched versions to preserve expensive AI summaries
-  // 🚨 SECURITY: This endpoint is PERMANENTLY DISABLED to prevent accidental database overwrites
   app.post('/api/pinecone/update-court-levels', async (req: Request, res: Response) => {
-    // HARD-CODED SAFETY GUARD: NEVER allow bulk re-uploading of Pinecone records
-    return res.status(403).json({ 
-      error: 'OPERATIE GEBLOKKEERD: Het bulk overschrijven van Pinecone records is permanent uitgeschakeld om data verlies te voorkomen.',
-      blocked: true,
-      reason: 'safety_guard'
-    });
-    
-    // Original code below is unreachable - kept for reference only
     try {
       const { detectCourtLevel } = await import('./court-utils');
       const { enrichedBatchRecords } = await import('@shared/schema');
@@ -746,16 +713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete Pinecone records without AI summaries
-  // 🚨 SECURITY: This endpoint is PERMANENTLY DISABLED to prevent accidental database deletion
   app.post('/api/pinecone/delete-without-ai', async (req: Request, res: Response) => {
-    // HARD-CODED SAFETY GUARD: NEVER allow deletion of Pinecone records
-    return res.status(403).json({ 
-      error: 'OPERATIE GEBLOKKEERD: Het verwijderen van Pinecone records is permanent uitgeschakeld om data verlies te voorkomen.',
-      blocked: true,
-      reason: 'safety_guard'
-    });
-    
-    // Original code below is unreachable - kept for reference only
     try {
       const { confirm } = req.body;
       
@@ -765,7 +723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { Pinecone } = await import('@pinecone-database/pinecone');
-      const pc = new Pinecone({ apiKey: apiKey as string });
+      const pc = new Pinecone({ apiKey });
       
       const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
       const indexName = indexHost.split('.')[0];
@@ -1011,220 +969,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error clearing processed ECLIs:', error);
       res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get all processed ECLIs (for displaying uploaded ECLI list)
-  app.get('/api/processed-eclis/list', async (req: Request, res: Response) => {
-    try {
-      const { namespace } = req.query;
-      const targetNamespace = namespace as string || 'ECLI_NL';
-      
-      // Query database for all processed ECLIs in the specified namespace
-      // Ordered by upload date (most recent first)
-      const allProcessed = await db
-        .select({ 
-          ecli: processedEclis.ecli,
-          uploadedAt: processedEclis.uploadedAt 
-        })
-        .from(processedEclis)
-        .where(eq(processedEclis.namespace, targetNamespace))
-        .orderBy(desc(processedEclis.uploadedAt));
-      
-      res.json({
-        success: true,
-        count: allProcessed.length,
-        namespace: targetNamespace,
-        eclis: allProcessed.map(p => p.ecli),
-      });
-    } catch (error: any) {
-      console.error('Error listing processed ECLIs:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Recovery endpoint: Re-upload ECLIs from database that are missing in Pinecone
-  // This fixes the sync issue where processed_eclis has more records than Pinecone
-  app.post('/api/processed-eclis/recovery', async (req: Request, res: Response) => {
-    try {
-      const { namespace } = req.body;
-      const targetNamespace = namespace || 'ECLI_NL';
-      
-      // Set up SSE for real-time progress
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no');
-      
-      if (req.socket) {
-        req.socket.setNoDelay(true);
-      }
-      
-      res.flushHeaders();
-      
-      const sendProgress = async (message: string, type: 'info' | 'success' | 'error' = 'info') => {
-        const data = `data: ${JSON.stringify({ type, message })}\n\n`;
-        res.write(data);
-        if ('flush' in res && typeof (res as any).flush === 'function') {
-          (res as any).flush();
-        }
-      };
-      
-      await sendProgress('🔍 Starting recovery process...', 'info');
-      
-      // Step 1: Get all ECLIs from processed_eclis table
-      const allProcessedEclis = await db
-        .select({ ecli: processedEclis.ecli })
-        .from(processedEclis)
-        .where(eq(processedEclis.namespace, targetNamespace));
-      
-      await sendProgress(`Found ${allProcessedEclis.length} ECLIs in database`, 'info');
-      
-      // Step 2: Get enriched records for these ECLIs from enrichedBatchRecords table
-      const { enrichedBatchRecords } = await import('@shared/schema');
-      const eclisToRecover = allProcessedEclis.map(p => p.ecli);
-      
-      if (eclisToRecover.length === 0) {
-        await sendProgress('No ECLIs found in database', 'info');
-        res.write('data: {"type":"complete","message":"Recovery complete"}\n\n');
-        return res.end();
-      }
-      
-      // Fetch enriched records in batches to avoid query size limits
-      const enrichedRecords: PreparedRecord[] = [];
-      const enrichedEclis = new Set<string>();
-      const QUERY_BATCH_SIZE = 100;
-      
-      for (let i = 0; i < eclisToRecover.length; i += QUERY_BATCH_SIZE) {
-        const batchEclis = eclisToRecover.slice(i, i + QUERY_BATCH_SIZE);
-        const records = await db
-          .select()
-          .from(enrichedBatchRecords)
-          .where(
-            and(
-              inArray(enrichedBatchRecords.ecli, batchEclis),
-              eq(enrichedBatchRecords.isEnriched, true)
-            )
-          );
-        
-        records.forEach(r => {
-          enrichedRecords.push(r.recordData as PreparedRecord);
-          enrichedEclis.add(r.ecli);
-        });
-      }
-      
-      // CRITICAL: Detect ECLIs that are in processed_eclis but have NO enriched data
-      const missingEnrichedData = eclisToRecover.filter(ecli => !enrichedEclis.has(ecli));
-      
-      if (missingEnrichedData.length > 0) {
-        await sendProgress(
-          `⚠️ WARNING: ${missingEnrichedData.length} ECLIs in database have NO enriched data available!`,
-          'error'
-        );
-        await sendProgress(
-          `These ECLIs cannot be recovered without re-enrichment: ${missingEnrichedData.slice(0, 10).join(', ')}${missingEnrichedData.length > 10 ? '...' : ''}`,
-          'error'
-        );
-      }
-      
-      await sendProgress(
-        `Found ${enrichedRecords.length} enriched records to re-upload (${missingEnrichedData.length} missing enriched data)`,
-        missingEnrichedData.length > 0 ? 'error' : 'info'
-      );
-      
-      if (enrichedRecords.length === 0) {
-        await sendProgress('❌ No enriched records found for recovery. All processed ECLIs are missing enriched data!', 'error');
-        await sendProgress('Solution: Delete these ECLIs from processed_eclis table and re-run AI enrichment', 'info');
-        res.write('data: {"type":"complete","message":"No enriched data available"}\n\n');
-        return res.end();
-      }
-      
-      // Step 3: Upload to Pinecone in batches
-      // SAFE APPROACH: Upsert is idempotent - we just re-upload to Pinecone
-      // No need to modify processed_eclis table (prevents data loss)
-      const UPLOAD_BATCH_SIZE = 25;
-      const totalBatches = Math.ceil(enrichedRecords.length / UPLOAD_BATCH_SIZE);
-      let totalSuccess = 0;
-      let totalFailed = 0;
-      const failedEclisAll: string[] = [];
-      
-      for (let i = 0; i < totalBatches; i++) {
-        const start = i * UPLOAD_BATCH_SIZE;
-        const end = Math.min(start + UPLOAD_BATCH_SIZE, enrichedRecords.length);
-        const batch = enrichedRecords.slice(start, end);
-        
-        await sendProgress(`Uploading batch ${i + 1}/${totalBatches} (${batch.length} records)...`, 'info');
-        
-        const result = await upsertRecordsToPinecone(
-          PINECONE_INDEX_HOST,
-          batch,
-          targetNamespace,
-          UPLOAD_BATCH_SIZE
-        );
-        
-        totalSuccess += result.successCount;
-        totalFailed += result.errorCount;
-        
-        // Track failed ECLIs for final report
-        if (result.failedEclis.length > 0) {
-          failedEclisAll.push(...result.failedEclis);
-        }
-        
-        await sendProgress(
-          `✓ Batch ${i + 1}/${totalBatches}: ${result.successCount} uploaded, ${result.errorCount} failed`,
-          result.errorCount > 0 ? 'error' : 'success'
-        );
-        
-        // Small delay between batches
-        if (i < totalBatches - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      // Final comprehensive report
-      await sendProgress('📊 === RECOVERY SUMMARY ===', 'info');
-      await sendProgress(`Total ECLIs in database: ${allProcessedEclis.length}`, 'info');
-      await sendProgress(`Enriched records available: ${enrichedRecords.length}`, 'info');
-      await sendProgress(`Missing enriched data: ${missingEnrichedData.length}`, missingEnrichedData.length > 0 ? 'error' : 'info');
-      await sendProgress(`Successfully uploaded: ${totalSuccess}`, 'success');
-      await sendProgress(`Upload failures: ${totalFailed}`, totalFailed > 0 ? 'error' : 'info');
-      
-      // Calculate remaining gap
-      const remainingGap = missingEnrichedData.length + totalFailed;
-      
-      if (remainingGap > 0) {
-        await sendProgress(
-          `⚠️ REMAINING GAP: ${remainingGap} ECLIs still missing from Pinecone`,
-          'error'
-        );
-        
-        if (missingEnrichedData.length > 0) {
-          await sendProgress(
-            `Action required: ${missingEnrichedData.length} ECLIs need re-enrichment (no AI data available)`,
-            'error'
-          );
-        }
-        
-        if (totalFailed > 0) {
-          await sendProgress(
-            `Failed uploads (${totalFailed}): ${failedEclisAll.slice(0, 5).join(', ')}${failedEclisAll.length > 5 ? '...' : ''}`,
-            'error'
-          );
-        }
-      } else {
-        await sendProgress('🎉 SUCCESS: All enriched records successfully uploaded to Pinecone!', 'success');
-      }
-      
-      await sendProgress('Recommendation: Check Pinecone dashboard to verify final record count', 'info');
-      
-      res.write('data: {"type":"complete","message":"Recovery process finished"}\n\n');
-      res.end();
-      
-    } catch (error: any) {
-      console.error('Error in recovery endpoint:', error);
-      const errorData = `data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`;
-      res.write(errorData);
-      res.end();
     }
   });
 
