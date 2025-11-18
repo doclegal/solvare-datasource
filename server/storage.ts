@@ -11,6 +11,7 @@ export interface IStorage {
   createBatch(records: PreparedRecord[]): Promise<PreparedBatch>;
   updateBatch(batchId: string, records: PreparedRecord[]): Promise<PreparedBatch>;
   getBatch(batchId: string): Promise<PreparedBatch | undefined>;
+  listBatches(limit?: number): Promise<Array<{ batchId: string; totalRecords: number; enrichedRecords: number; createdAt: Date }>>;
   deleteBatch(batchId: string): Promise<void>;
   cleanupOldBatches(maxAgeMs: number): Promise<number>;
   
@@ -54,6 +55,19 @@ export class MemStorage implements IStorage {
     return this.batches.get(batchId);
   }
   
+  async listBatches(limit: number = 20): Promise<Array<{ batchId: string; totalRecords: number; enrichedRecords: number; createdAt: Date }>> {
+    const allBatches = Array.from(this.batches.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limit);
+    
+    return allBatches.map(batch => ({
+      batchId: batch.batchId,
+      totalRecords: batch.records.length,
+      enrichedRecords: batch.records.filter(r => r.ai_title || r.ai_inhoudsindicatie).length,
+      createdAt: batch.createdAt,
+    }));
+  }
+  
   async deleteBatch(batchId: string): Promise<void> {
     this.batches.delete(batchId);
   }
@@ -84,13 +98,18 @@ export class PgStorage implements IStorage {
   async createBatch(records: PreparedRecord[]): Promise<PreparedBatch> {
     const batchId = randomUUID();
     
-    // Insert batch metadata
-    await db.insert(enrichedBatches).values({
+    // Insert batch metadata and get the actual createdAt timestamp from database
+    const [insertedBatch] = await db.insert(enrichedBatches).values({
       batchId,
       totalRecords: records.length,
       enrichedRecords: 0,
       failedRecords: 0,
-    });
+    }).returning({ createdAt: enrichedBatches.createdAt });
+    
+    // Safety: ensure we got a valid timestamp from the database
+    if (!insertedBatch || !insertedBatch.createdAt) {
+      throw new Error('Failed to create batch: database did not return createdAt timestamp');
+    }
     
     // Insert baseline records (immutable snapshot)
     const recordRows = records.map(record => ({
@@ -105,7 +124,7 @@ export class PgStorage implements IStorage {
     return {
       batchId,
       records,
-      createdAt: new Date(),
+      createdAt: insertedBatch.createdAt, // Use actual DB timestamp for accurate cleanup
     };
   }
   
@@ -137,6 +156,21 @@ export class PgStorage implements IStorage {
       records,
       createdAt: batchMeta[0].createdAt,
     };
+  }
+  
+  async listBatches(limit: number = 20): Promise<Array<{ batchId: string; totalRecords: number; enrichedRecords: number; createdAt: Date }>> {
+    const batches = await db
+      .select()
+      .from(enrichedBatches)
+      .orderBy(sql`${enrichedBatches.createdAt} DESC`)
+      .limit(limit);
+    
+    return batches.map(batch => ({
+      batchId: batch.batchId,
+      totalRecords: batch.totalRecords,
+      enrichedRecords: batch.enrichedRecords,
+      createdAt: batch.createdAt,
+    }));
   }
   
   async deleteBatch(batchId: string): Promise<void> {

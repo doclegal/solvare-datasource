@@ -4,6 +4,7 @@ import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
 import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
+import BatchManager from "@/components/BatchManager";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -324,6 +325,15 @@ export default function Home() {
     }
   };
 
+  const handleLoadBatch = (records: PreparedRecord[]) => {
+    setPreparedRecords(records);
+    const enrichedCount = countEnrichedRecords(records);
+    toast({
+      title: "Batch geladen",
+      description: `${records.length} records geladen (${enrichedCount} AI-verrijkt)`,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header isConnected={true} />
@@ -335,6 +345,11 @@ export default function Home() {
           onFetch={handleFetchDecisions}
           onReset={handleResetFilters}
           isLoading={isFetchingContent}
+        />
+
+        <BatchManager
+          currentRecords={preparedRecords}
+          onLoadBatch={handleLoadBatch}
         />
 
         <RecordPreparation

@@ -318,6 +318,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Save current records as a draft batch (24-hour retention)
+  app.post('/api/batches/save', async (req: Request, res: Response) => {
+    try {
+      const { records } = req.body;
+      
+      if (!Array.isArray(records) || records.length === 0) {
+        return res.status(400).json({ error: 'Records lijst is vereist' });
+      }
+
+      // Validate records schema - catch Zod errors separately for proper 400 response
+      try {
+        records.forEach((record: any) => {
+          preparedRecordSchema.parse(record);
+        });
+      } catch (validationError: any) {
+        return res.status(400).json({ 
+          error: 'Ongeldige record data',
+          details: validationError.message 
+        });
+      }
+
+      // Create batch in PostgreSQL (persistent storage)
+      const batch = await storage.createBatch(records);
+      
+      // Cleanup old batches (>24 hours)
+      const deleted = await storage.cleanupOldBatches(24 * 60 * 60 * 1000);
+      if (deleted > 0) {
+        console.log(`[Batch Cleanup] Removed ${deleted} batches older than 24 hours`);
+      }
+      
+      res.json({ 
+        success: true, 
+        batchId: batch.batchId,
+        recordCount: records.length,
+        message: `${records.length} records opgeslagen. Automatisch verwijderd na 24 uur.`
+      });
+    } catch (error: any) {
+      console.error('Error in /api/batches/save:', error);
+      res.status(500).json({ error: error.message || 'Kon batch niet opslaan' });
+    }
+  });
+
+  // List saved batches (most recent first)
+  app.get('/api/batches/list', async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const batches = await storage.listBatches(limit);
+      
+      res.json({ batches });
+    } catch (error: any) {
+      console.error('Error in /api/batches/list:', error);
+      res.status(500).json({ error: error.message || 'Kon batches niet ophalen' });
+    }
+  });
+
+  // Load a specific batch by ID
+  app.get('/api/batches/:batchId', async (req: Request, res: Response) => {
+    try {
+      const { batchId } = req.params;
+      const batch = await storage.getBatch(batchId);
+      
+      if (!batch) {
+        return res.status(404).json({ error: 'Batch niet gevonden' });
+      }
+      
+      res.json({ batch });
+    } catch (error: any) {
+      console.error('Error in /api/batches/:batchId:', error);
+      res.status(500).json({ error: error.message || 'Kon batch niet ophalen' });
+    }
+  });
+
+  // Delete a batch
+  app.delete('/api/batches/:batchId', async (req: Request, res: Response) => {
+    try {
+      const { batchId } = req.params;
+      await storage.deleteBatch(batchId);
+      
+      res.json({ success: true, message: 'Batch verwijderd' });
+    } catch (error: any) {
+      console.error('Error in /api/batches/:batchId DELETE:', error);
+      res.status(500).json({ error: error.message || 'Kon batch niet verwijderen' });
+    }
+  });
+
   // Create or update batch from records (for accumulated multi-fetch workflow)
   app.post('/api/rechtspraak/create-batch', async (req: Request, res: Response) => {
     try {

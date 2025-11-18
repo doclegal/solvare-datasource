@@ -1,0 +1,235 @@
+import { useState } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Save, FolderOpen, Trash2, Clock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import type { PreparedRecord } from "./RecordPreparation";
+
+interface SavedBatch {
+  batchId: string;
+  totalRecords: number;
+  enrichedRecords: number;
+  createdAt: Date;
+}
+
+interface BatchManagerProps {
+  currentRecords: PreparedRecord[];
+  onLoadBatch: (records: PreparedRecord[]) => void;
+}
+
+export default function BatchManager({ currentRecords, onLoadBatch }: BatchManagerProps) {
+  const [savedBatches, setSavedBatches] = useState<SavedBatch[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showBatches, setShowBatches] = useState(false);
+  const { toast } = useToast();
+
+  const handleSaveBatch = async () => {
+    if (currentRecords.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Geen records",
+        description: "Er zijn geen records om op te slaan",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const response = await apiRequest('POST', '/api/batches/save', {
+        records: currentRecords,
+      });
+
+      const data = await response.json();
+
+      toast({
+        title: "Opgeslagen",
+        description: data.message,
+      });
+
+      // Refresh batch list
+      await loadBatchList();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij opslaan",
+        description: error.message || "Kon batch niet opslaan",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const loadBatchList = async () => {
+    setIsLoading(true);
+    try {
+      const response = await apiRequest('GET', '/api/batches/list?limit=10');
+      const data = await response.json();
+      
+      // Convert createdAt strings to Date objects
+      const batches = data.batches.map((b: any) => ({
+        ...b,
+        createdAt: new Date(b.createdAt),
+      }));
+      
+      setSavedBatches(batches);
+      setShowBatches(true);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij laden",
+        description: error.message || "Kon batches niet ophalen",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoadBatch = async (batchId: string) => {
+    setIsLoading(true);
+    try {
+      const response = await apiRequest('GET', `/api/batches/${batchId}`);
+      const data = await response.json();
+
+      onLoadBatch(data.batch.records);
+
+      toast({
+        title: "Batch geladen",
+        description: `${data.batch.records.length} records geladen`,
+      });
+
+      setShowBatches(false);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij laden",
+        description: error.message || "Kon batch niet laden",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    if (!confirm('Weet je zeker dat je deze batch wilt verwijderen?')) {
+      return;
+    }
+
+    try {
+      await apiRequest('DELETE', `/api/batches/${batchId}`);
+
+      toast({
+        title: "Verwijderd",
+        description: "Batch succesvol verwijderd",
+      });
+
+      // Refresh list
+      await loadBatchList();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij verwijderen",
+        description: error.message || "Kon batch niet verwijderen",
+      });
+    }
+  };
+
+  const formatTimeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return 'zojuist';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} min geleden`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} uur geleden`;
+    return `${Math.floor(seconds / 86400)} dagen geleden`;
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <CardTitle>Batch Opslag</CardTitle>
+            <CardDescription>
+              Sla je huidige records tijdelijk op (24 uur)
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSaveBatch}
+              disabled={isSaving || currentRecords.length === 0}
+              data-testid="button-save-batch"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {isSaving ? "Bezig..." : "Opslaan"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadBatchList}
+              disabled={isLoading}
+              data-testid="button-load-batches"
+            >
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Laden
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+
+      {showBatches && (
+        <CardContent>
+          {savedBatches.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Geen opgeslagen batches gevonden</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm font-medium mb-3">
+                {savedBatches.length} opgeslagen batch{savedBatches.length !== 1 ? 'es' : ''}
+              </p>
+              {savedBatches.map((batch) => (
+                <div
+                  key={batch.batchId}
+                  className="flex items-center justify-between p-3 border rounded-md hover-elevate cursor-pointer"
+                  onClick={() => handleLoadBatch(batch.batchId)}
+                  data-testid={`batch-item-${batch.batchId}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="text-sm font-medium">
+                        {batch.totalRecords} records
+                        {batch.enrichedRecords > 0 && (
+                          <Badge variant="secondary" className="ml-2">
+                            {batch.enrichedRecords} AI-verrijkt
+                          </Badge>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatTimeAgo(batch.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => handleDeleteBatch(batch.batchId, e)}
+                    data-testid={`button-delete-batch-${batch.batchId}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
