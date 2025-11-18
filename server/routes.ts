@@ -152,11 +152,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let batch = await storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
       console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records in PostgreSQL`);
       
-      // START AUTO-UPLOAD WORKER (singleton - only one instance runs)
-      const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
-      const uploadWorker = getGlobalAutoUploadWorker();
-      uploadWorker.start().catch(err => console.error('[Auto-Upload] Worker start failed:', err));
-      await sendProgress(`📤 Auto-upload worker actief (upload batches van 25 elke 5 min)`, 'info');
+      // AUTO-UPLOAD WORKER DISABLED - Manual upload only via button
+      // const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
+      // const uploadWorker = getGlobalAutoUploadWorker();
+      // uploadWorker.start().catch(err => console.error('[Auto-Upload] Worker start failed:', err));
+      // await sendProgress(`📤 Auto-upload worker actief (upload batches van 25 elke 5 min)`, 'info');
       
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
@@ -233,10 +233,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (results.length > 0) {
         await sendProgress(`📤 Starten met upload van ${results.length} verrijkte records naar Pinecone...`, 'info');
         
-        // Get the singleton worker and trigger immediate upload check
-        uploadWorker.checkAndUpload().catch(err => {
-          console.error('[Auto-Upload] Immediate upload failed:', err);
-        });
+        // Auto-upload disabled - Manual upload only
+        // uploadWorker.checkAndUpload().catch((err: any) => {
+        //   console.error('[Auto-Upload] Immediate upload failed:', err);
+        // });
       }
       
       // Strip fullText from records to prevent SSE payload overflow
@@ -289,22 +289,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
 
-      // Import singleton auto-upload worker
-      const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
-      
-      // Get the singleton worker instance
-      const worker = getGlobalAutoUploadWorker();
-
-      // Register progress listener for SSE streaming
-      worker.addProgressListener(sendProgress);
-
-      // Start worker (idempotent - will not start if already running)
-      await worker.start();
+      // AUTO-UPLOAD WORKER DISABLED - Manual upload only via button
+      // const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
+      // const worker = getGlobalAutoUploadWorker();
+      // worker.addProgressListener(sendProgress);
+      // await worker.start();
 
       // Keep connection open for progress updates
       req.on('close', () => {
         // Cleanup: remove listener when client disconnects
-        worker.removeProgressListener(sendProgress);
+        // worker.removeProgressListener(sendProgress);
       });
 
     } catch (error: any) {
