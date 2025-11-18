@@ -2,43 +2,21 @@ import { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
-import PineconeExport, { type ExportConfig } from "@/components/PineconeExport";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
 const STORAGE_KEY = 'rechtspraak_prepared_records';
 
-interface ChunkedRecord {
-  ecli: string;
-  chunk_id: string;
-  section_type: string;
-  title: string;
-  text: string;
-  [key: string]: any;
-}
-
-interface ChunksByEcli {
-  ecli: string;
-  title: string;
-  totalChunks: number;
-  sectionCounts: Record<string, number>;
-  chunks: ChunkedRecord[];
-}
-
 export default function Home() {
   // State management
   const [preparedRecords, setPreparedRecords] = useState<PreparedRecord[]>([]);
   const [batchId, setBatchId] = useState<string | null>(null);
-  const [chunkedData, setChunkedData] = useState<{ chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null>(null);
   const [currentOffset, setCurrentOffset] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
   const [currentCivilSubcategory, setCurrentCivilSubcategory] = useState<string>("all");
   const [isFetchingContent, setIsFetchingContent] = useState(false);
-  const [isPreparingChunks, setIsPreparingChunks] = useState(false);
   const [isEnrichingWithAI, setIsEnrichingWithAI] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportLogs, setExportLogs] = useState<string[]>([]);
   const { toast } = useToast();
   
   // Use refs to prevent race conditions from concurrent fetches
@@ -120,10 +98,6 @@ export default function Home() {
     }
   }, [preparedRecords]);
 
-  const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString('nl-NL');
-    setExportLogs(prev => [...prev, `[${timestamp}] ${message}`]);
-  };
 
   const handleFetchDecisions = async (filters: FilterParams) => {
     // Atomic lock acquisition (prevents overlapping invocations)
@@ -316,7 +290,6 @@ export default function Home() {
     fetchLockRef.current = false;
     activeFiltersRef.current = null;
     setBatchId(null);
-    setChunkedData(null);
     setTotalResults(0);
     setCurrentOffset(0);
   };
@@ -327,8 +300,6 @@ export default function Home() {
     currentOffsetRef.current = 0;
     fetchLockRef.current = false;
     setBatchId(null);
-    setChunkedData(null);
-    setExportLogs([]);
     
     // Clear localStorage
     try {
@@ -339,261 +310,15 @@ export default function Home() {
     }
   };
 
-  const handlePrepareChunks = async (useLLM: boolean = false) => {
-    if (!batchId) {
-      toast({
-        variant: "destructive",
-        title: "Geen batch beschikbaar",
-        description: "Haal eerst uitspraken op voordat je chunks voorbereidt.",
-      });
-      return;
-    }
-    
-    setIsPreparingChunks(true);
-    
-    try {
-      const endpoint = useLLM 
-        ? '/api/rechtspraak/prepare-chunks-llm'
-        : '/api/rechtspraak/prepare-chunks';
-      
-      const response = await apiRequest(
-        'POST',
-        endpoint,
-        { batchId }
-      );
-
-      const data = await response.json();
-      
-      // Handle both keyword chunking (with chunksByEcli) and LLM chunking (flat chunks array)
-      if (useLLM) {
-        // LLM endpoint returns flat chunks array, need to group by ECLI
-        const chunksByEcli: Record<string, any> = {};
-        data.chunks.forEach((chunk: any) => {
-          if (!chunksByEcli[chunk.ecli]) {
-            chunksByEcli[chunk.ecli] = {
-              ecli: chunk.ecli,
-              title: chunk.title,
-              totalChunks: 0,
-              sectionCounts: {},
-              chunks: [],
-            };
-          }
-          
-          chunksByEcli[chunk.ecli].totalChunks++;
-          chunksByEcli[chunk.ecli].sectionCounts[chunk.section_type] = 
-            (chunksByEcli[chunk.ecli].sectionCounts[chunk.section_type] || 0) + 1;
-          chunksByEcli[chunk.ecli].chunks.push(chunk);
-        });
-        
-        setChunkedData({
-          chunksByEcli,
-          allChunks: data.chunks,
-        });
-        
-        const fallbackMsg = data.fallbackCount > 0 
-          ? ` (${data.fallbackCount} uitspraken gebruikten fallback naar keyword methode)` 
-          : '';
-        
-        toast({
-          title: "AI Chunks voorbereid",
-          description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken${fallbackMsg}.`,
-        });
-      } else {
-        setChunkedData({
-          chunksByEcli: data.chunksByEcli,
-          allChunks: data.allChunks,
-        });
-        
-        toast({
-          title: "Chunks voorbereid",
-          description: `${data.totalChunks} chunks gemaakt voor ${data.totalRecords} uitspraken.`,
-        });
-      }
-    } catch (error: any) {
-      // Handle 404 from stale batchId (e.g., after server restart)
-      if (error.message && error.message.includes('404')) {
-        // Clear all state to allow fresh refetch
-        setBatchId(null);
-        setPreparedRecords([]);
-        accumulatedRecordsRef.current = [];
-        currentOffsetRef.current = 0;
-        toast({
-          variant: "destructive",
-          title: "Batch niet gevonden",
-          description: "Batch is verlopen. Gebruik 'Opnieuw' om uitspraken opnieuw op te halen.",
-        });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Fout bij voorbereiden",
-          description: error.message || "Kon chunks niet voorbereiden",
-        });
-      }
-    } finally {
-      setIsPreparingChunks(false);
-    }
-  };
-
-  const handleExport = async (config: ExportConfig) => {
-    setIsExporting(true);
-    setExportLogs([]);
-    
-    // Use chunks if available, otherwise use full records
-    const dataToExport = chunkedData?.allChunks || preparedRecords;
-    const exportType = chunkedData ? 'chunks' : 'records';
-    
-    // CRITICAL: Check for AI-enriched records (only for non-chunked exports)
-    if (!chunkedData) {
-      const enrichedCount = countEnrichedRecords(preparedRecords);
-      if (enrichedCount === 0) {
-        setIsExporting(false);
-        toast({
-          variant: "destructive",
-          title: "⚠️ Geen AI-verrijkte records",
-          description: `Je hebt ${preparedRecords.length} records, maar geen enkele is AI-verrijkt. Gebruik eerst "AI Verrijking Toepassen".`,
-        });
-        return;
-      }
-      
-      const notEnrichedCount = preparedRecords.length - enrichedCount;
-      if (notEnrichedCount > 0) {
-        addLog(`⚠️ ${notEnrichedCount} niet-verrijkte records worden automatisch uitgefilterd`);
-        addLog(`✓ ${enrichedCount} AI-verrijkte records worden verstuurd`);
-      }
-    }
-    
-    addLog('Export naar Pinecone gestart...');
-    addLog(`Type: ${chunkedData ? 'Chunks (intelligent sections)' : 'Full records'}`);
-    addLog(`Index host: ${config.indexHost}`);
-    addLog(`Namespace: ${config.namespace || '(standaard)'}`);
-    addLog(`Batchgrootte: ${config.batchSize}`);
-    addLog(`Totaal ${exportType}: ${dataToExport.length}`);
-
-    try {
-      const exportPayload: any = {
-        indexHost: config.indexHost,
-        namespace: config.namespace,
-        batchSize: config.batchSize,
-      };
-      
-      if (chunkedData) {
-        exportPayload.chunks = chunkedData.allChunks;
-      } else {
-        exportPayload.records = preparedRecords;
-      }
-      
-      const response = await fetch('/api/pinecone/export', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(exportPayload),
-      });
-
-      if (!response.ok) {
-        throw new Error('Export mislukt');
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Kan response niet lezen');
-      }
-
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-            
-            if (data.type === 'progress') {
-              addLog(`Batch verwerkt: ${data.processedRecords}/${data.totalRecords} records (${data.successCount} succesvol, ${data.errorCount} fouten)`);
-            } else if (data.type === 'complete') {
-              addLog(`✓ Export voltooid! ${data.successCount} records succesvol geüpload.`);
-              
-              // Only clear records and mark as processed if upload was successful
-              if (data.successCount > 0) {
-                // Mark ECLIs as processed in database
-                try {
-                  const actuallyExportedEclis = chunkedData 
-                    ? chunkedData.allChunks.map(c => c.ecli)
-                    : preparedRecords.map(r => r.ecli);
-                  
-                  // Deduplicate ECLI list (chunks may have multiple per ECLI)
-                  const uniqueEclis = Array.from(new Set(actuallyExportedEclis));
-                  const namespace = config.namespace || 'ECLI_NL';
-                  
-                  addLog('ECLI\'s markeren als verwerkt...');
-                  const markResponse = await apiRequest(
-                    'POST',
-                    '/api/processed-eclis/mark',
-                    { eclis: uniqueEclis, namespace }
-                  );
-                  const markData = await markResponse.json();
-                  addLog(`✓ ${markData.marked} ECLI's gemarkeerd als verwerkt`);
-                } catch (error: any) {
-                  console.error('Failed to mark ECLIs as processed:', error);
-                  addLog(`⚠ Waarschuwing: Kon ECLI's niet markeren als verwerkt - ${error.message}`);
-                }
-                
-                // Clear prepared records and chunks ONLY after successful upload
-                setPreparedRecords([]);
-                setChunkedData(null);
-                accumulatedRecordsRef.current = [];
-                
-                // Clear localStorage too
-                localStorage.removeItem('rechtspraak_prepared_records');
-                console.log('[localStorage] Cleared records after successful upload');
-                
-                addLog('✓ Metadata Records tabel geleegd');
-              } else {
-                addLog('⚠ Geen records succesvol geüpload - Metadata Records blijven behouden');
-              }
-              
-              toast({
-                title: "Export voltooid",
-                description: `${data.successCount} van ${data.totalRecords} records succesvol naar Pinecone verstuurd.`,
-              });
-              
-              if (data.errorCount > 0) {
-                toast({
-                  variant: "destructive",
-                  title: "Enkele fouten",
-                  description: `${data.errorCount} records konden niet worden geüpload.`,
-                });
-              }
-            } else if (data.type === 'error') {
-              addLog(`✗ Fout: ${data.error}`);
-              throw new Error(data.error);
-            }
-          }
-        }
-      }
-    } catch (error: any) {
-      addLog(`✗ Export mislukt: ${error.message}`);
-      toast({
-        variant: "destructive",
-        title: "Export mislukt",
-        description: error.message || "Kon niet exporteren naar Pinecone",
-      });
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
   const handleRecordsDiscovered = (discoveredRecords: PreparedRecord[]) => {
     // Add discovered records to prepared records
     setPreparedRecords(prev => [...prev, ...discoveredRecords]);
     accumulatedRecordsRef.current = [...accumulatedRecordsRef.current, ...discoveredRecords];
     
-    addLog(`✓ ${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`);
+    toast({
+      title: 'ECLI Discovery',
+      description: `${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`,
+    });
   };
 
   // Count enriched records (records with AI-generated fields)
@@ -615,8 +340,11 @@ export default function Home() {
     }
 
     setIsEnrichingWithAI(true);
-    addLog(`🤖 Start AI enrichment voor ${preparedRecords.length} records...`);
-    addLog(`📤 Auto-upload naar Pinecone start automatisch in batches van 25...`);
+    
+    toast({
+      title: 'AI Enrichment gestart',
+      description: `${preparedRecords.length} records worden verrijkt. Upload naar Pinecone gebeurt automatisch na voltooiing.`,
+    });
 
     try {
       const eclis = preparedRecords.map(r => r.ecli);
@@ -672,17 +400,12 @@ export default function Home() {
                 setPreparedRecords(data.records || []);
                 accumulatedRecordsRef.current = data.records || [];
                 
-                addLog(`✓ AI enrichment voltooid: ${data.successful} succesvol, ${data.failed} fouten`);
-                
                 toast({
                   title: 'AI Enrichment Voltooid',
-                  description: `${data.successful} records verrijkt met AI samenvattingen`,
+                  description: `${data.successful} records verrijkt. Automatische upload naar Pinecone is gestart.`,
                 });
               } else if (data.type === 'error') {
-                addLog(`✗ Fout: ${data.message}`);
                 throw new Error(data.message || 'AI enrichment fout');
-              } else if (data.message) {
-                addLog(data.message);
               }
             } catch (e: any) {
               if (e.message && e.message.includes('AI enrichment fout')) {
@@ -695,7 +418,6 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('[AI Enrichment] Error:', error);
-      addLog(`✗ AI enrichment mislukt: ${error.message}`);
       toast({
         title: 'Fout bij AI Enrichment',
         description: error.message || 'Er is een fout opgetreden',
@@ -722,24 +444,10 @@ export default function Home() {
         <RecordPreparation
           ecliCount={preparedRecords.length}
           preparedRecords={preparedRecords}
-          chunkedData={chunkedData}
-          onPrepareChunks={handlePrepareChunks}
-          onFetchContent={() => {}}
           onClear={handleClearRecords}
           onEnrichWithAI={handleEnrichWithAI}
           isLoading={isFetchingContent}
-          isPreparingChunks={isPreparingChunks}
           isEnrichingWithAI={isEnrichingWithAI}
-        />
-
-        <PineconeExport
-          recordCount={chunkedData?.allChunks?.length || preparedRecords.length}
-          enrichedRecordCount={countEnrichedRecords(preparedRecords)}
-          isChunked={!!chunkedData}
-          civilSubcategory={currentCivilSubcategory}
-          onExport={handleExport}
-          isExporting={isExporting}
-          exportLogs={exportLogs}
         />
       </main>
     </div>
