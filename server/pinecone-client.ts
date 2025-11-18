@@ -289,6 +289,8 @@ export async function upsertRecordsToPinecone(
   // Format: index-name-abc123.svc.region.pinecone.io
   const indexName = indexHost.split('.')[0];
   
+  console.log(`[Pinecone] Connecting to index "${indexName}" with host "${indexHost}"`);
+  
   // This implementation uses Pinecone's Inference API to generate dense embeddings
   // using the 'multilingual-e5-large' model, which supports Dutch text well.
   // Additionally, it generates sparse vectors (BM25-like) for hybrid search support.
@@ -296,6 +298,8 @@ export async function upsertRecordsToPinecone(
   // Use the full host URL to bypass index lookup
   const index = pc.index(indexName, indexHost);
   const targetNamespace = namespace || '';
+  
+  console.log(`[Pinecone] Target namespace: "${targetNamespace}"`);
   
   // Enforce Pinecone Inference API limit for multilingual-e5-large model
   const safeBatchSize = Math.min(batchSize, 96);
@@ -459,9 +463,23 @@ export async function upsertRecordsToPinecone(
       });
       
       // Step 4: Upsert hybrid vectors (dense + sparse) to Pinecone
-      const upsertResponse: any = await index.namespace(targetNamespace).upsert(vectors);
+      console.log(`[Pinecone] About to upsert ${vectors.length} vectors to namespace "${targetNamespace}"...`);
+      console.log(`[Pinecone] First vector sample:`, {
+        id: vectors[0]?.id,
+        valuesLength: vectors[0]?.values?.length,
+        hasSparseValues: !!vectors[0]?.sparseValues,
+        metadataKeys: vectors[0]?.metadata ? Object.keys(vectors[0].metadata) : []
+      });
       
-      console.log(`[Pinecone] Upsert response for batch (size ${vectors.length}):`, JSON.stringify(upsertResponse));
+      try {
+        const upsertResponse: any = await index.namespace(targetNamespace).upsert(vectors);
+        console.log(`[Pinecone] Upsert response for batch (size ${vectors.length}):`, JSON.stringify(upsertResponse));
+        console.log(`[Pinecone] Upsert response type:`, typeof upsertResponse);
+        console.log(`[Pinecone] Upsert response keys:`, upsertResponse ? Object.keys(upsertResponse) : 'null/undefined');
+      } catch (upsertError: any) {
+        console.error(`[Pinecone] ✗ UPSERT FAILED:`, upsertError);
+        throw upsertError;
+      }
       
       // Step 5: CRITICAL FIX - Verify which records actually made it into Pinecone
       // Use retry loop with exponential backoff to accommodate Pinecone's eventual consistency
