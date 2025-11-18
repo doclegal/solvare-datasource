@@ -1415,6 +1415,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test upload: Upload first 5 enriched records to Pinecone
+  app.post('/api/pinecone/test-upload', async (req: Request, res: Response) => {
+    try {
+      // Get first 5 enriched records from database
+      const { enrichedBatchRecords } = await import('@shared/schema');
+      const enrichedRows = await db
+        .select()
+        .from(enrichedBatchRecords)
+        .where(eq(enrichedBatchRecords.isEnriched, true))
+        .limit(5);
+      
+      if (enrichedRows.length === 0) {
+        return res.json({
+          message: 'Geen enriched records gevonden om te uploaden',
+          uploaded: 0,
+        });
+      }
+      
+      const enrichedRecords = enrichedRows.map(row => row.recordData as unknown as PreparedRecord);
+      
+      console.log(`[Test Upload] Uploaden van ${enrichedRecords.length} records naar Pinecone...`);
+      
+      // Check which are already uploaded
+      const eclis = enrichedRecords.map((r: PreparedRecord) => r.ecli);
+      const processedRecords = await db.select()
+        .from(processedEclis)
+        .where(
+          and(
+            inArray(processedEclis.ecli, eclis),
+            eq(processedEclis.namespace, PINECONE_NAMESPACE)
+          )
+        );
+      
+      const processedEcliSet = new Set(processedRecords.map((r: any) => r.ecli));
+      const recordsToUpload = enrichedRecords.filter((r: PreparedRecord) => !processedEcliSet.has(r.ecli));
+      
+      if (recordsToUpload.length === 0) {
+        return res.json({
+          message: 'Alle records zijn al geüpload naar Pinecone',
+          totalChecked: enrichedRecords.length,
+          alreadyUploaded: processedRecords.length,
+          uploaded: 0,
+        });
+      }
+      
+      console.log(`[Test Upload] ${recordsToUpload.length} nieuwe records (${processedRecords.length} al geüpload)`);
+      
+      // Upload to Pinecone with verification
+      const result = await upsertRecordsToPinecone(
+        PINECONE_INDEX_HOST,
+        recordsToUpload,
+        PINECONE_NAMESPACE
+      );
+      
+      // Mark successfully uploaded ECLIs as processed
+      if (result.succeededEclis.length > 0) {
+        await db.insert(processedEclis).values(
+          result.succeededEclis.map(ecli => ({
+            ecli,
+            namespace: PINECONE_NAMESPACE,
+          }))
+        ).onConflictDoNothing();
+        
+        console.log(`[Test Upload] ✓ ${result.succeededEclis.length} ECLIs geverifieerd en gemarkeerd`);
+      }
+      
+      res.json({
+        message: 'Test upload voltooid',
+        totalChecked: enrichedRecords.length,
+        alreadyUploaded: processedRecords.length,
+        newRecords: recordsToUpload.length,
+        uploaded: result.successCount,
+        failed: result.errorCount,
+        succeededEclis: result.succeededEclis,
+        failedEclis: result.failedEclis.length > 0 ? result.failedEclis : undefined,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+      });
+    } catch (error: any) {
+      console.error('[Test Upload] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 

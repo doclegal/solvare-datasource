@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { FileText, Trash2, ExternalLink, Sparkles, Info } from "lucide-react";
+import { FileText, Trash2, ExternalLink, Sparkles, Info, Upload } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export interface PreparedRecord {
   ecli: string;
@@ -39,6 +41,8 @@ export default function RecordPreparation({
   isEnrichingWithAI = false,
 }: RecordPreparationProps) {
   const [expandedText, setExpandedText] = useState<Set<string>>(new Set());
+  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
 
   const toggleExpanded = (ecli: string) => {
     const newExpanded = new Set(expandedText);
@@ -63,6 +67,29 @@ export default function RecordPreparation({
     r.ai_title || r.ai_inhoudsindicatie || r.ai_feiten || 
     r.ai_geschil || r.ai_beslissing || r.ai_motivering
   ).length;
+
+  const handleTestUpload = async () => {
+    setIsUploading(true);
+    try {
+      const response = await apiRequest('POST', '/api/pinecone/test-upload');
+      const data = await response.json();
+      
+      toast({
+        title: 'Upload Voltooid',
+        description: `${data.uploaded || 0} records geüpload naar Pinecone. ${data.alreadyUploaded > 0 ? `${data.alreadyUploaded} al geüpload.` : ''}`,
+      });
+      
+      console.log('[Test Upload] Result:', data);
+    } catch (error: any) {
+      toast({
+        title: 'Upload Mislukt',
+        description: error.message || 'Er is een fout opgetreden',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <Card>
@@ -237,6 +264,24 @@ export default function RecordPreparation({
           </div>
         )}
       </CardContent>
+      
+      {enrichedCount > 0 && (
+        <CardFooter className="flex justify-between items-center border-t pt-4">
+          <p className="text-sm text-muted-foreground">
+            Test de Pinecone upload door de eerste 5 verrijkte records te uploaden
+          </p>
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={handleTestUpload}
+            disabled={isUploading}
+            data-testid="button-test-upload"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            {isUploading ? 'Bezig met uploaden...' : 'Test Upload naar Pinecone'}
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 }
