@@ -71,12 +71,12 @@ export default function RecordPreparation({
   const handleTestUpload = async () => {
     setIsUploading(true);
     try {
-      const response = await apiRequest('POST', '/api/pinecone/test-upload');
+      const response = await apiRequest('POST', '/api/pinecone/test-upload', { force: true });
       const data = await response.json();
       
       toast({
         title: 'Upload Voltooid',
-        description: `${data.uploaded || 0} records geüpload naar Pinecone. ${data.alreadyUploaded > 0 ? `${data.alreadyUploaded} al geüpload.` : ''}`,
+        description: `${data.uploaded || 0} records geüpload naar Pinecone. ${data.alreadyUploaded > 0 ? `${data.alreadyUploaded} overschreven.` : ''}`,
       });
       
       console.log('[Test Upload] Result:', data);

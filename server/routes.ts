@@ -1418,6 +1418,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Test upload: Upload first 5 enriched records to Pinecone
   app.post('/api/pinecone/test-upload', async (req: Request, res: Response) => {
     try {
+      const { force } = req.body; // Optional force parameter to re-upload already processed records
+      
       // Get first 5 enriched records from database
       const { enrichedBatchRecords } = await import('@shared/schema');
       const enrichedRows = await db
@@ -1435,32 +1437,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const enrichedRecords = enrichedRows.map(row => row.recordData as unknown as PreparedRecord);
       
-      console.log(`[Test Upload] Uploaden van ${enrichedRecords.length} records naar Pinecone...`);
+      console.log(`[Test Upload] Uploaden van ${enrichedRecords.length} records naar Pinecone... (force: ${force})`);
       
-      // Check which are already uploaded
-      const eclis = enrichedRecords.map((r: PreparedRecord) => r.ecli);
-      const processedRecords = await db.select()
-        .from(processedEclis)
-        .where(
-          and(
-            inArray(processedEclis.ecli, eclis),
-            eq(processedEclis.namespace, PINECONE_NAMESPACE)
-          )
-        );
+      let recordsToUpload = enrichedRecords;
+      let alreadyUploadedCount = 0;
       
-      const processedEcliSet = new Set(processedRecords.map((r: any) => r.ecli));
-      const recordsToUpload = enrichedRecords.filter((r: PreparedRecord) => !processedEcliSet.has(r.ecli));
-      
-      if (recordsToUpload.length === 0) {
-        return res.json({
-          message: 'Alle records zijn al geüpload naar Pinecone',
-          totalChecked: enrichedRecords.length,
-          alreadyUploaded: processedRecords.length,
-          uploaded: 0,
-        });
+      // Only check for already uploaded if not forcing
+      if (!force) {
+        const eclis = enrichedRecords.map((r: PreparedRecord) => r.ecli);
+        const processedRecords = await db.select()
+          .from(processedEclis)
+          .where(
+            and(
+              inArray(processedEclis.ecli, eclis),
+              eq(processedEclis.namespace, PINECONE_NAMESPACE)
+            )
+          );
+        
+        const processedEcliSet = new Set(processedRecords.map((r: any) => r.ecli));
+        alreadyUploadedCount = processedRecords.length;
+        recordsToUpload = enrichedRecords.filter((r: PreparedRecord) => !processedEcliSet.has(r.ecli));
+        
+        if (recordsToUpload.length === 0) {
+          return res.json({
+            message: 'Alle records zijn al geüpload naar Pinecone. Gebruik force=true om opnieuw te uploaden.',
+            totalChecked: enrichedRecords.length,
+            alreadyUploaded: processedRecords.length,
+            uploaded: 0,
+          });
+        }
+        
+        console.log(`[Test Upload] ${recordsToUpload.length} nieuwe records (${processedRecords.length} al geüpload)`);
+      } else {
+        console.log(`[Test Upload] Force mode: alle ${recordsToUpload.length} records worden geüpload (overschrijven)`);
       }
-      
-      console.log(`[Test Upload] ${recordsToUpload.length} nieuwe records (${processedRecords.length} al geüpload)`);
       
       // Upload to Pinecone with verification
       const result = await upsertRecordsToPinecone(
@@ -1482,9 +1492,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json({
-        message: 'Test upload voltooid',
+        message: force ? 'Test upload voltooid (force mode - records overschreven)' : 'Test upload voltooid',
         totalChecked: enrichedRecords.length,
-        alreadyUploaded: processedRecords.length,
+        alreadyUploaded: alreadyUploadedCount,
         newRecords: recordsToUpload.length,
         uploaded: result.successCount,
         failed: result.errorCount,
