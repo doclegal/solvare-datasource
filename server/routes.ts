@@ -765,7 +765,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { Pinecone } = await import('@pinecone-database/pinecone');
-      const pc = new Pinecone({ apiKey });
+      const pc = new Pinecone({ apiKey: apiKey as string });
       
       const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
       const indexName = indexHost.split('.')[0];
