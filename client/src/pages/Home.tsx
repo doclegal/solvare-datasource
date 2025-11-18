@@ -197,8 +197,6 @@ export default function Home() {
               const data = JSON.parse(line.slice(6));
               
               if (data.type === 'complete') {
-                console.log('[AI Enrichment] Completion:', data.records?.length, 'records');
-                
                 // Update records with enriched data
                 setPreparedRecords(data.records || []);
                 
