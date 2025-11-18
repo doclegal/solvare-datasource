@@ -6,7 +6,7 @@ import { upsertRecordsToPinecone } from "./pinecone-client";
 import { createChunksFromRecord } from "./chunking";
 import { storage } from "./storage";
 import { db, processedEclis } from "./db";
-import { inArray, eq, and } from "drizzle-orm";
+import { inArray, eq, and, desc } from "drizzle-orm";
 import { discoverECLIs, type DiscoveryProgress } from "./discovery/service";
 import { generateAISummary } from "./openai-summary";
 import { z } from "zod";

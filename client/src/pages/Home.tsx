@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
+import UploadedEcliList from "@/components/UploadedEcliList";
 import { EcliDiscovery } from "@/components/EcliDiscovery";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -458,12 +459,19 @@ export default function Home() {
           isLoading={isFetchingContent}
         />
 
-        <RecordPreparation
-          preparedRecords={preparedRecords}
-          onClear={handleClearRecords}
-          onEnrichWithAI={handleEnrichWithAI}
-          isEnrichingWithAI={isEnrichingWithAI}
-        />
+        <div className="flex gap-6">
+          <div className="flex-1">
+            <RecordPreparation
+              preparedRecords={preparedRecords}
+              onClear={handleClearRecords}
+              onEnrichWithAI={handleEnrichWithAI}
+              isEnrichingWithAI={isEnrichingWithAI}
+            />
+          </div>
+          <div className="w-80">
+            <UploadedEcliList />
+          </div>
+        </div>
       </main>
     </div>
   );
