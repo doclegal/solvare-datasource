@@ -26,20 +26,16 @@ export interface PreparedRecord {
 }
 
 interface RecordPreparationProps {
-  ecliCount: number;
   preparedRecords: PreparedRecord[];
   onClear: () => void;
   onEnrichWithAI?: () => void;
-  isLoading?: boolean;
   isEnrichingWithAI?: boolean;
 }
 
 export default function RecordPreparation({
-  ecliCount,
   preparedRecords,
   onClear,
   onEnrichWithAI,
-  isLoading = false,
   isEnrichingWithAI = false,
 }: RecordPreparationProps) {
   const [expandedText, setExpandedText] = useState<Set<string>>(new Set());

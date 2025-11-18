@@ -274,6 +274,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get enriched records from a batch (for recovery after SSE interruption)
+  app.get('/api/rechtspraak/batch/:batchId/enriched', async (req: Request, res: Response) => {
+    try {
+      const { batchId } = req.params;
+      
+      const batch = await storage.getBatch(batchId);
+      if (!batch) {
+        return res.status(404).json({ error: 'Batch niet gevonden' });
+      }
+      
+      // Return records without fullText to keep payload small
+      const recordsWithoutFullText = batch.records.map(({ fullText, ...record }: any) => record);
+      
+      res.json({
+        records: recordsWithoutFullText,
+        batchId: batch.batchId,
+        total: batch.records.length,
+      });
+    } catch (error: any) {
+      console.error('Error fetching batch enriched records:', error);
+      res.status(500).json({ error: error.message || 'Fout bij ophalen van batch records' });
+    }
+  });
+
   // Auto-upload enriched records to Pinecone (streaming progress via SSE)
   app.post('/api/pinecone/auto-upload-monitor', async (req: Request, res: Response) => {
     try {

@@ -408,9 +408,36 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('[AI Enrichment] Error:', error);
+      
+      // Try to recover enriched records from batch ID in localStorage
+      const batchId = localStorage.getItem('rechtspraak_enrichment_batch_id');
+      if (batchId) {
+        console.log('[AI Enrichment] Attempting recovery from batch ID:', batchId);
+        try {
+          const recoveryResponse = await fetch(`/api/rechtspraak/batch/${batchId}/enriched`);
+          if (recoveryResponse.ok) {
+            const recoveryData = await recoveryResponse.json();
+            if (recoveryData.records && recoveryData.records.length > 0) {
+              console.log('[AI Enrichment] Successfully recovered', recoveryData.records.length, 'enriched records');
+              setPreparedRecords(recoveryData.records);
+              accumulatedRecordsRef.current = recoveryData.records;
+              localStorage.removeItem('rechtspraak_enrichment_batch_id');
+              
+              toast({
+                title: 'AI Enrichment Voltooid',
+                description: `${recoveryData.records.length} records verrijkt (hersteld na onderbreking). Automatische upload naar Pinecone is gestart.`,
+              });
+              return; // Exit without showing error
+            }
+          }
+        } catch (recoveryError) {
+          console.error('[AI Enrichment] Recovery failed:', recoveryError);
+        }
+      }
+      
       toast({
         title: 'Fout bij AI Enrichment',
-        description: error.message || 'Er is een fout opgetreden',
+        description: error.message || 'Er is een fout opgetreden. Probeer het opnieuw.',
         variant: 'destructive',
       });
     } finally {
@@ -432,11 +459,9 @@ export default function Home() {
         />
 
         <RecordPreparation
-          ecliCount={preparedRecords.length}
           preparedRecords={preparedRecords}
           onClear={handleClearRecords}
           onEnrichWithAI={handleEnrichWithAI}
-          isLoading={isFetchingContent}
           isEnrichingWithAI={isEnrichingWithAI}
         />
       </main>
