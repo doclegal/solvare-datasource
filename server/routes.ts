@@ -1306,6 +1306,115 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Force upload all enriched records endpoint (for manual trigger)
+  app.post('/api/pinecone/force-upload-enriched', async (req: Request, res: Response) => {
+    try {
+      // Import required modules
+      const { enrichedBatchRecords } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+      
+      // Get all enriched records
+      const enrichedRecords = await db
+        .select()
+        .from(enrichedBatchRecords)
+        .where(eq(enrichedBatchRecords.isEnriched, true));
+      
+      console.log(`[Force Upload] Found ${enrichedRecords.length} total enriched records`);
+      
+      // Get already processed ECLIs
+      const processedRecords = await db
+        .select({ ecli: processedEclis.ecli })
+        .from(processedEclis)
+        .where(eq(processedEclis.namespace, PINECONE_NAMESPACE));
+      
+      const processedEcliSet = new Set(processedRecords.map(r => r.ecli));
+      console.log(`[Force Upload] ${processedRecords.length} already in processed_eclis`);
+      
+      // Filter out already processed
+      const recordsToUpload = enrichedRecords.filter(r => !processedEcliSet.has(r.ecli));
+      
+      console.log(`[Force Upload] ${recordsToUpload.length} records to upload`);
+      
+      if (recordsToUpload.length === 0) {
+        return res.json({
+          message: 'Geen nieuwe verrijkte records om te uploaden',
+          totalEnriched: enrichedRecords.length,
+          alreadyUploaded: processedRecords.length,
+          newRecords: 0,
+        });
+      }
+      
+      // Process in batches
+      const BATCH_SIZE = 25;
+      const totalBatches = Math.ceil(recordsToUpload.length / BATCH_SIZE);
+      let totalSuccess = 0;
+      let totalFailed = 0;
+      const failedEclis: string[] = [];
+      
+      for (let i = 0; i < totalBatches; i++) {
+        const start = i * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, recordsToUpload.length);
+        const batch = recordsToUpload.slice(start, end);
+        
+        console.log(`[Force Upload] Processing batch ${i + 1}/${totalBatches} (${batch.length} records)`);
+        
+        const preparedRecords: PreparedRecord[] = batch.map(r => r.recordData as PreparedRecord);
+        
+        try {
+          const result = await upsertRecordsToPinecone(
+            PINECONE_INDEX_HOST,
+            preparedRecords,
+            PINECONE_NAMESPACE,
+            BATCH_SIZE
+          );
+          
+          totalSuccess += result.successCount;
+          totalFailed += result.errorCount;
+          
+          // Mark successfully uploaded ECLIs as processed
+          if (result.succeededEclis.length > 0) {
+            await db.insert(processedEclis).values(
+              result.succeededEclis.map(ecli => ({
+                ecli,
+                namespace: PINECONE_NAMESPACE,
+              }))
+            ).onConflictDoNothing();
+            
+            console.log(`[Force Upload] ✓ Marked ${result.succeededEclis.length} ECLIs as processed`);
+          }
+          
+          // Track failures
+          if (result.failedEclis.length > 0) {
+            failedEclis.push(...result.failedEclis);
+            console.error(`[Force Upload] ✗ ${result.failedEclis.length} failed:`, result.failedEclis);
+          }
+          
+          // Small delay between batches
+          if (i < totalBatches - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (error: any) {
+          console.error(`[Force Upload] Batch ${i + 1} error:`, error);
+          totalFailed += batch.length;
+          failedEclis.push(...batch.map(r => r.ecli));
+        }
+      }
+      
+      res.json({
+        message: 'Force upload voltooid',
+        totalEnriched: enrichedRecords.length,
+        alreadyUploaded: processedRecords.length,
+        newRecords: recordsToUpload.length,
+        uploaded: totalSuccess,
+        failed: totalFailed,
+        failedEclis: failedEclis.length > 0 ? failedEclis : undefined,
+      });
+    } catch (error: any) {
+      console.error('[Force Upload] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 

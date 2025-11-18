@@ -78,5 +78,18 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // START AUTO-UPLOAD WORKER ON SERVER STARTUP
+    // This ensures enriched records are automatically uploaded even if server restarts
+    (async () => {
+      try {
+        const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
+        const worker = getGlobalAutoUploadWorker();
+        await worker.start();
+        console.log('[Server] Auto-upload worker started successfully');
+      } catch (error) {
+        console.error('[Server] Failed to start auto-upload worker:', error);
+      }
+    })();
   });
 })();
