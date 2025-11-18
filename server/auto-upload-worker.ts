@@ -170,13 +170,21 @@ export class AutoUploadWorker {
           totalSuccessCount += result.successCount;
           totalErrorCount += result.errorCount;
 
-          // Mark as processed in database
-          const eclis = preparedRecords.map(r => r.ecli);
-          await this.markAsProcessed(eclis);
+          // CRITICAL FIX: Only mark successfully uploaded ECLIs as processed
+          // This prevents the 444 vs 261 sync issue
+          if (result.succeededEclis.length > 0) {
+            await this.markAsProcessed(result.succeededEclis);
+            console.log(`[Auto-Upload] ✓ Marked ${result.succeededEclis.length} ECLIs as processed`);
+          }
+          
+          // Log failures so they can be retried on next run
+          if (result.failedEclis.length > 0) {
+            console.error(`[Auto-Upload] ✗ ${result.failedEclis.length} ECLIs failed and will be retried:`, result.failedEclis);
+          }
 
           this.sendProgress({
             type: 'progress',
-            message: `✓ Batch ${i + 1}/${totalBatches} voltooid (${result.successCount} succesvol)`,
+            message: `✓ Batch ${i + 1}/${totalBatches} voltooid (${result.successCount} succesvol${result.failedEclis.length > 0 ? `, ${result.failedEclis.length} gefaald` : ''})`,
             currentBatch: i + 1,
             totalBatches,
             successCount: result.successCount,

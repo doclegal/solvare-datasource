@@ -118,6 +118,8 @@ interface UploadProgress {
   successCount: number;
   errorCount: number;
   errors: Array<{ ecli: string; error: string }>;
+  succeededEclis: string[];  // NEW: Track which ECLIs succeeded
+  failedEclis: string[];      // NEW: Track which ECLIs failed
 }
 
 type ExportableRecord = PreparedRecord | ChunkedRecord;
@@ -272,6 +274,8 @@ export async function upsertRecordsToPinecone(
     successCount: 0,
     errorCount: 0,
     errors: [],
+    succeededEclis: [],
+    failedEclis: [],
   };
   
   // Process records in batches (max 96 per batch due to Pinecone Inference API limit)
@@ -425,6 +429,10 @@ export async function upsertRecordsToPinecone(
       // Step 4: Upsert hybrid vectors (dense + sparse) to Pinecone
       await index.namespace(targetNamespace).upsert(vectors);
       
+      // Track succeeded ECLIs
+      const batchEclis = batch.map(r => r.ecli);
+      progress.succeededEclis.push(...batchEclis);
+      
       progress.processedRecords += batch.length;
       progress.successCount += batch.length;
       
@@ -433,6 +441,10 @@ export async function upsertRecordsToPinecone(
       }
     } catch (error: any) {
       console.error(`Error upserting batch starting at index ${i}:`, error);
+      
+      // Track failed ECLIs
+      const batchEclis = batch.map(r => r.ecli);
+      progress.failedEclis.push(...batchEclis);
       
       // Record errors for this batch
       batch.forEach(record => {
