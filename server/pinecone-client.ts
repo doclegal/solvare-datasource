@@ -296,10 +296,11 @@ export async function upsertRecordsToPinecone(
   // Additionally, it generates sparse vectors (BM25-like) for hybrid search support.
   // Both vector types are uploaded to your Pinecone index for optimal retrieval.
   
-  // CRITICAL FIX: Use index name only (SDK will use the API key to find the correct host)
-  // The second parameter (host) is optional and may cause issues if specified incorrectly
-  console.log(`[Pinecone] Attempting to connect WITHOUT explicit host (letting SDK auto-discover)...`);
-  const index = pc.index(indexName);
+  // CRITICAL: Must provide host parameter with https:// prefix to bypass control plane index lookup
+  // The index exists but SDK can't find it via control plane, so we specify the host directly
+  const fullHostUrl = indexHost.startsWith('https://') ? indexHost : `https://${indexHost}`;
+  console.log(`[Pinecone] Using full host URL: "${fullHostUrl}"`);
+  const index = pc.index(indexName, fullHostUrl);
   const targetNamespace = namespace || '';
   
   console.log(`[Pinecone] Target namespace: "${targetNamespace}"`);
