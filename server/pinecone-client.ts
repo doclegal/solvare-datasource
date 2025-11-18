@@ -295,8 +295,11 @@ export async function upsertRecordsToPinecone(
   // using the 'multilingual-e5-large' model, which supports Dutch text well.
   // Additionally, it generates sparse vectors (BM25-like) for hybrid search support.
   // Both vector types are uploaded to your Pinecone index for optimal retrieval.
-  // Use the full host URL to bypass index lookup
-  const index = pc.index(indexName, indexHost);
+  
+  // CRITICAL FIX: Use index name only (SDK will use the API key to find the correct host)
+  // The second parameter (host) is optional and may cause issues if specified incorrectly
+  console.log(`[Pinecone] Attempting to connect WITHOUT explicit host (letting SDK auto-discover)...`);
+  const index = pc.index(indexName);
   const targetNamespace = namespace || '';
   
   console.log(`[Pinecone] Target namespace: "${targetNamespace}"`);
