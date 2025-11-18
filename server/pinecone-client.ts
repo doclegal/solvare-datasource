@@ -237,38 +237,6 @@ export async function upsertSingleRecordToPinecone(
       metadata,
     }]);
     
-    // Verify the upload with retry loop (exponential backoff)
-    const maxRetries = 3;
-    let retryCount = 0;
-    let verified = false;
-    
-    while (retryCount < maxRetries && !verified) {
-      const delayMs = 500 * Math.pow(2, retryCount);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-      
-      try {
-        const fetchResponse = await index.namespace(namespace).fetch([vectorId]);
-        if (fetchResponse && fetchResponse.records && fetchResponse.records[vectorId]) {
-          verified = true;
-          console.log(`[Pinecone] ✓ Verified vector ${vectorId} in Pinecone (attempt ${retryCount + 1})`);
-        } else if (retryCount < maxRetries - 1) {
-          console.log(`[Pinecone] ⏳ Vector ${vectorId} not found, retrying (attempt ${retryCount + 1})...`);
-          retryCount++;
-        } else {
-          console.error(`[Pinecone] ✗ Vector ${vectorId} not found after ${maxRetries} attempts`);
-          return { success: false, error: `Vector not found in Pinecone after ${maxRetries} verification attempts` };
-        }
-      } catch (fetchError: any) {
-        if (retryCount < maxRetries - 1) {
-          console.log(`[Pinecone] ⏳ Verification fetch failed for ${vectorId} (attempt ${retryCount + 1}), retrying:`, fetchError.message);
-          retryCount++;
-        } else {
-          console.error(`[Pinecone] ✗ Verification fetch failed for ${vectorId} after ${maxRetries} attempts:`, fetchError.message);
-          return { success: false, error: `Verification failed after ${maxRetries} attempts: ${fetchError.message}` };
-        }
-      }
-    }
-    
     return { success: true };
   } catch (error: any) {
     console.error(`[Pinecone] Failed to upload ${record.ecli}:`, error.message);
@@ -289,21 +257,13 @@ export async function upsertRecordsToPinecone(
   // Format: index-name-abc123.svc.region.pinecone.io
   const indexName = indexHost.split('.')[0];
   
-  console.log(`[Pinecone] Connecting to index "${indexName}" with host "${indexHost}"`);
-  
   // This implementation uses Pinecone's Inference API to generate dense embeddings
   // using the 'multilingual-e5-large' model, which supports Dutch text well.
   // Additionally, it generates sparse vectors (BM25-like) for hybrid search support.
   // Both vector types are uploaded to your Pinecone index for optimal retrieval.
-  
-  // CRITICAL: Must provide host parameter with https:// prefix to bypass control plane index lookup
-  // The index exists but SDK can't find it via control plane, so we specify the host directly
-  const fullHostUrl = indexHost.startsWith('https://') ? indexHost : `https://${indexHost}`;
-  console.log(`[Pinecone] Using full host URL: "${fullHostUrl}"`);
-  const index = pc.index(indexName, fullHostUrl);
+  // Use the full host URL to bypass index lookup
+  const index = pc.index(indexName, indexHost);
   const targetNamespace = namespace || '';
-  
-  console.log(`[Pinecone] Target namespace: "${targetNamespace}"`);
   
   // Enforce Pinecone Inference API limit for multilingual-e5-large model
   const safeBatchSize = Math.min(batchSize, 96);
@@ -467,126 +427,14 @@ export async function upsertRecordsToPinecone(
       });
       
       // Step 4: Upsert hybrid vectors (dense + sparse) to Pinecone
-      console.log(`[Pinecone] About to upsert ${vectors.length} vectors to namespace "${targetNamespace}"...`);
-      console.log(`[Pinecone] First vector sample:`, {
-        id: vectors[0]?.id,
-        valuesLength: vectors[0]?.values?.length,
-        hasSparseValues: !!vectors[0]?.sparseValues,
-        metadataKeys: vectors[0]?.metadata ? Object.keys(vectors[0].metadata) : []
-      });
+      await index.namespace(targetNamespace).upsert(vectors);
       
-      try {
-        const upsertResponse: any = await index.namespace(targetNamespace).upsert(vectors);
-        console.log(`[Pinecone] Upsert response for batch (size ${vectors.length}):`, JSON.stringify(upsertResponse));
-        console.log(`[Pinecone] Upsert response type:`, typeof upsertResponse);
-        console.log(`[Pinecone] Upsert response keys:`, upsertResponse ? Object.keys(upsertResponse) : 'null/undefined');
-      } catch (upsertError: any) {
-        console.error(`[Pinecone] ✗ UPSERT FAILED:`, upsertError);
-        throw upsertError;
-      }
+      // Track succeeded ECLIs
+      const batchEclis = batch.map(r => r.ecli);
+      progress.succeededEclis.push(...batchEclis);
       
-      // Step 5: CRITICAL FIX - Verify which records actually made it into Pinecone
-      // Use retry loop with exponential backoff to accommodate Pinecone's eventual consistency
-      const vectorIds = vectors.map(v => v.id);
-      console.log(`[Pinecone] Verifying ${vectorIds.length} uploaded vectors...`);
-      
-      // Track cumulative verified IDs across retries to prevent losing earlier successes
-      const cumulativeVerifiedIds = new Set<string>();
-      
-      // Retry verification up to 3 times with exponential backoff
-      const maxRetries = 3;
-      
-      for (let retryCount = 0; retryCount < maxRetries; retryCount++) {
-        const delayMs = 500 * Math.pow(2, retryCount); // 500ms, 1000ms, 2000ms
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        
-        try {
-          const fetchResponse = await index.namespace(targetNamespace).fetch(vectorIds);
-          
-          if (fetchResponse && fetchResponse.records) {
-            // Add newly verified IDs to cumulative set (preserves earlier successes)
-            Object.keys(fetchResponse.records).forEach(id => cumulativeVerifiedIds.add(id));
-            
-            const stillUnverified = vectorIds.filter(id => !cumulativeVerifiedIds.has(id));
-            
-            if (stillUnverified.length === 0) {
-              console.log(`[Pinecone] ✓ Verified all ${cumulativeVerifiedIds.size} vectors in Pinecone (attempt ${retryCount + 1})`);
-              break; // All verified, exit retry loop
-            } else if (retryCount < maxRetries - 1) {
-              console.log(`[Pinecone] ⏳ Verified ${cumulativeVerifiedIds.size}/${vectorIds.length}, retrying ${stillUnverified.length} pending...`);
-            } else {
-              console.error(`[Pinecone] ✗ Failed to verify ${stillUnverified.length}/${vectorIds.length} vectors after ${maxRetries} attempts:`, stillUnverified.slice(0, 5));
-            }
-          } else if (retryCount < maxRetries - 1) {
-            console.log(`[Pinecone] ⏳ Fetch returned no records, retrying (attempt ${retryCount + 1})...`);
-          } else {
-            console.error(`[Pinecone] ✗ Fetch returned no records after ${maxRetries} attempts`);
-          }
-        } catch (fetchError: any) {
-          if (retryCount < maxRetries - 1) {
-            console.log(`[Pinecone] ⏳ Verification fetch failed (attempt ${retryCount + 1}), retrying:`, fetchError.message);
-          } else {
-            console.error(`[Pinecone] ✗ Verification fetch failed after ${maxRetries} attempts:`, fetchError.message);
-          }
-        }
-      }
-      
-      const verifiedIds = Array.from(cumulativeVerifiedIds);
-      const failedIds = vectorIds.filter(id => !cumulativeVerifiedIds.has(id));
-      
-      // CRITICAL: Track ECLIs per-ECLI basis - only mark as succeeded if ALL chunks/records for that ECLI are verified
-      // Build map of ECLI -> all vector IDs (chunk_ids or single ECLI)
-      const ecliToVectorIds = new Map<string, string[]>();
-      batch.forEach(record => {
-        const vectorId = isChunkedRecord(record) ? record.chunk_id : record.ecli;
-        const ecli = record.ecli;
-        if (!ecliToVectorIds.has(ecli)) {
-          ecliToVectorIds.set(ecli, []);
-        }
-        ecliToVectorIds.get(ecli)!.push(vectorId);
-      });
-      
-      // Determine which ECLIs are fully verified (all chunks/records present)
-      const fullyVerifiedEclis: string[] = [];
-      const partiallyFailedEclis: string[] = [];
-      
-      ecliToVectorIds.forEach((vectorIdsForEcli, ecli) => {
-        const allChunksVerified = vectorIdsForEcli.every(vid => cumulativeVerifiedIds.has(vid));
-        if (allChunksVerified) {
-          fullyVerifiedEclis.push(ecli);
-        } else {
-          const failedChunks = vectorIdsForEcli.filter(vid => !cumulativeVerifiedIds.has(vid));
-          partiallyFailedEclis.push(ecli);
-          console.error(`[Pinecone] ✗ ECLI ${ecli} partially failed: ${failedChunks.length}/${vectorIdsForEcli.length} chunks missing:`, failedChunks);
-        }
-      });
-      
-      // CRITICAL FIX: Deduplicate ECLIs before adding to progress
-      // Filter out ECLIs already in succeededEclis/failedEclis to prevent duplicates
-      const newSucceededEclis = fullyVerifiedEclis.filter(ecli => 
-        !progress.succeededEclis.includes(ecli) && !progress.failedEclis.includes(ecli)
-      );
-      const newFailedEclis = partiallyFailedEclis.filter(ecli => 
-        !progress.succeededEclis.includes(ecli) && !progress.failedEclis.includes(ecli)
-      );
-      
-      progress.succeededEclis.push(...newSucceededEclis);
-      progress.failedEclis.push(...newFailedEclis);
-      
-      // Align counters: processedRecords counts unique ECLIs (not vectors)
-      // This keeps downstream worker logic consistent
-      progress.processedRecords += newSucceededEclis.length + newFailedEclis.length;
-      progress.successCount += newSucceededEclis.length;
-      progress.errorCount += newFailedEclis.length;
-      
-      // Record detailed errors for failed ECLIs
-      newFailedEclis.forEach(ecli => {
-        const failedChunks = ecliToVectorIds.get(ecli)!.filter(vid => !cumulativeVerifiedIds.has(vid));
-        progress.errors.push({
-          ecli,
-          error: `Partially failed: ${failedChunks.length} of ${ecliToVectorIds.get(ecli)!.length} chunk(s) not verified: ${failedChunks.join(', ')}`,
-        });
-      });
+      progress.processedRecords += batch.length;
+      progress.successCount += batch.length;
       
       if (onProgress) {
         onProgress({ ...progress });
@@ -594,24 +442,20 @@ export async function upsertRecordsToPinecone(
     } catch (error: any) {
       console.error(`Error upserting batch starting at index ${i}:`, error);
       
-      // Track unique failed ECLIs from this batch
-      const batchEclis = Array.from(new Set(batch.map(r => r.ecli)));
-      const newFailedEclis = batchEclis.filter(ecli => 
-        !progress.succeededEclis.includes(ecli) && !progress.failedEclis.includes(ecli)
-      );
+      // Track failed ECLIs
+      const batchEclis = batch.map(r => r.ecli);
+      progress.failedEclis.push(...batchEclis);
       
-      progress.failedEclis.push(...newFailedEclis);
-      
-      // Record errors for failed ECLIs
-      newFailedEclis.forEach(ecli => {
+      // Record errors for this batch
+      batch.forEach(record => {
         progress.errors.push({
-          ecli,
+          ecli: record.ecli,
           error: error.message || 'Onbekende fout',
         });
       });
       
-      progress.processedRecords += newFailedEclis.length;
-      progress.errorCount += newFailedEclis.length;
+      progress.processedRecords += batch.length;
+      progress.errorCount += batch.length;
       
       if (onProgress) {
         onProgress({ ...progress });
