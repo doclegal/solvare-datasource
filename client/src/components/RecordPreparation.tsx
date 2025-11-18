@@ -3,9 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { FileText, Trash2, ExternalLink, Sparkles, Bot } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FileText, Trash2, ExternalLink, Sparkles, Info } from "lucide-react";
 
 export interface PreparedRecord {
   ecli: string;
@@ -26,69 +25,24 @@ export interface PreparedRecord {
   ai_motivering?: string;
 }
 
-interface ChunkedRecord {
-  ecli: string;
-  chunk_id: string;
-  section_type: string;
-  title: string;
-  text: string;
-  [key: string]: any;
-}
-
-interface ChunksByEcli {
-  ecli: string;
-  title: string;
-  totalChunks: number;
-  sectionCounts: Record<string, number>;
-  chunks: ChunkedRecord[];
-}
-
 interface RecordPreparationProps {
   ecliCount: number;
   preparedRecords: PreparedRecord[];
-  chunkedData?: { chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null;
-  onPrepareChunks?: (useLLM: boolean) => void;
-  onFetchContent: () => void;
   onClear: () => void;
   onEnrichWithAI?: () => void;
   isLoading?: boolean;
-  isPreparingChunks?: boolean;
   isEnrichingWithAI?: boolean;
 }
-
-const SECTION_TYPE_LABELS: Record<string, string> = {
-  summary: 'Samenvatting',
-  claims: 'Vorderingen',
-  facts: 'Feiten',
-  reasoning: 'Beoordeling',
-  decision: 'Beslissing',
-  other: 'Overig',
-};
-
-const SECTION_TYPE_COLORS: Record<string, string> = {
-  summary: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  claims: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  facts: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  reasoning: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-  decision: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  other: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
-};
 
 export default function RecordPreparation({
   ecliCount,
   preparedRecords,
-  chunkedData,
-  onPrepareChunks,
-  onFetchContent,
   onClear,
   onEnrichWithAI,
   isLoading = false,
-  isPreparingChunks = false,
   isEnrichingWithAI = false,
 }: RecordPreparationProps) {
   const [expandedText, setExpandedText] = useState<Set<string>>(new Set());
-  const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
-  const [useLLMChunking, setUseLLMChunking] = useState(false);
 
   const toggleExpanded = (ecli: string) => {
     const newExpanded = new Set(expandedText);
@@ -100,16 +54,6 @@ export default function RecordPreparation({
     setExpandedText(newExpanded);
   };
 
-  const toggleChunkExpanded = (chunkId: string) => {
-    const newExpanded = new Set(expandedChunks);
-    if (newExpanded.has(chunkId)) {
-      newExpanded.delete(chunkId);
-    } else {
-      newExpanded.add(chunkId);
-    }
-    setExpandedChunks(newExpanded);
-  };
-
   const truncateText = (text: string, ecli: string) => {
     const maxLength = 300;
     if (text.length <= maxLength || expandedText.has(ecli)) {
@@ -118,25 +62,26 @@ export default function RecordPreparation({
     return text.substring(0, maxLength) + "...";
   };
   
-  const truncateChunkText = (text: string, chunkId: string) => {
-    const maxLength = 200;
-    if (text.length <= maxLength || expandedChunks.has(chunkId)) {
-      return text;
-    }
-    return text.substring(0, maxLength) + "...";
-  };
+  // Count enriched records
+  const enrichedCount = preparedRecords.filter(r => 
+    r.ai_title || r.ai_inhoudsindicatie || r.ai_feiten || 
+    r.ai_geschil || r.ai_beslissing || r.ai_motivering
+  ).length;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="space-y-1">
             <CardTitle>Metadata Records</CardTitle>
             <CardDescription>
-              {chunkedData 
-                ? `${chunkedData.allChunks.length} chunks voorbereid uit ${preparedRecords.length} uitspraken`
-                : `Civielrechtelijke uitspraken met metadata${preparedRecords.length > 0 ? ` • ${preparedRecords.length} records` : ''}`
-              }
+              {preparedRecords.length > 0 ? (
+                <>
+                  {preparedRecords.length} records • {enrichedCount} AI-verrijkt
+                </>
+              ) : (
+                'Civielrechtelijke uitspraken met metadata'
+              )}
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -149,7 +94,7 @@ export default function RecordPreparation({
                 data-testid="button-enrich-ai"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
-                {isEnrichingWithAI ? 'Bezig met verrijken...' : 'Genereer AI Samenvatting'}
+                {isEnrichingWithAI ? 'Bezig met verrijken...' : 'Start AI Verrijking'}
               </Button>
             )}
             {preparedRecords.length > 0 && (
@@ -166,81 +111,16 @@ export default function RecordPreparation({
           <div className="text-center py-12 text-muted-foreground">
             <p>Gebruik de filters hierboven om uitspraken met metadata op te halen.</p>
           </div>
-        ) : chunkedData ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">
-                {Object.keys(chunkedData.chunksByEcli).length} uitspraken • {chunkedData.allChunks.length} chunks
-              </p>
-            </div>
-            
-            <Accordion type="multiple" className="space-y-2">
-              {Object.values(chunkedData.chunksByEcli).map((ecliData) => (
-                <AccordionItem 
-                  key={ecliData.ecli} 
-                  value={ecliData.ecli}
-                  className="border rounded-md px-4"
-                  data-testid={`accordion-chunks-${ecliData.ecli}`}
-                >
-                  <AccordionTrigger className="hover:no-underline">
-                    <div className="flex items-center gap-3 text-left flex-wrap">
-                      <span className="font-mono text-sm font-medium">{ecliData.ecli}</span>
-                      <Badge variant="secondary">{ecliData.totalChunks} chunks</Badge>
-                      {Object.entries(ecliData.sectionCounts).map(([type, count]) => (
-                        <Badge 
-                          key={type} 
-                          className={`text-xs ${SECTION_TYPE_COLORS[type] || ''}`}
-                        >
-                          {SECTION_TYPE_LABELS[type] || type}: {count}
-                        </Badge>
-                      ))}
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="space-y-3 pt-3">
-                    <div className="space-y-2">
-                      {ecliData.chunks.map((chunk, idx) => (
-                        <div key={chunk.chunk_id} className="border rounded-md p-3 bg-muted/30">
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2">
-                              <Badge className={`text-xs ${SECTION_TYPE_COLORS[chunk.section_type] || ''}`}>
-                                {SECTION_TYPE_LABELS[chunk.section_type] || chunk.section_type}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground font-mono">
-                                #{idx + 1}
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {chunk.text.length} tekens
-                            </span>
-                          </div>
-                          <div className="bg-background p-2 rounded text-sm font-mono whitespace-pre-wrap">
-                            {truncateChunkText(chunk.text, chunk.chunk_id)}
-                          </div>
-                          {chunk.text.length > 200 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="mt-2 p-0 h-auto text-xs"
-                              onClick={() => toggleChunkExpanded(chunk.chunk_id)}
-                            >
-                              {expandedChunks.has(chunk.chunk_id) ? "Minder tonen" : "Meer tonen"}
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">
-                {preparedRecords.length} records voorbereid
-              </p>
-            </div>
+            {enrichedCount > 0 && (
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Records worden automatisch geüpload naar Pinecone na AI verrijking. Handmatige upload is niet meer nodig.
+                </AlertDescription>
+              </Alert>
+            )}
             
             <Accordion type="multiple" className="space-y-2">
               {preparedRecords.map((record, idx) => (

@@ -137,11 +137,9 @@ export default function Home() {
         accumulatedRecordsRef.current = [];
         currentOffsetRef.current = 0;
         setBatchId(null);
-        setChunkedData(null);
         setPreparedRecords([]);
         setCurrentOffset(0);
         setTotalResults(0);
-        setExportLogs([]);
         activeFiltersRef.current = serializedFilters;
         
         // Clear localStorage on filter change
@@ -152,9 +150,6 @@ export default function Home() {
           console.error('[Filter change] Failed to clear localStorage:', error);
         }
       }
-      
-      // Clear chunks when fetching new records
-      setChunkedData(null);
       
       // Use ref for current offset (atomic)
       const offsetToUse = currentOffsetRef.current;
@@ -201,11 +196,6 @@ export default function Home() {
         });
         fetchLockRef.current = false; // Unlock before return
         return;
-      }
-      
-      // Log duplicate info
-      if (checkData.alreadyProcessed > 0) {
-        addLog(`${checkData.alreadyProcessed} van ${checkData.total} ECLI's al verwerkt - worden overgeslagen`);
       }
       
       // Step 3: Fetch full content for NEW ECLIs only
