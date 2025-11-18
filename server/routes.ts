@@ -643,7 +643,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Re-upload existing Pinecone records with court_level metadata
   // Prioritizes AI-enriched versions to preserve expensive AI summaries
+  // 🚨 SECURITY: This endpoint is PERMANENTLY DISABLED to prevent accidental database overwrites
   app.post('/api/pinecone/update-court-levels', async (req: Request, res: Response) => {
+    // HARD-CODED SAFETY GUARD: NEVER allow bulk re-uploading of Pinecone records
+    return res.status(403).json({ 
+      error: 'OPERATIE GEBLOKKEERD: Het bulk overschrijven van Pinecone records is permanent uitgeschakeld om data verlies te voorkomen.',
+      blocked: true,
+      reason: 'safety_guard'
+    });
+    
+    // Original code below is unreachable - kept for reference only
     try {
       const { detectCourtLevel } = await import('./court-utils');
       const { enrichedBatchRecords } = await import('@shared/schema');
@@ -737,7 +746,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete Pinecone records without AI summaries
+  // 🚨 SECURITY: This endpoint is PERMANENTLY DISABLED to prevent accidental database deletion
   app.post('/api/pinecone/delete-without-ai', async (req: Request, res: Response) => {
+    // HARD-CODED SAFETY GUARD: NEVER allow deletion of Pinecone records
+    return res.status(403).json({ 
+      error: 'OPERATIE GEBLOKKEERD: Het verwijderen van Pinecone records is permanent uitgeschakeld om data verlies te voorkomen.',
+      blocked: true,
+      reason: 'safety_guard'
+    });
+    
+    // Original code below is unreachable - kept for reference only
     try {
       const { confirm } = req.body;
       
