@@ -1014,6 +1014,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all processed ECLIs (for displaying uploaded ECLI list)
+  app.get('/api/processed-eclis/list', async (req: Request, res: Response) => {
+    try {
+      const { namespace } = req.query;
+      const targetNamespace = namespace as string || 'ECLI_NL';
+      
+      // Query database for all processed ECLIs in the specified namespace
+      // Ordered by upload date (most recent first)
+      const allProcessed = await db
+        .select({ 
+          ecli: processedEclis.ecli,
+          uploadedAt: processedEclis.uploadedAt 
+        })
+        .from(processedEclis)
+        .where(eq(processedEclis.namespace, targetNamespace))
+        .orderBy(desc(processedEclis.uploadedAt));
+      
+      res.json({
+        success: true,
+        count: allProcessed.length,
+        namespace: targetNamespace,
+        eclis: allProcessed.map(p => p.ecli),
+      });
+    } catch (error: any) {
+      console.error('Error listing processed ECLIs:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ECLI Discovery endpoint with breadth-first section crawling
   app.post('/api/ecli-discovery/ingest', async (req: Request, res: Response) => {
     try {
