@@ -15,6 +15,7 @@ export default function Home() {
   const [currentCivilSubcategory, setCurrentCivilSubcategory] = useState<string>("all");
   const [isFetchingContent, setIsFetchingContent] = useState(false);
   const [isEnrichingWithAI, setIsEnrichingWithAI] = useState(false);
+  const [testingSummary, setTestingSummary] = useState<Record<string, { loading: boolean; summary: string | null; error: string | null }>>({});
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
   const { toast } = useToast();
@@ -130,6 +131,51 @@ export default function Home() {
   const handleClearRecords = () => {
     setPreparedRecords([]);
     setExportLogs([]);
+  };
+
+  // NIEUWE FUNCTIE: Test AI samenvatting voor 1 record
+  const handleTestAISummary = async (ecli: string) => {
+    setTestingSummary(prev => ({ ...prev, [ecli]: { loading: true, summary: null, error: null } }));
+    
+    try {
+      const rechtspraakUrl = `https://uitspraken.rechtspraak.nl/details?id=${ecli}`;
+      
+      const response = await fetch('/api/ai/test-summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          ecli,
+          rechtspraakUrl 
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      setTestingSummary(prev => ({ 
+        ...prev, 
+        [ecli]: { loading: false, summary: data.summary, error: null } 
+      }));
+      
+      toast({
+        title: 'AI Samenvatting gereed',
+        description: `Samenvatting voor ${ecli} is gegenereerd`,
+      });
+    } catch (error: any) {
+      setTestingSummary(prev => ({ 
+        ...prev, 
+        [ecli]: { loading: false, summary: null, error: error.message } 
+      }));
+      
+      toast({
+        title: 'Fout bij AI samenvatting',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleRecordsDiscovered = (discoveredRecords: PreparedRecord[]) => {
@@ -379,6 +425,8 @@ export default function Home() {
           onFetchContent={() => {}} 
           onClear={handleClearRecords}
           onEnrichWithAI={handleEnrichWithAI}
+          onTestAISummary={handleTestAISummary}
+          testingSummary={testingSummary}
           isEnrichingWithAI={isEnrichingWithAI}
         />
 

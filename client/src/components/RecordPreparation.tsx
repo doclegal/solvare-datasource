@@ -52,6 +52,8 @@ interface RecordPreparationProps {
   onFetchContent: () => void;
   onClear: () => void;
   onEnrichWithAI?: () => void;
+  onTestAISummary?: (ecli: string) => void;
+  testingSummary?: Record<string, { loading: boolean; summary: any | null; error: string | null }>;
   isLoading?: boolean;
   isPreparingChunks?: boolean;
   isEnrichingWithAI?: boolean;
@@ -83,6 +85,8 @@ export default function RecordPreparation({
   onFetchContent,
   onClear,
   onEnrichWithAI,
+  onTestAISummary,
+  testingSummary = {},
   isLoading = false,
   isPreparingChunks = false,
   isEnrichingWithAI = false,
@@ -269,6 +273,74 @@ export default function RecordPreparation({
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-3 pt-3">
+                    {/* TEST AI BUTTON */}
+                    {onTestAISummary && (
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onTestAISummary(record.ecli)}
+                          disabled={testingSummary[record.ecli]?.loading}
+                          data-testid={`button-test-ai-${record.ecli}`}
+                        >
+                          <Bot className="mr-2 h-4 w-4" />
+                          {testingSummary[record.ecli]?.loading ? 'Bezig...' : 'Test AI Samenvatting'}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* SHOW TEST SUMMARY RESULT */}
+                    {testingSummary[record.ecli]?.summary && (
+                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 p-4 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Bot className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          <p className="text-sm font-semibold text-green-900 dark:text-green-100">TEST AI Samenvatting</p>
+                          <Badge variant="secondary" className="text-xs">GPT-3.5</Badge>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-800 dark:text-green-200 mb-1">Titel</h4>
+                            <p className="text-sm text-green-900 dark:text-green-100 leading-relaxed">{testingSummary[record.ecli].summary.title}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-800 dark:text-green-200 mb-1">Inhoudsindicatie</h4>
+                            <p className="text-sm text-green-900 dark:text-green-100 leading-relaxed">{testingSummary[record.ecli].summary.inhoudsindicatie}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-800 dark:text-green-200 mb-1">Feiten</h4>
+                            <p className="text-sm text-green-900 dark:text-green-100 leading-relaxed">{testingSummary[record.ecli].summary.feiten}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-800 dark:text-green-200 mb-1">Geschil</h4>
+                            <p className="text-sm text-green-900 dark:text-green-100 leading-relaxed">{testingSummary[record.ecli].summary.geschil}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-800 dark:text-green-200 mb-1">Beslissing</h4>
+                            <p className="text-sm text-green-900 dark:text-green-100 leading-relaxed">{testingSummary[record.ecli].summary.beslissing}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 className="text-xs font-semibold text-green-800 dark:text-green-200 mb-1">Motivering</h4>
+                            <p className="text-sm text-green-900 dark:text-green-100 leading-relaxed">{testingSummary[record.ecli].summary.motivering}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SHOW ERROR IF ANY */}
+                    {testingSummary[record.ecli]?.error && (
+                      <div className="bg-red-50 dark:bg-red-950/30 p-3 rounded-md border border-red-200 dark:border-red-800">
+                        <p className="text-sm text-red-800 dark:text-red-200">
+                          Fout: {testingSummary[record.ecli].error}
+                        </p>
+                      </div>
+                    )}
+
                     <div>
                       <p className="text-sm font-medium mb-1">Titel</p>
                       <p className="text-sm text-muted-foreground">{record.title}</p>

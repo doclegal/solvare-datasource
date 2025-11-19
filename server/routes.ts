@@ -444,6 +444,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // SIMPLE TEST: AI samenvatting voor 1 record
+  app.post('/api/ai/test-summary', async (req: Request, res: Response) => {
+    try {
+      const { ecli, rechtspraakUrl } = req.body;
+      
+      console.log(`[AI Test] Generating summary for ${ecli}`);
+      console.log(`[AI Test] Rechtspraak URL: ${rechtspraakUrl}`);
+      
+      // Fetch full text
+      const fullText = await fetchFullText(ecli);
+      
+      if (!fullText || fullText.trim().length < 100) {
+        return res.status(400).json({ error: 'Geen volledige tekst beschikbaar' });
+      }
+      
+      console.log(`[AI Test] Full text length: ${fullText.length} characters`);
+      
+      // Generate AI summary
+      const aiSummary = await generateAISummary(fullText, ecli);
+      
+      console.log(`[AI Test] Summary generated successfully`);
+      
+      // Return complete summary
+      res.json({
+        success: true,
+        ecli,
+        rechtspraakUrl,
+        summary: {
+          title: aiSummary.title,
+          inhoudsindicatie: aiSummary.inhoudsindicatie,
+          feiten: aiSummary.feiten,
+          geschil: aiSummary.geschil,
+          beslissing: aiSummary.beslissing,
+          motivering: aiSummary.motivering,
+        }
+      });
+    } catch (error: any) {
+      console.error('[AI Test] Error:', error);
+      res.status(500).json({ error: error.message || 'AI samenvatting failed' });
+    }
+  });
+
   // NEW: AI Enrichment endpoint - clean rebuild without circular references
   app.post('/api/ai/enrich', async (req: Request, res: Response) => {
     try {
