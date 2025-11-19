@@ -177,12 +177,12 @@ export default function PineconeExport({
           </div>
 
           <div className="space-y-2">
-            <Label>Namespace(s)</Label>
-            <div className="text-sm font-medium bg-muted px-3 py-2 rounded-md">
+            <Label>Doel Namespace(s)</Label>
+            <div className="text-sm font-medium bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 px-3 py-2 rounded-md border border-blue-200 dark:border-blue-800">
               {displayNamespace}
             </div>
             <p className="text-xs text-muted-foreground">
-              Standaard namespace voor alle ECLI records
+              <strong>Automatisch gerouteerd</strong> op basis van bron: Web search → WEB_ECLI • API search → ECLI_NL
             </p>
           </div>
 
