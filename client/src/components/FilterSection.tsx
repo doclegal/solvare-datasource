@@ -123,7 +123,13 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="year-select">Jaar (Methode 1)</Label>
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <Select value={selectedYear} onValueChange={(value) => {
+                setSelectedYear(value);
+                // Reset month when year is cleared
+                if (value === "none") {
+                  setSelectedMonth("none");
+                }
+              }}>
                 <SelectTrigger id="year-select" data-testid="select-year">
                   <SelectValue placeholder="Selecteer jaar" />
                 </SelectTrigger>
