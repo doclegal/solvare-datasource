@@ -293,22 +293,12 @@ export default function Home() {
             if (data.type === 'progress') {
               addLog(`Batch verwerkt: ${data.processedRecords}/${data.totalRecords} records (${data.successCount} succesvol)`);
             } else if (data.type === 'complete') {
-              addLog(`✓ Export voltooid! ${data.successCount} records succesvol geüpload.`);
+              addLog(`✓ Export voltooid! ${data.totalUpserted} records succesvol geüpload naar ${data.namespaces?.length || 0} namespace(s).`);
               
-              if (data.successCount > 0) {
-                // Mark as processed
-                const uniqueEclis = Array.from(new Set(preparedRecords.map(r => r.ecli)));
-                const namespace = config.namespace || 'ECLI_NL';
-                
-                addLog('ECLI\'s markeren als verwerkt...');
-                const markResponse = await apiRequest(
-                  'POST',
-                  '/api/processed-eclis/mark',
-                  { eclis: uniqueEclis, namespace }
-                );
-                const markData = await markResponse.json();
-                addLog(`✓ ${markData.marked} ECLI's gemarkeerd als verwerkt`);
-                
+              // Backend marks processed_eclis automatically per namespace during upload
+              // No need to do this manually in frontend anymore
+              
+              if (data.totalUpserted > 0) {
                 // Clear records after successful upload
                 setPreparedRecords([]);
                 addLog('✓ Records tabel geleegd');
@@ -316,15 +306,14 @@ export default function Home() {
               
               toast({
                 title: "Export voltooid",
-                description: `${data.successCount} van ${data.totalRecords} records succesvol naar Pinecone verstuurd.`,
+                description: `${data.totalUpserted} records succesvol naar Pinecone verstuurd.`,
               });
               
-              if (data.errorCount > 0) {
-                toast({
-                  variant: "destructive",
-                  title: "Enkele fouten",
-                  description: `${data.errorCount} records konden niet worden geüpload.`,
-                });
+              if (data.namespaces && data.namespaces.length > 0) {
+                const namespaceSummary = data.namespaces
+                  .map((ns: any) => `${ns.namespace}: ${ns.successCount} records`)
+                  .join(', ');
+                addLog(`📊 Namespace verdeling: ${namespaceSummary}`);
               }
             } else if (data.type === 'error') {
               addLog(`✗ Fout: ${data.error}`);

@@ -683,6 +683,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           totalUpserted += webResult.successCount;
           allResults.push({ namespace: 'WEB_ECLI', ...webResult });
           
+          // Mark successfully uploaded ECLIs as processed in WEB_ECLI namespace
+          if (webResult.successCount > 0) {
+            const successfulEclis = webSearchRecords
+              .slice(0, webResult.successCount)
+              .map(r => r.ecli);
+            
+            const markValues = successfulEclis.map(ecli => ({ 
+              ecli, 
+              namespace: 'WEB_ECLI' 
+            }));
+            
+            await db
+              .insert(processedEclis)
+              .values(markValues)
+              .onConflictDoNothing();
+            
+            console.log(`[Pinecone Export] Marked ${successfulEclis.length} ECLIs as processed in WEB_ECLI namespace`);
+          }
+          
           sendProgress({
             type: 'namespace_complete',
             message: `WEB_ECLI namespace voltooid: ${webResult.successCount} records`,
@@ -715,6 +734,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           totalUpserted += apiResult.successCount;
           allResults.push({ namespace: 'ECLI_NL', ...apiResult });
+          
+          // Mark successfully uploaded ECLIs as processed in ECLI_NL namespace
+          if (apiResult.successCount > 0) {
+            const successfulEclis = apiSearchRecords
+              .slice(0, apiResult.successCount)
+              .map(r => r.ecli);
+            
+            const markValues = successfulEclis.map(ecli => ({ 
+              ecli, 
+              namespace: 'ECLI_NL' 
+            }));
+            
+            await db
+              .insert(processedEclis)
+              .values(markValues)
+              .onConflictDoNothing();
+            
+            console.log(`[Pinecone Export] Marked ${successfulEclis.length} ECLIs as processed in ECLI_NL namespace`);
+          }
           
           sendProgress({
             type: 'namespace_complete',
