@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Save, FolderOpen, Trash2, Clock } from "lucide-react";
+import { Save, FolderOpen, Trash2, Clock, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { PreparedRecord } from "./RecordPreparation";
@@ -17,9 +17,10 @@ interface SavedBatch {
 interface BatchManagerProps {
   currentRecords: PreparedRecord[];
   onLoadBatch: (records: PreparedRecord[]) => void;
+  onResumeBatch?: (batchId: string, records: PreparedRecord[]) => void;
 }
 
-export default function BatchManager({ currentRecords, onLoadBatch }: BatchManagerProps) {
+export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatch }: BatchManagerProps) {
   const [savedBatches, setSavedBatches] = useState<SavedBatch[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -112,6 +113,42 @@ export default function BatchManager({ currentRecords, onLoadBatch }: BatchManag
     }
   };
 
+  const handleResumeBatch = async (batchId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    if (!onResumeBatch) {
+      toast({
+        variant: "destructive",
+        title: "Niet beschikbaar",
+        description: "Resume functionaliteit is niet beschikbaar",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await apiRequest('GET', `/api/batches/${batchId}`);
+      const data = await response.json();
+
+      onResumeBatch(batchId, data.batch.records);
+
+      toast({
+        title: "Batch wordt hervat",
+        description: `AI verrijking wordt hervat voor ${data.batch.records.length} records`,
+      });
+
+      setShowBatches(false);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Fout bij hervatten",
+        description: error.message || "Kon batch niet hervatten",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteBatch = async (batchId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     
@@ -193,39 +230,62 @@ export default function BatchManager({ currentRecords, onLoadBatch }: BatchManag
               <p className="text-sm font-medium mb-3">
                 {savedBatches.length} opgeslagen batch{savedBatches.length !== 1 ? 'es' : ''}
               </p>
-              {savedBatches.map((batch) => (
-                <div
-                  key={batch.batchId}
-                  className="flex items-center justify-between p-3 border rounded-md hover-elevate cursor-pointer"
-                  onClick={() => handleLoadBatch(batch.batchId)}
-                  data-testid={`batch-item-${batch.batchId}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <p className="text-sm font-medium">
-                        {batch.totalRecords} records
-                        {batch.enrichedRecords > 0 && (
-                          <Badge variant="secondary" className="ml-2">
-                            {batch.enrichedRecords} AI-verrijkt
-                          </Badge>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {formatTimeAgo(batch.createdAt)}
-                      </p>
+              {savedBatches.map((batch) => {
+                const isIncomplete = batch.enrichedRecords < batch.totalRecords && batch.enrichedRecords > 0;
+                
+                return (
+                  <div
+                    key={batch.batchId}
+                    className="flex items-center justify-between p-3 border rounded-md hover-elevate cursor-pointer"
+                    onClick={() => handleLoadBatch(batch.batchId)}
+                    data-testid={`batch-item-${batch.batchId}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {batch.totalRecords} records
+                          {batch.enrichedRecords > 0 && (
+                            <Badge variant="secondary" className="ml-2">
+                              {batch.enrichedRecords} AI-verrijkt
+                            </Badge>
+                          )}
+                          {isIncomplete && (
+                            <Badge variant="outline" className="ml-2 text-amber-600 border-amber-600">
+                              Incompleet
+                            </Badge>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {formatTimeAgo(batch.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {isIncomplete && onResumeBatch && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => handleResumeBatch(batch.batchId, e)}
+                          data-testid={`button-resume-batch-${batch.batchId}`}
+                          className="mr-1"
+                        >
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Hervat
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => handleDeleteBatch(batch.batchId, e)}
+                        data-testid={`button-delete-batch-${batch.batchId}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => handleDeleteBatch(batch.batchId, e)}
-                    data-testid={`button-delete-batch-${batch.batchId}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

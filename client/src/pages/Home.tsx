@@ -143,7 +143,22 @@ export default function Home() {
     ).length;
   };
 
-  const handleEnrichWithAI = async () => {
+  const handleResumeBatch = async (batchId: string, records: PreparedRecord[]) => {
+    // Load the batch records into the current state
+    setPreparedRecords(records);
+    
+    const enrichedCount = countEnrichedRecords(records);
+    const remainingCount = records.length - enrichedCount;
+    
+    addLog(`📋 Batch geladen: ${records.length} records (${enrichedCount} verrijkt, ${remainingCount} te verrijken)`);
+    
+    // Automatically start enrichment with resume
+    setTimeout(() => {
+      handleEnrichWithAI(batchId);
+    }, 500); // Small delay to ensure UI updates
+  };
+
+  const handleEnrichWithAI = async (resumeBatchId?: string) => {
     if (preparedRecords.length === 0) {
       toast({
         title: 'Geen records',
@@ -157,14 +172,19 @@ export default function Home() {
     const eclis = preparedRecords.map(r => r.ecli);
 
     try {
-      addLog(`AI enrichment starten voor ${eclis.length} records...`);
+      if (resumeBatchId) {
+        addLog(`AI enrichment hervatten voor batch ${resumeBatchId} (${eclis.length} records)...`);
+      } else {
+        addLog(`AI enrichment starten voor ${eclis.length} records...`);
+      }
       
       const response = await fetch('/api/rechtspraak/enrich-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           eclis,
-          originalRecords: preparedRecords
+          originalRecords: preparedRecords,
+          resumeBatchId, // Pass the resume batch ID if provided
         }),
       });
 
@@ -350,6 +370,7 @@ export default function Home() {
         <BatchManager
           currentRecords={preparedRecords}
           onLoadBatch={handleLoadBatch}
+          onResumeBatch={handleResumeBatch}
         />
 
         <RecordPreparation
