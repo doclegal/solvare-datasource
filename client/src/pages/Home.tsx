@@ -181,16 +181,8 @@ export default function Home() {
     }
 
     setIsEnrichingWithAI(true);
-    const eclis = preparedRecords.map(r => r.ecli);
-    console.log('✅ ECLIs extracted:', eclis.length);
 
     try {
-      if (resumeBatchId) {
-        addLog(`AI enrichment hervatten voor batch ${resumeBatchId} (${eclis.length} records)...`);
-      } else {
-        addLog(`AI enrichment starten voor ${eclis.length} records...`);
-      }
-      
       console.log('🧹 Cleaning records to remove circular refs...');
       // Strip circular references and problematic fields from preparedRecords
       const cleanRecords = preparedRecords.map(record => ({
@@ -212,8 +204,18 @@ export default function Home() {
         ai_motivering: record.ai_motivering,
       }));
       
+      // Extract ECLIs from clean records instead of original preparedRecords
+      const eclis = cleanRecords.map(r => r.ecli);
+      
       console.log('✅ Clean records created:', cleanRecords.length);
+      console.log('✅ ECLIs extracted:', eclis.length);
       console.log('🔍 Sample clean record:', cleanRecords[0]);
+      
+      if (resumeBatchId) {
+        addLog(`AI enrichment hervatten voor batch ${resumeBatchId} (${eclis.length} records)...`);
+      } else {
+        addLog(`AI enrichment starten voor ${eclis.length} records...`);
+      }
       
       const requestBody = { 
         eclis,
