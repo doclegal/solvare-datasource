@@ -104,33 +104,44 @@ export default function WebSearchDiscovery({ onRecordsDiscovered }: Props) {
         throw new Error('No response stream');
       }
 
+      let buffer = '';
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        
+        // Keep last incomplete line in buffer
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (!line.trim()) continue;
+          
           if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6)) as DiscoveryProgress;
+            try {
+              const data = JSON.parse(line.slice(6)) as DiscoveryProgress;
             
-            setProgress(prev => [...prev, data.message]);
+              setProgress(prev => [...prev, data.message]);
 
-            if (data.type === 'discovery_complete' && data.preparedRecords) {
-              setResults(data.preparedRecords);
-              onRecordsDiscovered(data.preparedRecords);
-              
-              toast({
-                title: 'Discovery voltooid',
-                description: `${data.preparedRecords.length} geldige ECLI's gevonden`,
-              });
-            } else if (data.type === 'error') {
-              toast({
-                title: 'Fout tijdens discovery',
-                description: data.message,
-                variant: 'destructive',
-              });
+              if (data.type === 'discovery_complete' && data.preparedRecords) {
+                setResults(data.preparedRecords);
+                onRecordsDiscovered(data.preparedRecords);
+                
+                toast({
+                  title: 'Discovery voltooid',
+                  description: `${data.preparedRecords.length} geldige ECLI's gevonden`,
+                });
+              } else if (data.type === 'error') {
+                toast({
+                  title: 'Fout tijdens discovery',
+                  description: data.message,
+                  variant: 'destructive',
+                });
+              }
+            } catch (parseError) {
+              // Ignore JSON parse errors from partial chunks
+              console.log('SSE parse error (partial chunk):', parseError);
             }
           }
         }
