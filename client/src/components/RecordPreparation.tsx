@@ -295,12 +295,12 @@ export default function RecordPreparation({
                       </div>
                     )}
 
-                    {/* SHOW TEST SUMMARY RESULT */}
-                    {testingSummary[record.ecli]?.summary && (
+                    {/* SHOW TEST SUMMARY RESULT - Only if not yet merged into preparedRecords */}
+                    {testingSummary[record.ecli]?.summary && !record.ai_inhoudsindicatie && (
                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 p-4 rounded-lg border border-green-200 dark:border-green-800">
                         <div className="flex items-center gap-2 mb-3">
                           <Bot className="h-5 w-5 text-green-600 dark:text-green-400" />
-                          <p className="text-sm font-semibold text-green-900 dark:text-green-100">TEST AI Samenvatting</p>
+                          <p className="text-sm font-semibold text-green-900 dark:text-green-100">TEST AI Samenvatting (preview)</p>
                           <Badge variant="secondary" className="text-xs">GPT-3.5</Badge>
                         </div>
                         
