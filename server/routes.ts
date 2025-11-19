@@ -742,26 +742,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('Geen records of chunks om te exporteren');
       }
       
-      // CRITICAL: Only allow AI-enriched records to prevent database pollution
+      // QUALITY CONTROL: Filter records based on enrichment status
       if (config.records && config.records.length > 0) {
         const isEnriched = (record: any) => {
           return !!(record.ai_title || record.ai_inhoudsindicatie || record.ai_feiten || 
                    record.ai_geschil || record.ai_beslissing || record.ai_motivering);
         };
         
-        const enrichedRecords = config.records.filter(isEnriched);
-        const notEnrichedCount = config.records.length - enrichedRecords.length;
-        
-        if (enrichedRecords.length === 0) {
-          throw new Error('Geen AI-verrijkte records gevonden. Gebruik eerst "AI Verrijking Toepassen".');
+        // NEW: Allow non-enriched records for ECLI_NL namespace only
+        if (config.includeNonEnriched) {
+          // Split records by source
+          const webSearchRecords = config.records.filter((r: any) => r.source === 'web_search');
+          const apiSearchRecords = config.records.filter((r: any) => r.source === 'api_search');
+          
+          // WEB_ECLI: always require enrichment
+          const enrichedWebRecords = webSearchRecords.filter(isEnriched);
+          const filteredWebCount = webSearchRecords.length - enrichedWebRecords.length;
+          
+          if (filteredWebCount > 0) {
+            console.log(`[Pinecone Export] ${filteredWebCount} niet-verrijkte WEB_ECLI records uitgefilterd (altijd verplicht)`);
+          }
+          
+          // ECLI_NL: allow all records (enriched + non-enriched)
+          const enrichedApiCount = apiSearchRecords.filter(isEnriched).length;
+          const nonEnrichedApiCount = apiSearchRecords.length - enrichedApiCount;
+          
+          console.log(`[Pinecone Export] ECLI_NL: ${enrichedApiCount} verrijkt, ${nonEnrichedApiCount} niet-verrijkt (beide toegestaan)`);
+          
+          // Combine: enriched web records + all API records
+          config.records = [...enrichedWebRecords, ...apiSearchRecords];
+          
+          if (config.records.length === 0) {
+            throw new Error('Geen records om te uploaden na filtering.');
+          }
+        } else {
+          // DEFAULT: Only allow enriched records for all namespaces
+          const enrichedRecords = config.records.filter(isEnriched);
+          const notEnrichedCount = config.records.length - enrichedRecords.length;
+          
+          if (enrichedRecords.length === 0) {
+            throw new Error('Geen AI-verrijkte records gevonden. Gebruik eerst "AI Verrijking Toepassen".');
+          }
+          
+          if (notEnrichedCount > 0) {
+            console.log(`[Pinecone Export] ${notEnrichedCount} niet-verrijkte records uitgefilterd`);
+          }
+          
+          // Replace with only enriched records
+          config.records = enrichedRecords;
         }
-        
-        if (notEnrichedCount > 0) {
-          console.log(`[Pinecone Export] ${notEnrichedCount} niet-verrijkte records uitgefilterd`);
-        }
-        
-        // Replace with only enriched records
-        config.records = enrichedRecords;
       }
       
       // Set up SSE (Server-Sent Events) for streaming progress
