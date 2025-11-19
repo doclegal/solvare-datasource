@@ -52,8 +52,10 @@ interface RecordPreparationProps {
   onFetchContent: () => void;
   onClear: () => void;
   onEnrichWithAI?: () => void;
+  onEnrichAllRecords?: () => void;
   onTestAISummary?: (ecli: string) => void;
   testingSummary?: Record<string, { loading: boolean; summary: any | null; error: string | null }>;
+  enrichAllProgress?: { current: number; total: number } | null;
   isLoading?: boolean;
   isPreparingChunks?: boolean;
   isEnrichingWithAI?: boolean;
@@ -85,8 +87,10 @@ export default function RecordPreparation({
   onFetchContent,
   onClear,
   onEnrichWithAI,
+  onEnrichAllRecords,
   onTestAISummary,
   testingSummary = {},
+  enrichAllProgress = null,
   isLoading = false,
   isPreparingChunks = false,
   isEnrichingWithAI = false,
@@ -145,16 +149,18 @@ export default function RecordPreparation({
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            {preparedRecords.length > 0 && onEnrichWithAI && (
+            {preparedRecords.length > 0 && onEnrichAllRecords && (
               <Button 
                 variant="default" 
                 size="sm" 
-                onClick={onEnrichWithAI} 
+                onClick={onEnrichAllRecords} 
                 disabled={isEnrichingWithAI}
-                data-testid="button-enrich-ai"
+                data-testid="button-enrich-all"
               >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {isEnrichingWithAI ? 'Bezig met verrijken...' : 'Genereer AI Samenvatting'}
+                <Bot className="mr-2 h-4 w-4" />
+                {isEnrichingWithAI && enrichAllProgress 
+                  ? `Verrijken... ${enrichAllProgress.current}/${enrichAllProgress.total}` 
+                  : 'Verrijk Alle Records'}
               </Button>
             )}
             {preparedRecords.length > 0 && (

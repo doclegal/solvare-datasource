@@ -16,6 +16,7 @@ export default function Home() {
   const [isFetchingContent, setIsFetchingContent] = useState(false);
   const [isEnrichingWithAI, setIsEnrichingWithAI] = useState(false);
   const [testingSummary, setTestingSummary] = useState<Record<string, { loading: boolean; summary: string | null; error: string | null }>>({});
+  const [enrichAllProgress, setEnrichAllProgress] = useState<{ current: number; total: number } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
   const { toast } = useToast();
@@ -131,6 +132,63 @@ export default function Home() {
   const handleClearRecords = () => {
     setPreparedRecords([]);
     setExportLogs([]);
+  };
+
+  // Verrijk ALLE records met AI samenvattingen
+  const handleEnrichAllRecords = async () => {
+    if (preparedRecords.length === 0) {
+      toast({
+        title: 'Geen records',
+        description: 'Er zijn geen records om te verrijken',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsEnrichingWithAI(true);
+    setEnrichAllProgress({ current: 0, total: preparedRecords.length });
+    
+    let successCount = 0;
+    let errorCount = 0;
+
+    addLog(`AI verrijking gestart voor ${preparedRecords.length} records...`);
+
+    for (let i = 0; i < preparedRecords.length; i++) {
+      const record = preparedRecords[i];
+      
+      // Skip if already enriched
+      if (record.ai_title) {
+        addLog(`⏭️ ${record.ecli} al verrijkt, overgeslagen`);
+        setEnrichAllProgress({ current: i + 1, total: preparedRecords.length });
+        continue;
+      }
+
+      try {
+        setEnrichAllProgress({ current: i + 1, total: preparedRecords.length });
+        addLog(`[${i + 1}/${preparedRecords.length}] Verrijken: ${record.ecli}...`);
+        
+        await handleTestAISummary(record.ecli);
+        successCount++;
+        
+        // Rate limiting: wacht 1 seconde tussen requests
+        if (i < preparedRecords.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error: any) {
+        errorCount++;
+        addLog(`✗ ${record.ecli}: ${error.message}`);
+      }
+    }
+
+    setIsEnrichingWithAI(false);
+    setEnrichAllProgress(null);
+
+    addLog(`✓ Volttooid: ${successCount} verrijkt, ${errorCount} fouten`);
+    
+    toast({
+      title: 'AI Verrijking voltooid',
+      description: `${successCount} records verrijkt, ${errorCount} fouten`,
+    });
   };
 
   // NIEUWE FUNCTIE: Test AI samenvatting voor 1 record
@@ -445,9 +503,10 @@ export default function Home() {
           preparedRecords={preparedRecords}
           onFetchContent={() => {}} 
           onClear={handleClearRecords}
-          onEnrichWithAI={handleEnrichWithAI}
+          onEnrichAllRecords={handleEnrichAllRecords}
           onTestAISummary={handleTestAISummary}
           testingSummary={testingSummary}
+          enrichAllProgress={enrichAllProgress}
           isEnrichingWithAI={isEnrichingWithAI}
         />
 
