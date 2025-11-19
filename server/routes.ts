@@ -502,7 +502,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             procedureType: metadata.procedureType,
             sourceUrl: `https://uitspraken.rechtspraak.nl/details?id=${ecli}`,
             inhoudsindicatie: metadata.inhoudsindicatie,
-            source: metadata.source || 'api_search',
+            source: 'api_search', // Default to API search namespace
             
             // AI-generated fields
             ai_title: aiSummary.title,

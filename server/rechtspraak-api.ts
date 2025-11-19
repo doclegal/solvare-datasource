@@ -494,6 +494,7 @@ export async function fetchDecisionContent(ecli: string): Promise<PreparedRecord
       procedureType,
       sourceUrl,
       inhoudsindicatie: inhoudsindicatie || 'Geen inhoudsindicatie beschikbaar',
+      source: 'api_search', // Default source for API fetched records
     };
   } catch (error: any) {
     console.error(`Error fetching content for ${ecli}:`, error.message);
