@@ -151,6 +151,7 @@ export async function discoverEclisFromSearch(
         preparedRecords.push({
           ...validationResult.enrichedRecord,
           sourceUrl,
+          source: 'web_search', // Tag as web search origin → goes to WEB_ECLI namespace
         });
         
         // Rate limiting

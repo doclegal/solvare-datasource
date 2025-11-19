@@ -52,7 +52,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           console.log(`[${ecli}] ✓ Metadata only (skipping AI summary)`);
           
-          results.push(record);
+          // Tag as API search origin → goes to ECLI_NL namespace
+          results.push({
+            ...record,
+            source: 'api_search',
+          });
           
           // Small delay to avoid hammering the server
           if (i < eclis.length - 1) {
@@ -587,30 +591,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
 
-      sendProgress({
-        type: 'start',
-        message: 'Export naar Pinecone gestart...',
-        totalRecords: dataToExport.length,
-      });
-
-      const result = await upsertRecordsToPinecone(
-        config.indexHost,
-        dataToExport,
-        config.namespace,
-        config.batchSize,
-        (progress) => {
+      // NAMESPACE ROUTING: Split records by source and export to correct namespace
+      if (config.records && config.records.length > 0) {
+        const webSearchRecords = config.records.filter((r: any) => r.source === 'web_search');
+        const apiSearchRecords = config.records.filter((r: any) => r.source === 'api_search');
+        
+        console.log(`[Pinecone Export] Web Search records: ${webSearchRecords.length} → WEB_ECLI namespace`);
+        console.log(`[Pinecone Export] API Search records: ${apiSearchRecords.length} → ECLI_NL namespace`);
+        
+        sendProgress({
+          type: 'start',
+          message: `Export naar Pinecone gestart (${webSearchRecords.length} web search, ${apiSearchRecords.length} API search)...`,
+          totalRecords: config.records.length,
+          webSearchCount: webSearchRecords.length,
+          apiSearchCount: apiSearchRecords.length,
+        });
+        
+        let totalUpserted = 0;
+        let allResults: any[] = [];
+        
+        // Export web search records to WEB_ECLI namespace
+        if (webSearchRecords.length > 0) {
           sendProgress({
-            type: 'progress',
-            ...progress,
+            type: 'namespace_start',
+            message: `Exporteren naar WEB_ECLI namespace (${webSearchRecords.length} records)...`,
+            namespace: 'WEB_ECLI',
+          });
+          
+          const webResult = await upsertRecordsToPinecone(
+            config.indexHost,
+            webSearchRecords,
+            'WEB_ECLI', // Fixed namespace for web search
+            config.batchSize,
+            (progress) => {
+              sendProgress({
+                type: 'progress',
+                namespace: 'WEB_ECLI',
+                ...progress,
+              });
+            }
+          );
+          
+          totalUpserted += webResult.successCount;
+          allResults.push({ namespace: 'WEB_ECLI', ...webResult });
+          
+          sendProgress({
+            type: 'namespace_complete',
+            message: `WEB_ECLI namespace voltooid: ${webResult.successCount} records`,
+            namespace: 'WEB_ECLI',
+            ...webResult,
           });
         }
-      );
+        
+        // Export API search records to ECLI_NL namespace
+        if (apiSearchRecords.length > 0) {
+          sendProgress({
+            type: 'namespace_start',
+            message: `Exporteren naar ECLI_NL namespace (${apiSearchRecords.length} records)...`,
+            namespace: 'ECLI_NL',
+          });
+          
+          const apiResult = await upsertRecordsToPinecone(
+            config.indexHost,
+            apiSearchRecords,
+            'ECLI_NL', // Fixed namespace for API search
+            config.batchSize,
+            (progress) => {
+              sendProgress({
+                type: 'progress',
+                namespace: 'ECLI_NL',
+                ...progress,
+              });
+            }
+          );
+          
+          totalUpserted += apiResult.successCount;
+          allResults.push({ namespace: 'ECLI_NL', ...apiResult });
+          
+          sendProgress({
+            type: 'namespace_complete',
+            message: `ECLI_NL namespace voltooid: ${apiResult.successCount} records`,
+            namespace: 'ECLI_NL',
+            ...apiResult,
+          });
+        }
+        
+        sendProgress({
+          type: 'complete',
+          message: `Export voltooid: ${totalUpserted} records naar ${allResults.length} namespaces`,
+          totalUpserted,
+          namespaces: allResults,
+        });
+      } else {
+        // Fallback for chunks (use original namespace logic)
+        sendProgress({
+          type: 'start',
+          message: 'Export naar Pinecone gestart...',
+          totalRecords: dataToExport.length,
+        });
 
-      sendProgress({
-        type: 'complete',
-        message: 'Export voltooid',
-        ...result,
-      });
+        const result = await upsertRecordsToPinecone(
+          config.indexHost,
+          dataToExport,
+          config.namespace,
+          config.batchSize,
+          (progress) => {
+            sendProgress({
+              type: 'progress',
+              ...progress,
+            });
+          }
+        );
+
+        sendProgress({
+          type: 'complete',
+          message: 'Export voltooid',
+          ...result,
+        });
+      }
 
       res.end();
     } catch (error: any) {

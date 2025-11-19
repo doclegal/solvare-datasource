@@ -16,6 +16,7 @@ export interface PreparedRecord {
   procedureType: string;
   sourceUrl: string;
   inhoudsindicatie: string; // Required - official summary
+  source?: 'web_search' | 'api_search'; // Determines Pinecone namespace routing
   
   // AI-generated summary sections
   ai_title?: string; // AI-generated title (fallback when title is empty)
@@ -251,8 +252,16 @@ export default function RecordPreparation({
                   data-testid={`accordion-record-${idx}`}
                 >
                   <AccordionTrigger className="hover:no-underline">
-                    <div className="flex items-center gap-3 text-left">
+                    <div className="flex items-center gap-3 text-left flex-wrap">
                       <span className="font-mono text-sm font-medium">{record.ecli}</span>
+                      {record.source && (
+                        <Badge 
+                          variant={record.source === 'web_search' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {record.source === 'web_search' ? '🌐 Web Search → WEB_ECLI' : '📋 API → ECLI_NL'}
+                        </Badge>
+                      )}
                       <span className="text-muted-foreground">•</span>
                       <span className="text-sm text-muted-foreground">{record.court}</span>
                       <span className="text-muted-foreground">•</span>

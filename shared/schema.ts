@@ -26,6 +26,11 @@ export const preparedRecordSchema = z.object({
   inhoudsindicatie: z.string(), // Official summary from Rechtspraak (required)
   fullText: z.string().optional(), // Full text of judgment (for AI enrichment)
   
+  // Source tracking: determines Pinecone namespace
+  // web_search → WEB_ECLI namespace
+  // api_search → ECLI_NL namespace
+  source: z.enum(['web_search', 'api_search']).default('api_search'),
+  
   // AI-generated summary sections (generated from full text)
   ai_title: z.string().optional(), // AI-generated title (fallback when title is empty)
   ai_inhoudsindicatie: z.string().optional(),
