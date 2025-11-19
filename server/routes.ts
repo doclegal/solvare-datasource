@@ -100,7 +100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Enrich ECLIs with AI summaries (batch processing with SSE progress)
   app.post('/api/rechtspraak/enrich-batch', async (req: Request, res: Response) => {
     try {
-      const { eclis, originalRecords } = req.body;
+      const { eclis, originalRecords, resumeBatchId } = req.body;
       
       if (!Array.isArray(eclis) || eclis.length === 0) {
         return res.status(400).json({ error: 'ECLI lijst is vereist' });
@@ -152,9 +152,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // This ensures complete data even if enrichment fails mid-stream
       const initialRecords: PreparedRecord[] = eclis.map(ecli => originalMap.get(ecli)!);
       
-      // Save initial batch immediately to prevent data loss (PostgreSQL survives restarts)
-      let batch = await storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
-      console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records in PostgreSQL`);
+      // RESUME FUNCTIONALITY: Check if we're resuming an existing batch
+      let batch: PreparedBatch;
+      let alreadyEnrichedMap = new Map<string, PreparedRecord>();
+      
+      if (resumeBatchId) {
+        const existingBatch = await storage.getBatch(resumeBatchId);
+        if (!existingBatch) {
+          throw new Error(`Batch ${resumeBatchId} niet gevonden - kan niet hervatten`);
+        }
+        
+        batch = existingBatch;
+        
+        // Extract already enriched records
+        existingBatch.records.forEach(record => {
+          if (record.ai_title || record.ai_inhoudsindicatie) {
+            alreadyEnrichedMap.set(record.ecli, record);
+          }
+        });
+        
+        console.log(`[AI Enrichment] Resuming batch ${batch.batchId}: ${alreadyEnrichedMap.size} already enriched, ${eclis.length - alreadyEnrichedMap.size} remaining`);
+        await sendProgress(`🔄 Hervatten batch ${resumeBatchId}: ${alreadyEnrichedMap.size} al verrijkt, ${eclis.length - alreadyEnrichedMap.size} te verrijken`, 'info');
+      } else {
+        // Create new batch
+        batch = await storage.createBatch([...initialRecords]); // Clone to avoid mutation issues
+        console.log(`[AI Enrichment] Created initial batch ${batch.batchId} with ${initialRecords.length} original records in PostgreSQL`);
+      }
       
       // AUTO-UPLOAD WORKER DISABLED - Manual upload only via button
       // const { getGlobalAutoUploadWorker } = await import('./auto-upload-worker');
@@ -165,27 +188,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const results: PreparedRecord[] = [];
       const errors: Array<{ ecli: string; error: string }> = [];
       
-      // Track enriched records by ECLI for incremental updates
-      const enrichedMap = new Map<string, PreparedRecord>();
+      // Track enriched records by ECLI for incremental updates (includes already enriched from resume)
+      const enrichedMap = new Map<string, PreparedRecord>(alreadyEnrichedMap);
 
-      await sendProgress(`🤖 Starten met AI verrijking voor ${eclis.length} ECLI(s)...`, 'info');
+      // Filter ECLIs: only enrich those not already enriched
+      const eclisToEnrich = eclis.filter(ecli => !alreadyEnrichedMap.has(ecli));
+      const skippedCount = eclis.length - eclisToEnrich.length;
+      
+      if (skippedCount > 0) {
+        await sendProgress(`⏭️ ${skippedCount} record(s) al verrijkt - overgeslagen`, 'info');
+      }
+      
+      await sendProgress(`🤖 Starten met AI verrijking voor ${eclisToEnrich.length} ECLI(s)...`, 'info');
 
-      // Process each ECLI with AI enrichment + AUTOMATIC Pinecone upload
-      for (let i = 0; i < eclis.length; i++) {
-        const ecli = eclis[i];
+      // Process each ECLI with AI enrichment
+      for (let i = 0; i < eclisToEnrich.length; i++) {
+        const ecli = eclisToEnrich[i];
+        const overallProgress = skippedCount + i + 1; // Include skipped records in total count
         
         try {
-          await sendProgress(`[${i + 1}/${eclis.length}] 📥 Ophalen ${ecli}...`, 'info');
+          await sendProgress(`[${overallProgress}/${eclis.length}] 📥 Ophalen ${ecli}...`, 'info');
           
           // Step 1: Fetch metadata
           const record = await fetchDecisionContent(ecli);
           
           // Step 2: Fetch full text
-          await sendProgress(`[${i + 1}/${eclis.length}] 📄 Volledige tekst ophalen voor ${ecli}...`, 'info');
+          await sendProgress(`[${overallProgress}/${eclis.length}] 📄 Volledige tekst ophalen voor ${ecli}...`, 'info');
           const fullText = await fetchFullText(ecli);
           
           // Step 3: Generate AI summary
-          await sendProgress(`[${i + 1}/${eclis.length}] 🤖 AI samenvatting genereren voor ${ecli}...`, 'info');
+          await sendProgress(`[${overallProgress}/${eclis.length}] 🤖 AI samenvatting genereren voor ${ecli}...`, 'info');
           const aiSummary = await generateAISummary(fullText, ecli);
           
           // Merge everything including AI title AND preserve source from original record
@@ -211,10 +243,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Upsert enriched record to PostgreSQL (incremental, survives crashes)
           await storage.upsertEnrichedRecord(batch.batchId, enrichedRecord);
           
-          await sendProgress(`[${i + 1}/${eclis.length}] ✅ ${ecli} succesvol verrijkt`, 'success');
+          await sendProgress(`[${overallProgress}/${eclis.length}] ✅ ${ecli} succesvol verrijkt`, 'success');
           
           // Small delay to avoid hammering APIs
-          if (i < eclis.length - 1) {
+          if (i < eclisToEnrich.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
         } catch (error: any) {
@@ -223,7 +255,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ecli,
             error: error.message,
           });
-          await sendProgress(`[${i + 1}/${eclis.length}] ❌ Fout bij ${ecli}: ${error.message}`, 'error');
+          await sendProgress(`[${overallProgress}/${eclis.length}] ❌ Fout bij ${ecli}: ${error.message}`, 'error');
+          
+          // IMPORTANT: Continue with next record even if one fails
+          console.log(`[AI Enrichment] Continuing with next record after error in ${ecli}`);
         }
       }
 
