@@ -160,6 +160,8 @@ export default function Home() {
   };
 
   const handleEnrichWithAI = async (resumeBatchId?: string) => {
+    console.log('🔥 NEW VERSION LOADED - 2025-11-19 14:00');
+    
     if (preparedRecords.length === 0) {
       toast({
         title: 'Geen records',
@@ -171,6 +173,7 @@ export default function Home() {
 
     setIsEnrichingWithAI(true);
     const eclis = preparedRecords.map(r => r.ecli);
+    console.log('✅ ECLIs extracted:', eclis.length);
 
     try {
       if (resumeBatchId) {
@@ -179,6 +182,7 @@ export default function Home() {
         addLog(`AI enrichment starten voor ${eclis.length} records...`);
       }
       
+      console.log('🧹 Cleaning records to remove circular refs...');
       // Strip circular references and problematic fields from preparedRecords
       const cleanRecords = preparedRecords.map(record => ({
         ecli: record.ecli,
@@ -199,15 +203,25 @@ export default function Home() {
         ai_motivering: record.ai_motivering,
       }));
       
+      console.log('✅ Clean records created:', cleanRecords.length);
+      console.log('🔍 Sample clean record:', cleanRecords[0]);
+      
+      const requestBody = { 
+        eclis,
+        originalRecords: cleanRecords,
+        resumeBatchId,
+      };
+      
+      console.log('📦 Request body prepared, size:', JSON.stringify(requestBody).length, 'bytes');
+      console.log('🚀 About to POST to /api/rechtspraak/enrich-batch');
+      
       const response = await fetch('/api/rechtspraak/enrich-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          eclis,
-          originalRecords: cleanRecords,
-          resumeBatchId,
-        }),
+        body: JSON.stringify(requestBody),
       });
+      
+      console.log('✅ Fetch completed! Response status:', response.status);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
