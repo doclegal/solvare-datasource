@@ -160,8 +160,6 @@ export default function Home() {
   };
 
   const handleEnrichWithAI = async (resumeBatchId?: string) => {
-    console.log('[AI Enrichment] Starting handleEnrichWithAI, preparedRecords:', preparedRecords.length);
-    
     if (preparedRecords.length === 0) {
       toast({
         title: 'Geen records',
@@ -173,7 +171,6 @@ export default function Home() {
 
     setIsEnrichingWithAI(true);
     const eclis = preparedRecords.map(r => r.ecli);
-    console.log('[AI Enrichment] ECLIs to enrich:', eclis);
 
     try {
       if (resumeBatchId) {
@@ -182,35 +179,37 @@ export default function Home() {
         addLog(`AI enrichment starten voor ${eclis.length} records...`);
       }
       
-      console.log('[AI Enrichment] About to fetch /api/rechtspraak/enrich-batch');
-      console.log('[AI Enrichment] Request payload:', { eclis, resumeBatchId, recordCount: preparedRecords.length });
+      // Strip circular references and problematic fields from preparedRecords
+      const cleanRecords = preparedRecords.map(record => ({
+        ecli: record.ecli,
+        title: record.title,
+        court: record.court,
+        decisionDate: record.decisionDate,
+        legalArea: record.legalArea,
+        procedureType: record.procedureType,
+        inhoudsindicatie: record.inhoudsindicatie,
+        source: record.source,
+        sourceUrl: record.sourceUrl,
+        // Include AI fields if resuming
+        ai_title: record.ai_title,
+        ai_inhoudsindicatie: record.ai_inhoudsindicatie,
+        ai_feiten: record.ai_feiten,
+        ai_geschil: record.ai_geschil,
+        ai_beslissing: record.ai_beslissing,
+        ai_motivering: record.ai_motivering,
+      }));
       
-      // CRITICAL: Ensure POST method is used (not GET)
-      const requestOptions = {
-        method: 'POST' as const,
-        headers: { 
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch('/api/rechtspraak/enrich-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           eclis,
-          originalRecords: preparedRecords,
+          originalRecords: cleanRecords,
           resumeBatchId,
         }),
-      };
-      console.log('[AI Enrichment] Request options:', { method: requestOptions.method, hasBody: !!requestOptions.body });
-      
-      let response;
-      try {
-        response = await fetch('/api/rechtspraak/enrich-batch', requestOptions);
-        console.log('[AI Enrichment] Fetch completed, response.ok:', response.ok, 'status:', response.status);
-      } catch (fetchError: any) {
-        console.error('[AI Enrichment] Fetch failed:', fetchError);
-        throw fetchError;
-      }
+      });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[AI Enrichment] HTTP error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
