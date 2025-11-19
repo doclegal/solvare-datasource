@@ -185,17 +185,23 @@ export default function Home() {
       console.log('[AI Enrichment] About to fetch /api/rechtspraak/enrich-batch');
       console.log('[AI Enrichment] Request payload:', { eclis, resumeBatchId, recordCount: preparedRecords.length });
       
+      // CRITICAL: Ensure POST method is used (not GET)
+      const requestOptions = {
+        method: 'POST' as const,
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          eclis,
+          originalRecords: preparedRecords,
+          resumeBatchId,
+        }),
+      };
+      console.log('[AI Enrichment] Request options:', { method: requestOptions.method, hasBody: !!requestOptions.body });
+      
       let response;
       try {
-        response = await fetch('/api/rechtspraak/enrich-batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            eclis,
-            originalRecords: preparedRecords,
-            resumeBatchId, // Pass the resume batch ID if provided
-          }),
-        });
+        response = await fetch('/api/rechtspraak/enrich-batch', requestOptions);
         console.log('[AI Enrichment] Fetch completed, response.ok:', response.ok, 'status:', response.status);
       } catch (fetchError: any) {
         console.error('[AI Enrichment] Fetch failed:', fetchError);
