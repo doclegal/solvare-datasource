@@ -119,6 +119,7 @@ export const exportConfigSchema = z.object({
   batchSize: z.number().default(100),
   records: z.array(preparedRecordSchema).optional(),
   chunks: z.array(chunkedRecordSchema).optional(),
+  includeNonEnriched: z.boolean().optional().default(false), // NEW: Allow non-enriched ECLI_NL records
 });
 
 export type ExportConfig = z.infer<typeof exportConfigSchema>;
