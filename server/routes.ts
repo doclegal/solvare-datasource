@@ -1092,20 +1092,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         onProgress: sendProgress,
       });
       
-      // Send completion event
-      const completionData = `data: ${JSON.stringify({
-        type: 'discovery_complete',
-        message: `Discovery voltooid: ${eclis.length} geldige ECLI's gevonden`,
-        eclis,
-        preparedRecords,
-        totalEclis: eclis.length,
-      })}\n\n`;
-      res.write(completionData);
-      if ('flush' in res && typeof (res as any).flush === 'function') {
-        (res as any).flush();
+      console.log(`[Discovery] Found ${eclis.length} ECLIs, prepared ${preparedRecords.length} records`);
+      
+      // Log first record to debug
+      if (preparedRecords.length > 0) {
+        console.log('[Discovery] Sample prepared record:', {
+          ecli: preparedRecords[0].ecli,
+          title: preparedRecords[0].title,
+          court: preparedRecords[0].court,
+          hasInhoudsindicatie: !!preparedRecords[0].inhoudsindicatie,
+          legalArea: preparedRecords[0].legalArea,
+        });
       }
       
-      res.end();
+      // Send completion event with prepared records
+      // Note: We send all records at once - frontend has buffered SSE parser to handle large messages
+      try {
+        const completionData = `data: ${JSON.stringify({
+          type: 'discovery_complete',
+          message: `Discovery voltooid: ${eclis.length} geldige ECLI's gevonden`,
+          eclis,
+          preparedRecords,
+          totalEclis: eclis.length,
+          validEclis: eclis.length,
+        })}\n\n`;
+        
+        console.log(`[Discovery] Sending completion event with ${preparedRecords.length} records (${completionData.length} bytes)`);
+        
+        res.write(completionData);
+        if ('flush' in res && typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+        
+        res.end();
+      } catch (jsonError: any) {
+        console.error('[Discovery] Failed to serialize prepared records:', jsonError);
+        
+        // Fallback: send error
+        const errorData = `data: ${JSON.stringify({
+          type: 'error',
+          message: `Kon resultaten niet serialiseren: ${jsonError.message}`,
+        })}\n\n`;
+        res.write(errorData);
+        res.end();
+      }
     } catch (error: any) {
       console.error('Error in web search discovery:', error);
       
