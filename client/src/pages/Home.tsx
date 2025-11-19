@@ -59,6 +59,7 @@ export default function Home() {
       
       // Step 2: Check which ECLIs are already processed
       const eclis = searchData.records.map((r: any) => r.ecli);
+      // API search results always go to ECLI_NL namespace
       const namespace = 'ECLI_NL';
       
       const checkResponse = await apiRequest(
@@ -244,10 +245,21 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('[AI Enrichment] Error:', error);
-      addLog(`✗ AI enrichment mislukt: ${error.message}`);
+      
+      // Provide better error message
+      let errorMsg = 'Er is een onbekende fout opgetreden';
+      if (error.message) {
+        errorMsg = error.message;
+      } else if (error instanceof TypeError) {
+        errorMsg = 'Netwerkfout - controleer de serververbinding';
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      }
+      
+      addLog(`✗ AI enrichment mislukt: ${errorMsg}`);
       toast({
         title: 'Fout bij AI Enrichment',
-        description: error.message || 'Er is een fout opgetreden',
+        description: errorMsg,
         variant: 'destructive',
       });
     } finally {
@@ -374,6 +386,7 @@ export default function Home() {
         <PineconeExport
           recordCount={preparedRecords.length}
           enrichedRecordCount={countEnrichedRecords(preparedRecords)}
+          preparedRecords={preparedRecords}
           onExport={handleExport}
           isExporting={isExporting}
           exportLogs={exportLogs}

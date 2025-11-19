@@ -147,7 +147,7 @@ export function EcliDiscovery({ onRecordsDiscovered }: Props) {
         },
         body: JSON.stringify({
           sourceUrls: validUrls,
-          namespace: 'ECLI_NL',
+          // Backend automatically tags with source: 'web_search' → WEB_ECLI namespace
         }),
       });
       

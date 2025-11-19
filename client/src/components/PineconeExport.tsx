@@ -14,6 +14,7 @@ interface PineconeExportProps {
   enrichedRecordCount?: number; // Count of AI-enriched records
   isChunked?: boolean;
   civilSubcategory?: string;
+  preparedRecords?: any[]; // The actual records to detect source/namespace
   onExport: (config: ExportConfig) => void;
   isExporting?: boolean;
   exportLogs?: string[];
@@ -25,9 +26,22 @@ export interface ExportConfig {
   batchSize: number;
 }
 
-// Always use ECLI_NL namespace (regardless of civil subcategory)
-const getNamespaceFromSubcategory = (subcategory: string): string => {
-  return 'ECLI_NL';
+// Determine namespace(s) from records based on their source field
+const getNamespacesFromRecords = (records: any[]): string => {
+  if (!records || records.length === 0) {
+    return 'ECLI_NL';
+  }
+  
+  const hasWebSearch = records.some(r => r.source === 'web_search');
+  const hasApiSearch = records.some(r => r.source === 'api_search' || !r.source);
+  
+  if (hasWebSearch && hasApiSearch) {
+    return 'WEB_ECLI + ECLI_NL';
+  } else if (hasWebSearch) {
+    return 'WEB_ECLI';
+  } else {
+    return 'ECLI_NL';
+  }
 };
 
 export default function PineconeExport({
@@ -35,43 +49,64 @@ export default function PineconeExport({
   enrichedRecordCount = 0,
   isChunked = false,
   civilSubcategory = 'all',
+  preparedRecords = [],
   onExport,
   isExporting = false,
   exportLogs = [],
 }: PineconeExportProps) {
   const [indexHost, setIndexHost] = useState("rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io");
-  const [namespace, setNamespace] = useState("");
+  const [displayNamespace, setDisplayNamespace] = useState(""); // Display only
   const [batchSize, setBatchSize] = useState("100");
   const [isClearing, setIsClearing] = useState(false);
   const { toast } = useToast();
   
-  // Auto-generate namespace from civil subcategory
+  // Auto-detect namespace display from records based on their source field
   useEffect(() => {
-    const generatedNamespace = getNamespaceFromSubcategory(civilSubcategory);
-    setNamespace(generatedNamespace);
-  }, [civilSubcategory]);
+    const detectedNamespace = getNamespacesFromRecords(preparedRecords);
+    setDisplayNamespace(detectedNamespace);
+  }, [preparedRecords]);
 
   const handleExport = () => {
     onExport({
       indexHost,
-      namespace,
+      // Backend does automatic source-based routing for PreparedRecords
+      // For chunks, use default ECLI_NL namespace
+      namespace: 'ECLI_NL',
       batchSize: parseInt(batchSize) || 100,
     });
   };
 
   const handleClearProcessedDatabase = async () => {
-    if (!confirm(`Weet je zeker dat je alle verwerkte ECLI's uit de ${namespace} namespace wilt verwijderen? Dit staat je toe om alle records opnieuw te uploaden.`)) {
+    // ROBUST & SIMPLE APPROACH: Always clear BOTH namespaces
+    // This is a debug/admin tool - safer to clear everything than miss records
+    // Clearing empty namespaces has no downside (just returns deleted: 0)
+    
+    if (!confirm(`Weet je zeker dat je alle verwerkte ECLI's uit BEIDE namespaces (WEB_ECLI + ECLI_NL) wilt verwijderen? Dit staat je toe om alle records opnieuw te uploaden.`)) {
       return;
     }
 
     setIsClearing(true);
     try {
-      const response = await apiRequest('DELETE', '/api/processed-eclis/clear', { namespace });
-      const data = await response.json();
+      let webDeleted = 0;
+      let apiDeleted = 0;
+      
+      // Always clear both namespaces sequentially
+      const webResponse = await apiRequest('DELETE', '/api/processed-eclis/clear', { namespace: 'WEB_ECLI' });
+      const webData = await webResponse.json();
+      webDeleted = webData.deleted;
+      
+      const apiResponse = await apiRequest('DELETE', '/api/processed-eclis/clear', { namespace: 'ECLI_NL' });
+      const apiData = await apiResponse.json();
+      apiDeleted = apiData.deleted;
+      
+      const totalDeleted = webDeleted + apiDeleted;
+      const details = webDeleted > 0 || apiDeleted > 0
+        ? ` (WEB_ECLI: ${webDeleted}, ECLI_NL: ${apiDeleted})`
+        : '';
       
       toast({
         title: "Database gewist",
-        description: `${data.deleted} verwerkte ECLI's verwijderd. Je kunt nu alle records opnieuw uploaden.`,
+        description: `${totalDeleted} verwerkte ECLI's verwijderd uit beide namespaces${details}. Je kunt nu alle records opnieuw uploaden.`,
       });
     } catch (error: any) {
       toast({
@@ -142,9 +177,9 @@ export default function PineconeExport({
           </div>
 
           <div className="space-y-2">
-            <Label>Namespace</Label>
+            <Label>Namespace(s)</Label>
             <div className="text-sm font-medium bg-muted px-3 py-2 rounded-md">
-              {namespace}
+              {displayNamespace}
             </div>
             <p className="text-xs text-muted-foreground">
               Standaard namespace voor alle ECLI records
