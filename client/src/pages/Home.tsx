@@ -155,20 +155,41 @@ export default function Home() {
       
       const data = await response.json();
       
+      // Update testingSummary for UI feedback
       setTestingSummary(prev => ({ 
         ...prev, 
         [ecli]: { loading: false, summary: data.summary, error: null } 
       }));
       
+      // BELANGRIJK: Merge AI summary into preparedRecords for Pinecone upload
+      setPreparedRecords(prev => prev.map(record => {
+        if (record.ecli === ecli) {
+          return {
+            ...record,
+            ai_title: data.summary.title,
+            ai_inhoudsindicatie: data.summary.inhoudsindicatie,
+            ai_feiten: data.summary.feiten,
+            ai_geschil: data.summary.geschil,
+            ai_beslissing: data.summary.beslissing,
+            ai_motivering: data.summary.motivering,
+          };
+        }
+        return record;
+      }));
+      
+      addLog(`✓ ${ecli} verrijkt met AI samenvatting`);
+      
       toast({
         title: 'AI Samenvatting gereed',
-        description: `Samenvatting voor ${ecli} is gegenereerd`,
+        description: `${ecli} kan nu geüpload worden naar Pinecone`,
       });
     } catch (error: any) {
       setTestingSummary(prev => ({ 
         ...prev, 
         [ecli]: { loading: false, summary: null, error: error.message } 
       }));
+      
+      addLog(`✗ ${ecli}: ${error.message}`);
       
       toast({
         title: 'Fout bij AI samenvatting',
