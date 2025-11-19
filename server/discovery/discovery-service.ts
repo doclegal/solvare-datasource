@@ -1,6 +1,6 @@
 import { searchWeb, extractECLIs } from './serper-search';
-import { validateEcli } from '../rechtspraak/validator';
-import { fetchMetadata } from '../rechtspraak/metadata';
+import { validateECLI } from './validator';
+import { fetchDecisionContent } from '../rechtspraak-api';
 import type { PreparedRecord } from '@shared/schema';
 import axios from 'axios';
 
@@ -131,9 +131,10 @@ export async function discoverEclisFromSearch(
   
   for (const ecli of Array.from(allEclis)) {
     try {
-      const isValid = await validateEcli(ecli);
+      // Validate and fetch metadata in one call
+      const validationResult = await validateECLI(ecli, 'metadata-only');
       
-      if (isValid) {
+      if (validationResult.isValid && validationResult.enrichedRecord) {
         validEclis.push(ecli);
         
         if (onProgress) {
@@ -145,20 +146,18 @@ export async function discoverEclisFromSearch(
           });
         }
         
-        // Fetch metadata for valid ECLI
-        const metadata = await fetchMetadata(ecli);
-        if (metadata) {
-          preparedRecords.push({
-            ...metadata,
-            sourceUrl: ecliSources.get(ecli)?.[0] || metadata.sourceUrl,
-          });
-        }
+        // Use the enriched record with source URL from discovery
+        const sourceUrl = ecliSources.get(ecli)?.[0] || validationResult.enrichedRecord.sourceUrl;
+        preparedRecords.push({
+          ...validationResult.enrichedRecord,
+          sourceUrl,
+        });
         
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, 200));
       }
     } catch (error) {
-      console.log(`[Discovery] Validation failed for ${ecli}`);
+      console.log(`[Discovery] Validation failed for ${ecli}:`, error);
     }
   }
   
