@@ -188,9 +188,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await sendProgress(`[${i + 1}/${eclis.length}] 🤖 AI samenvatting genereren voor ${ecli}...`, 'info');
           const aiSummary = await generateAISummary(fullText, ecli);
           
-          // Merge everything including AI title
+          // Merge everything including AI title AND preserve source from original record
+          const originalRecord = originalMap.get(ecli)!;
           const enrichedRecord: PreparedRecord = {
             ...record,
+            source: originalRecord.source, // CRITICAL: Preserve source for namespace routing
             fullText,
             ai_title: aiSummary.title,
             ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
@@ -593,8 +595,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // NAMESPACE ROUTING: Split records by source and export to correct namespace
       if (config.records && config.records.length > 0) {
+        // Validate that all records have a source field
+        const recordsWithoutSource = config.records.filter((r: any) => !r.source);
+        if (recordsWithoutSource.length > 0) {
+          throw new Error(`${recordsWithoutSource.length} records hebben geen 'source' veld. Alle records moeten getagd zijn als 'web_search' of 'api_search'.`);
+        }
+        
         const webSearchRecords = config.records.filter((r: any) => r.source === 'web_search');
         const apiSearchRecords = config.records.filter((r: any) => r.source === 'api_search');
+        const unknownSourceRecords = config.records.filter((r: any) => r.source !== 'web_search' && r.source !== 'api_search');
+        
+        if (unknownSourceRecords.length > 0) {
+          console.warn(`[Pinecone Export] WARNING: ${unknownSourceRecords.length} records met onbekende source:`, unknownSourceRecords.map((r: any) => `${r.ecli} (${r.source})`));
+        }
         
         console.log(`[Pinecone Export] Web Search records: ${webSearchRecords.length} → WEB_ECLI namespace`);
         console.log(`[Pinecone Export] API Search records: ${apiSearchRecords.length} → ECLI_NL namespace`);

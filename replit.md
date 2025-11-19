@@ -22,7 +22,7 @@ This project is a web application designed to retrieve and process Dutch judicia
 - I want the tool to prioritize data quality, specifically by filtering out records without valid summaries.
 - The system should prevent duplicate processing of ECLI records.
 - I prefer to be informed about the status of operations, including successful and failed attempts.
-- Avoid making changes to how the `ECLI_NL` namespace is handled; it should remain fixed for all records.
+- Web search discoveries should be routed to the `WEB_ECLI` namespace, while API search results go to the `ECLI_NL` namespace.
 
 ## System Architecture
 
@@ -52,7 +52,10 @@ The application follows a client-server architecture with a React-based frontend
         - **API Endpoint**: `/api/ecli-discovery/ingest` with SSE streaming for real-time progress feedback. Accepts optional config: `maxDepth` (1-10), `maxPages` (1-500), `delayMs` (100-5000ms).
         - **Frontend Component**: `EcliDiscovery.tsx` with dynamic URL inputs, live status updates (pages crawled, depth, queue size), and automatic integration into preparation pipeline.
         - **Default URLs**: Preconfigured with 10 legal websites covering various practice areas (huurrecht, arbeidsrecht, bestuursrecht, consumentenrecht) including Academie voor de Rechtspraktijk, cassatieblog.nl, recht.nl, TRIP Advocaten, Stibbe, Unger Nolet, NJB, Benk, Yspeert, and Wijnenstael.
-    - **Pinecone Export**: Uploads metadata records to a hardcoded Pinecone index (`rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`) within the `ECLI_NL` namespace. Embedding generation uses the `multilingual-e5-large` model.
+    - **Pinecone Export**: Uploads metadata records to a hardcoded Pinecone index (`rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`). Records are routed to namespaces based on their source:
+        - **Web Search discoveries** → `WEB_ECLI` namespace (records tagged with `source: 'web_search'`)
+        - **API Search results** → `ECLI_NL` namespace (records tagged with `source: 'api_search'`)
+        - Embedding generation uses the `multilingual-e5-large` model.
     - **Hybrid Search**: All records are uploaded with both dense and sparse vectors for optimal retrieval:
         - **Dense Vectors**: Generated via Pinecone's `multilingual-e5-large` embedding model for semantic similarity matching.
         - **Sparse Vectors**: Deterministic term-frequency based vectors using DJB2 hashing (32-bit) with Dutch character preservation, Unicode normalization (NFD), and top 1000 highest-weighted terms. Enables precise keyword matching alongside semantic search.
@@ -64,7 +67,7 @@ The application follows a client-server architecture with a React-based frontend
 
 ### System Design Choices
 - **Duplicate Tracking**: A `processed_eclis` table in PostgreSQL tracks already processed ECLIs based on a composite unique key (namespace, ecli), preventing redundant API calls and uploads.
-- **Fixed Pinecone Configuration**: The Pinecone index host and namespace (`ECLI_NL`) are hardcoded for consistency and to simplify deployment.
+- **Source-based Namespace Routing**: Records are tagged with their origin (`web_search` or `api_search`) and automatically routed to the appropriate Pinecone namespace (`WEB_ECLI` or `ECLI_NL` respectively) during export.
 - **Server-side Batch Management**: For chunk preparation, records are batched server-side to prevent HTTP 413 errors with large payloads.
 - **Metadata-Only Export**: The primary Pinecone export strategy focuses on ingesting only the "Inhoudsindicatie" as a vector, with the ECLI serving as the unique vector ID.
 
@@ -82,7 +85,9 @@ The application follows a client-server architecture with a React-based frontend
     - **Embedding Model**: `multilingual-e5-large` (supports Dutch).
     - **Operations**: Upsert vectors with embeddings and metadata.
     - **Index Host (Hardcoded)**: `rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`.
-    - **Namespace (Fixed)**: `ECLI_NL`.
+    - **Namespaces**: 
+        - `WEB_ECLI` for web search discoveries
+        - `ECLI_NL` for API search results
 
 - **PostgreSQL (Neon)**:
     - Used for duplicate tracking of processed ECLIs.
