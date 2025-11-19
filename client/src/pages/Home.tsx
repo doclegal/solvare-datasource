@@ -160,6 +160,8 @@ export default function Home() {
   };
 
   const handleEnrichWithAI = async (resumeBatchId?: string) => {
+    console.log('[AI Enrichment] Starting handleEnrichWithAI, preparedRecords:', preparedRecords.length);
+    
     if (preparedRecords.length === 0) {
       toast({
         title: 'Geen records',
@@ -171,6 +173,7 @@ export default function Home() {
 
     setIsEnrichingWithAI(true);
     const eclis = preparedRecords.map(r => r.ecli);
+    console.log('[AI Enrichment] ECLIs to enrich:', eclis);
 
     try {
       if (resumeBatchId) {
@@ -179,6 +182,7 @@ export default function Home() {
         addLog(`AI enrichment starten voor ${eclis.length} records...`);
       }
       
+      console.log('[AI Enrichment] About to fetch /api/rechtspraak/enrich-batch');
       const response = await fetch('/api/rechtspraak/enrich-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
