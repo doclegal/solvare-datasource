@@ -199,12 +199,25 @@ export default function Home() {
         body: JSON.stringify({ eclis, resumeBatchId }),
       });
       
+      console.log('[AI Enrich] Response status:', response.status);
+      console.log('[AI Enrich] Response ok:', response.ok);
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        const errorText = await response.text();
+        console.error('[AI Enrich] Error response:', errorText);
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.error || `HTTP ${response.status}`);
+        } catch {
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
       }
 
-      const data = await response.json();
+      const responseText = await response.text();
+      console.log('[AI Enrich] Response text length:', responseText.length);
+      console.log('[AI Enrich] Response preview:', responseText.substring(0, 200));
+      
+      const data = JSON.parse(responseText);
       
       console.log(`[AI Enrich] Received ${data.enrichedRecords.length} enriched records`);
       
