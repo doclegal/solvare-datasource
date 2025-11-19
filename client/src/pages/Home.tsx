@@ -212,13 +212,24 @@ export default function Home() {
         resumeBatchId,
       };
       
-      console.log('📦 Request body prepared, size:', JSON.stringify(requestBody).length, 'bytes');
+      console.log('✅ Request body object created');
+      
+      // Test JSON.stringify in try-catch to catch circular ref errors
+      let jsonBody;
+      try {
+        jsonBody = JSON.stringify(requestBody);
+        console.log('✅ JSON.stringify succeeded! Size:', jsonBody.length, 'bytes');
+      } catch (stringifyError: any) {
+        console.error('❌ JSON.stringify FAILED:', stringifyError);
+        throw new Error(`JSON serialization failed: ${stringifyError.message}`);
+      }
+      
       console.log('🚀 About to POST to /api/rechtspraak/enrich-batch');
       
       const response = await fetch('/api/rechtspraak/enrich-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+        body: jsonBody,
       });
       
       console.log('✅ Fetch completed! Response status:', response.status);
