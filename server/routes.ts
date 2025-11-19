@@ -666,48 +666,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
             namespace: 'WEB_ECLI',
           });
           
-          const webResult = await upsertRecordsToPinecone(
-            config.indexHost,
-            webSearchRecords,
-            'WEB_ECLI', // Fixed namespace for web search
-            config.batchSize,
-            (progress) => {
-              sendProgress({
-                type: 'progress',
-                namespace: 'WEB_ECLI',
-                ...progress,
-              });
+          try {
+            const webResult = await upsertRecordsToPinecone(
+              config.indexHost,
+              webSearchRecords,
+              'WEB_ECLI', // Fixed namespace for web search
+              config.batchSize,
+              (progress) => {
+                sendProgress({
+                  type: 'progress',
+                  namespace: 'WEB_ECLI',
+                  ...progress,
+                });
+              }
+            );
+            
+            totalUpserted += webResult.successCount;
+            allResults.push({ namespace: 'WEB_ECLI', ...webResult });
+            
+            // Mark successfully uploaded ECLIs as processed in WEB_ECLI namespace
+            // Use the explicit list of successful ECLIs from the upload result
+            // This is accurate even if some records failed mid-batch
+            if (webResult.successfulEclis && webResult.successfulEclis.length > 0) {
+              const markValues = webResult.successfulEclis.map(ecli => ({ 
+                ecli, 
+                namespace: 'WEB_ECLI' 
+              }));
+              
+              await db
+                .insert(processedEclis)
+                .values(markValues)
+                .onConflictDoNothing();
+              
+              console.log(`[Pinecone Export] Marked ${webResult.successfulEclis.length} ECLIs as processed in WEB_ECLI namespace`);
             }
-          );
-          
-          totalUpserted += webResult.successCount;
-          allResults.push({ namespace: 'WEB_ECLI', ...webResult });
-          
-          // Mark successfully uploaded ECLIs as processed in WEB_ECLI namespace
-          if (webResult.successCount > 0) {
-            const successfulEclis = webSearchRecords
-              .slice(0, webResult.successCount)
-              .map(r => r.ecli);
             
-            const markValues = successfulEclis.map(ecli => ({ 
-              ecli, 
-              namespace: 'WEB_ECLI' 
-            }));
-            
-            await db
-              .insert(processedEclis)
-              .values(markValues)
-              .onConflictDoNothing();
-            
-            console.log(`[Pinecone Export] Marked ${successfulEclis.length} ECLIs as processed in WEB_ECLI namespace`);
+            sendProgress({
+              type: 'namespace_complete',
+              message: `WEB_ECLI namespace voltooid: ${webResult.successCount} records`,
+              namespace: 'WEB_ECLI',
+              ...webResult,
+            });
+          } catch (error: any) {
+            console.error(`[Pinecone Export] Error uploading to WEB_ECLI namespace:`, error);
+            allResults.push({ 
+              namespace: 'WEB_ECLI', 
+              successCount: 0,
+              errorCount: webSearchRecords.length,
+              errors: [{ ecli: 'batch', error: error.message }]
+            });
+            sendProgress({
+              type: 'namespace_error',
+              message: `Fout bij WEB_ECLI namespace: ${error.message}`,
+              namespace: 'WEB_ECLI',
+            });
+            // Continue with next namespace instead of failing entire export
           }
-          
-          sendProgress({
-            type: 'namespace_complete',
-            message: `WEB_ECLI namespace voltooid: ${webResult.successCount} records`,
-            namespace: 'WEB_ECLI',
-            ...webResult,
-          });
         }
         
         // Export API search records to ECLI_NL namespace
@@ -718,48 +732,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
             namespace: 'ECLI_NL',
           });
           
-          const apiResult = await upsertRecordsToPinecone(
-            config.indexHost,
-            apiSearchRecords,
-            'ECLI_NL', // Fixed namespace for API search
-            config.batchSize,
-            (progress) => {
-              sendProgress({
-                type: 'progress',
-                namespace: 'ECLI_NL',
-                ...progress,
-              });
+          try {
+            const apiResult = await upsertRecordsToPinecone(
+              config.indexHost,
+              apiSearchRecords,
+              'ECLI_NL', // Fixed namespace for API search
+              config.batchSize,
+              (progress) => {
+                sendProgress({
+                  type: 'progress',
+                  namespace: 'ECLI_NL',
+                  ...progress,
+                });
+              }
+            );
+            
+            totalUpserted += apiResult.successCount;
+            allResults.push({ namespace: 'ECLI_NL', ...apiResult });
+            
+            // Mark successfully uploaded ECLIs as processed in ECLI_NL namespace
+            // Use the explicit list of successful ECLIs from the upload result
+            // This is accurate even if some records failed mid-batch
+            if (apiResult.successfulEclis && apiResult.successfulEclis.length > 0) {
+              const markValues = apiResult.successfulEclis.map(ecli => ({ 
+                ecli, 
+                namespace: 'ECLI_NL' 
+              }));
+              
+              await db
+                .insert(processedEclis)
+                .values(markValues)
+                .onConflictDoNothing();
+              
+              console.log(`[Pinecone Export] Marked ${apiResult.successfulEclis.length} ECLIs as processed in ECLI_NL namespace`);
             }
-          );
-          
-          totalUpserted += apiResult.successCount;
-          allResults.push({ namespace: 'ECLI_NL', ...apiResult });
-          
-          // Mark successfully uploaded ECLIs as processed in ECLI_NL namespace
-          if (apiResult.successCount > 0) {
-            const successfulEclis = apiSearchRecords
-              .slice(0, apiResult.successCount)
-              .map(r => r.ecli);
             
-            const markValues = successfulEclis.map(ecli => ({ 
-              ecli, 
-              namespace: 'ECLI_NL' 
-            }));
-            
-            await db
-              .insert(processedEclis)
-              .values(markValues)
-              .onConflictDoNothing();
-            
-            console.log(`[Pinecone Export] Marked ${successfulEclis.length} ECLIs as processed in ECLI_NL namespace`);
+            sendProgress({
+              type: 'namespace_complete',
+              message: `ECLI_NL namespace voltooid: ${apiResult.successCount} records`,
+              namespace: 'ECLI_NL',
+              ...apiResult,
+            });
+          } catch (error: any) {
+            console.error(`[Pinecone Export] Error uploading to ECLI_NL namespace:`, error);
+            allResults.push({ 
+              namespace: 'ECLI_NL', 
+              successCount: 0,
+              errorCount: apiSearchRecords.length,
+              errors: [{ ecli: 'batch', error: error.message }]
+            });
+            sendProgress({
+              type: 'namespace_error',
+              message: `Fout bij ECLI_NL namespace: ${error.message}`,
+              namespace: 'ECLI_NL',
+            });
+            // Continue instead of failing entire export
           }
-          
-          sendProgress({
-            type: 'namespace_complete',
-            message: `ECLI_NL namespace voltooid: ${apiResult.successCount} records`,
-            namespace: 'ECLI_NL',
-            ...apiResult,
-          });
         }
         
         sendProgress({
@@ -770,6 +798,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } else {
         // Fallback for chunks (use original namespace logic)
+        // TODO: Chunks don't have a 'source' field, so we can't route them to the correct namespace
+        // Solution: Either add 'source' to ChunkedRecord schema, or deprecate chunking altogether
+        // For now, chunks use the static namespace provided in config
+        console.warn(`[Pinecone Export] Chunk export using static namespace: ${config.namespace}. Namespace routing not supported for chunks.`);
+        
         sendProgress({
           type: 'start',
           message: 'Export naar Pinecone gestart...',
@@ -792,7 +825,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         sendProgress({
           type: 'complete',
           message: 'Export voltooid',
-          ...result,
+          totalUpserted: result.successCount,
+          namespaces: [{ namespace: config.namespace, ...result }],
         });
       }
 

@@ -70,7 +70,14 @@ The application follows a client-server architecture with a React-based frontend
 
 ### System Design Choices
 - **Duplicate Tracking**: A `processed_eclis` table in PostgreSQL tracks already processed ECLIs based on a composite unique key (namespace, ecli), preventing redundant API calls and uploads.
+  - **Automatic Backend Tracking (November 2025)**: The backend automatically marks ECLIs as processed in the correct namespace immediately after successful Pinecone upload. This eliminates frontend manual tracking and ensures namespace accuracy:
+    - Web search records → marked in WEB_ECLI namespace after upload to WEB_ECLI
+    - API search records → marked in ECLI_NL namespace after upload to ECLI_NL
+    - No manual /api/processed-eclis/mark calls needed from frontend
 - **Source-based Namespace Routing**: Records are tagged with their origin (`web_search` or `api_search`) and automatically routed to the appropriate Pinecone namespace (`WEB_ECLI` or `ECLI_NL` respectively) during export.
+  - Export handler splits records by `source` field before upload
+  - Each namespace upload is tracked independently in the database
+  - SSE progress events include namespace-specific breakdowns
 - **Server-side Batch Management**: For chunk preparation, records are batched server-side to prevent HTTP 413 errors with large payloads.
 - **Metadata-Only Export**: The primary Pinecone export strategy focuses on ingesting only the "Inhoudsindicatie" as a vector, with the ECLI serving as the unique vector ID.
 
