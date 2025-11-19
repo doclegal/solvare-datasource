@@ -246,14 +246,33 @@ export default function Home() {
     } catch (error: any) {
       console.error('[AI Enrichment] Error:', error);
       
-      // Provide better error message
-      let errorMsg = 'Er is een onbekende fout opgetreden';
-      if (error.message) {
+      // Robust error message extraction - handle all edge cases including DOMException
+      let errorMsg = '';
+      
+      // Check for AbortError (DOMException) - happens when stream ends unexpectedly
+      if (error?.name === 'AbortError' || (error?.constructor?.name === 'DOMException' && error?.code === 20)) {
+        errorMsg = 'Verbinding met AI enrichment verbroken - mogelijk server error. Controleer de server logs.';
+      } else if (typeof error === 'string' && error.trim()) {
+        errorMsg = error;
+      } else if (error?.message && typeof error.message === 'string' && error.message.trim()) {
         errorMsg = error.message;
       } else if (error instanceof TypeError) {
         errorMsg = 'Netwerkfout - controleer de serververbinding';
-      } else if (typeof error === 'string') {
-        errorMsg = error;
+      } else if (error instanceof Error) {
+        errorMsg = error.toString();
+      } else if (error && typeof error === 'object') {
+        // Try to extract something useful from the object
+        const jsonStr = JSON.stringify(error);
+        if (jsonStr !== '{}' && jsonStr !== 'null') {
+          errorMsg = jsonStr;
+        } else {
+          errorMsg = 'Onbekende fout bij AI enrichment - mogelijk stream verbinding probleem';
+        }
+      }
+      
+      // Final fallback
+      if (!errorMsg || errorMsg.trim() === '') {
+        errorMsg = 'Onbekende fout bij AI enrichment - controleer de server logs';
       }
       
       addLog(`✗ AI enrichment mislukt: ${errorMsg}`);
