@@ -24,6 +24,7 @@ export interface ExportConfig {
   indexHost: string;
   namespace: string;
   batchSize: number;
+  includeNonEnriched?: boolean; // NEW: Allow non-enriched ECLI_NL records
 }
 
 // Determine namespace(s) from records based on their source field
@@ -65,14 +66,19 @@ export default function PineconeExport({
     const detectedNamespace = getNamespacesFromRecords(preparedRecords);
     setDisplayNamespace(detectedNamespace);
   }, [preparedRecords]);
+  
+  // Count ECLI_NL (api_search) records for non-enriched upload option
+  const ecliNlRecordCount = preparedRecords.filter(r => r.source === 'api_search' || !r.source).length;
+  const hasEcliNlRecords = ecliNlRecordCount > 0;
 
-  const handleExport = () => {
+  const handleExport = (includeNonEnriched: boolean = false) => {
     onExport({
       indexHost,
       // Backend does automatic source-based routing for PreparedRecords
       // For chunks, use default ECLI_NL namespace
       namespace: 'ECLI_NL',
       batchSize: parseInt(batchSize) || 100,
+      includeNonEnriched, // NEW: Allow non-enriched ECLI_NL records
     });
   };
 
@@ -204,32 +210,52 @@ export default function PineconeExport({
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Button
-            onClick={handleExport}
-            disabled={recordCount === 0 || !indexHost || isExporting || (!isChunked && enrichedRecordCount === 0)}
-            className="flex-1"
-            data-testid="button-export"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {isExporting 
-              ? "Bezig met exporteren..." 
-              : isChunked 
-                ? `${recordCount} Records naar Pinecone Versturen`
-                : `${enrichedRecordCount} AI-Verrijkte Records naar Pinecone Versturen`
-            }
-          </Button>
+        <div className="flex flex-col gap-3">
+          {/* Standard upload: Only AI-enriched records */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={() => handleExport(false)}
+              disabled={recordCount === 0 || !indexHost || isExporting || (!isChunked && enrichedRecordCount === 0)}
+              className="flex-1"
+              data-testid="button-export"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isExporting 
+                ? "Bezig met exporteren..." 
+                : isChunked 
+                  ? `${recordCount} Records naar Pinecone Versturen`
+                  : `${enrichedRecordCount} AI-Verrijkte Records naar Pinecone Versturen`
+              }
+            </Button>
+            
+            <Button
+              onClick={handleClearProcessedDatabase}
+              disabled={isClearing || isExporting}
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              data-testid="button-clear-processed"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {isClearing ? "Wissen..." : "Wis Verwerkte ECLI's Database"}
+            </Button>
+          </div>
           
-          <Button
-            onClick={handleClearProcessedDatabase}
-            disabled={isClearing || isExporting}
-            variant="outline"
-            className="flex-1 sm:flex-none"
-            data-testid="button-clear-processed"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            {isClearing ? "Wissen..." : "Wis Verwerkte ECLI's Database"}
-          </Button>
+          {/* NEW: ECLI_NL upload without enrichment (grey button) */}
+          {!isChunked && hasEcliNlRecords && (
+            <Button
+              onClick={() => handleExport(true)}
+              disabled={!indexHost || isExporting}
+              variant="outline"
+              className="w-full sm:w-auto"
+              data-testid="button-export-non-enriched"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isExporting 
+                ? "Bezig met exporteren..." 
+                : `${ecliNlRecordCount} ECLI_NL Records Uploaden (zonder verrijking)`
+              }
+            </Button>
+          )}
         </div>
 
         {exportLogs.length > 0 && (
