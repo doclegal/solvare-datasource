@@ -1051,17 +1051,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ECLI Discovery endpoint with breadth-first section crawling
-  app.post('/api/ecli-discovery/ingest', async (req: Request, res: Response) => {
+  // NEW: Web Search Discovery endpoint (replaces old crawler-based discovery)
+  app.post('/api/discovery/search', async (req: Request, res: Response) => {
     try {
-      const { sourceUrls, namespace, config } = z.object({
-        sourceUrls: z.array(z.string().url()),
-        namespace: z.string().default('ECLI_NL'),
-        config: z.object({
-          maxDepth: z.number().min(1).max(10).optional(),
-          maxPages: z.number().min(1).max(500).optional(),
-          delayMs: z.number().min(100).max(5000).optional(),
-        }).optional(),
+      const { query, domains, maxResults } = z.object({
+        query: z.string().min(1),
+        domains: z.array(z.string()).optional(),
+        maxResults: z.number().min(1).max(100).default(20),
       }).parse(req.body);
       
       // Set up SSE with proper headers to prevent buffering
@@ -1070,41 +1066,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       
-      // Disable TCP buffering (Nagle's algorithm)
       if (req.socket) {
         req.socket.setNoDelay(true);
       }
       
       res.flushHeaders();
       
-      const sendProgress = async (progress: DiscoveryProgress) => {
-        console.log('[SSE] Sending progress:', progress.type, progress.message);
+      const sendProgress = async (progress: any) => {
+        console.log('[Discovery SSE]', progress.type, progress.message);
         const data = `data: ${JSON.stringify(progress)}\n\n`;
         res.write(data);
         
-        // Force flush to send immediately
         if ('flush' in res && typeof (res as any).flush === 'function') {
           (res as any).flush();
         }
         
-        // Small delay to ensure browser has time to process
         await new Promise(resolve => setImmediate(resolve));
       };
       
-      // Run discovery with section crawling
-      const { preparedRecords, results } = await discoverECLIs(
-        sourceUrls,
-        namespace,
-        config || {},
-        sendProgress
-      );
+      // Import and run discovery service
+      const { discoverEclisFromSearch } = await import('./discovery/discovery-service');
+      const { eclis, preparedRecords } = await discoverEclisFromSearch(query, {
+        domains,
+        maxResults,
+        onProgress: sendProgress,
+      });
       
-      // Send completion event with prepared records
+      // Send completion event
       const completionData = `data: ${JSON.stringify({
         type: 'discovery_complete',
+        message: `Discovery voltooid: ${eclis.length} geldige ECLI's gevonden`,
+        eclis,
         preparedRecords,
-        results,
-        totalRecords: preparedRecords.length,
+        totalEclis: eclis.length,
       })}\n\n`;
       res.write(completionData);
       if ('flush' in res && typeof (res as any).flush === 'function') {
@@ -1113,9 +1107,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.end();
     } catch (error: any) {
-      console.error('Error in ECLI discovery:', error);
+      console.error('Error in web search discovery:', error);
       
-      // Send error via SSE
       const errorData = `data: ${JSON.stringify({
         type: 'error',
         message: error.message || 'Discovery failed',
