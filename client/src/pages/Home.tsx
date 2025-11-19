@@ -145,6 +145,13 @@ export default function Home() {
   };
 
   const handleResumeBatch = async (batchId: string, records: PreparedRecord[]) => {
+    console.log('🟢 Home handleResumeBatch called');
+    console.log('🟢 batchId type:', typeof batchId);
+    console.log('🟢 batchId value:', batchId);
+    console.log('🟢 records type:', typeof records);
+    console.log('🟢 records is array:', Array.isArray(records));
+    console.log('🟢 records count:', records?.length);
+    
     // Load the batch records into the current state
     setPreparedRecords(records);
     
@@ -154,7 +161,9 @@ export default function Home() {
     addLog(`📋 Batch geladen: ${records.length} records (${enrichedCount} verrijkt, ${remainingCount} te verrijken)`);
     
     // Automatically start enrichment with resume
+    console.log('🟢 About to call handleEnrichWithAI with batchId:', batchId);
     setTimeout(() => {
+      console.log('🟢 setTimeout executing - calling handleEnrichWithAI');
       handleEnrichWithAI(batchId);
     }, 500); // Small delay to ensure UI updates
   };

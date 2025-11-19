@@ -116,6 +116,10 @@ export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatc
   const handleResumeBatch = async (batchId: string, event: React.MouseEvent) => {
     event.stopPropagation();
     
+    console.log('🔵 BatchManager handleResumeBatch called');
+    console.log('🔵 batchId type:', typeof batchId);
+    console.log('🔵 batchId value:', batchId);
+    
     if (!onResumeBatch) {
       toast({
         variant: "destructive",
@@ -129,6 +133,11 @@ export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatc
     try {
       const response = await apiRequest('GET', `/api/batches/${batchId}`);
       const data = await response.json();
+      
+      console.log('🔵 Batch data received:', data);
+      console.log('🔵 Records count:', data.batch?.records?.length);
+      console.log('🔵 Sample record:', data.batch?.records?.[0]);
+      console.log('🔵 Calling onResumeBatch with:', { batchId, recordsCount: data.batch.records.length });
 
       onResumeBatch(batchId, data.batch.records);
 
