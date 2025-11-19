@@ -169,8 +169,6 @@ export default function Home() {
   };
 
   const handleEnrichWithAI = async (resumeBatchId?: string) => {
-    console.log('🔥 NEW VERSION LOADED - 2025-11-19 14:00');
-    
     if (preparedRecords.length === 0) {
       toast({
         title: 'Geen records',
@@ -183,33 +181,8 @@ export default function Home() {
     setIsEnrichingWithAI(true);
 
     try {
-      console.log('🧹 Cleaning records to remove circular refs...');
-      // Strip circular references and problematic fields from preparedRecords
-      const cleanRecords = preparedRecords.map(record => ({
-        ecli: record.ecli,
-        title: record.title,
-        court: record.court,
-        decisionDate: record.decisionDate,
-        legalArea: record.legalArea,
-        procedureType: record.procedureType,
-        inhoudsindicatie: record.inhoudsindicatie,
-        source: record.source,
-        sourceUrl: record.sourceUrl,
-        // Include AI fields if resuming
-        ai_title: record.ai_title,
-        ai_inhoudsindicatie: record.ai_inhoudsindicatie,
-        ai_feiten: record.ai_feiten,
-        ai_geschil: record.ai_geschil,
-        ai_beslissing: record.ai_beslissing,
-        ai_motivering: record.ai_motivering,
-      }));
-      
-      // Extract ECLIs from clean records instead of original preparedRecords
-      const eclis = cleanRecords.map(r => r.ecli);
-      
-      console.log('✅ Clean records created:', cleanRecords.length);
-      console.log('✅ ECLIs extracted:', eclis.length);
-      console.log('🔍 Sample clean record:', cleanRecords[0]);
+      // CLEAN REBUILD: Extract ONLY ECLIs - no complex objects, no circular refs
+      const eclis = preparedRecords.map(r => r.ecli);
       
       if (resumeBatchId) {
         addLog(`AI enrichment hervatten voor batch ${resumeBatchId} (${eclis.length} records)...`);
@@ -217,124 +190,62 @@ export default function Home() {
         addLog(`AI enrichment starten voor ${eclis.length} records...`);
       }
       
-      const requestBody = { 
-        eclis,
-        originalRecords: cleanRecords,
-        resumeBatchId,
-      };
+      console.log(`[AI Enrich] Calling /api/ai/enrich with ${eclis.length} ECLIs`);
       
-      console.log('✅ Request body object created');
-      
-      // Test JSON.stringify in try-catch to catch circular ref errors
-      let jsonBody;
-      try {
-        jsonBody = JSON.stringify(requestBody);
-        console.log('✅ JSON.stringify succeeded! Size:', jsonBody.length, 'bytes');
-      } catch (stringifyError: any) {
-        console.error('❌ JSON.stringify FAILED:', stringifyError);
-        throw new Error(`JSON serialization failed: ${stringifyError.message}`);
-      }
-      
-      console.log('🚀 About to POST to /api/rechtspraak/enrich-batch');
-      
-      const response = await fetch('/api/rechtspraak/enrich-batch', {
+      // Call new clean endpoint
+      const response = await fetch('/api/ai/enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: jsonBody,
+        body: JSON.stringify({ eclis, resumeBatchId }),
       });
       
-      console.log('✅ Fetch completed! Response status:', response.status);
-
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('Geen response stream beschikbaar');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          console.log('[AI Enrichment] Stream completed');
-          break;
+      const data = await response.json();
+      
+      console.log(`[AI Enrich] Received ${data.enrichedRecords.length} enriched records`);
+      
+      // Update preparedRecords with enriched data
+      // Match by ECLI and merge AI fields
+      setPreparedRecords(prev => prev.map(record => {
+        const enriched = data.enrichedRecords.find((r: PreparedRecord) => r.ecli === record.ecli);
+        if (enriched) {
+          return {
+            ...record,
+            ai_title: enriched.ai_title,
+            ai_inhoudsindicatie: enriched.ai_inhoudsindicatie,
+            ai_feiten: enriched.ai_feiten,
+            ai_geschil: enriched.ai_geschil,
+            ai_beslissing: enriched.ai_beslissing,
+            ai_motivering: enriched.ai_motivering,
+          };
         }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.type === 'complete') {
-                // Update records with enriched data
-                setPreparedRecords(data.records || []);
-                
-                addLog(`✓ AI enrichment voltooid: ${data.successful} succesvol, ${data.failed} fouten`);
-                
-                toast({
-                  title: 'AI Enrichment Voltooid',
-                  description: `${data.successful} records verrijkt met AI samenvattingen`,
-                });
-              } else if (data.type === 'error') {
-                addLog(`✗ Fout: ${data.message}`);
-                throw new Error(data.message || 'AI enrichment fout');
-              } else if (data.message) {
-                addLog(data.message);
-              }
-            } catch (e: any) {
-              if (e.message && e.message.includes('AI enrichment fout')) {
-                throw e;
-              }
-              console.error('[AI Enrichment] Parse error:', e);
-            }
-          }
-        }
+        return record;
+      }));
+      
+      // Log results
+      addLog(`✓ AI enrichment voltooid: ${data.stats.enriched} verrijkt, ${data.stats.failed} fouten`);
+      
+      if (data.errors.length > 0) {
+        data.errors.forEach((err: { ecli: string; error: string }) => {
+          addLog(`✗ ${err.ecli}: ${err.error}`);
+        });
       }
+
+      toast({
+        title: 'AI Enrichment voltooid',
+        description: `${data.stats.enriched} records verrijkt met AI samenvattingen`,
+      });
     } catch (error: any) {
       console.error('[AI Enrichment] Error:', error);
       
-      // Robust error message extraction - handle all edge cases including DOMException
-      let errorMsg = '';
-      
-      // Check for AbortError (DOMException) - happens when stream ends unexpectedly
-      if (error?.name === 'AbortError' || (error?.constructor?.name === 'DOMException' && error?.code === 20)) {
-        errorMsg = 'Verbinding met AI enrichment verbroken - mogelijk server error. Controleer de server logs.';
-      } else if (typeof error === 'string' && error.trim()) {
-        errorMsg = error;
-      } else if (error?.message && typeof error.message === 'string' && error.message.trim()) {
-        errorMsg = error.message;
-      } else if (error instanceof TypeError) {
-        errorMsg = 'Netwerkfout - controleer de serververbinding';
-      } else if (error instanceof Error) {
-        errorMsg = error.toString();
-      } else if (error && typeof error === 'object') {
-        // Try to extract something useful from the object
-        const jsonStr = JSON.stringify(error);
-        if (jsonStr !== '{}' && jsonStr !== 'null') {
-          errorMsg = jsonStr;
-        } else {
-          errorMsg = 'Onbekende fout bij AI enrichment - mogelijk stream verbinding probleem';
-        }
-      }
-      
-      // Final fallback
-      if (!errorMsg || errorMsg.trim() === '') {
-        errorMsg = 'Onbekende fout bij AI enrichment - controleer de server logs';
-      }
-      
-      addLog(`✗ AI enrichment mislukt: ${errorMsg}`);
+      addLog(`Fout bij AI enrichment: ${error.message}`);
       toast({
-        title: 'Fout bij AI Enrichment',
-        description: errorMsg,
+        title: 'AI Enrichment mislukt',
+        description: error.message,
         variant: 'destructive',
       });
     } finally {

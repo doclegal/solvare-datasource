@@ -444,6 +444,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // NEW: AI Enrichment endpoint - clean rebuild without circular references
+  app.post('/api/ai/enrich', async (req: Request, res: Response) => {
+    try {
+      const { eclis, resumeBatchId } = req.body;
+      
+      if (!Array.isArray(eclis) || eclis.length === 0) {
+        return res.status(400).json({ error: 'ECLIs lijst is vereist' });
+      }
+
+      console.log(`[AI Enrich] Starting enrichment for ${eclis.length} ECLIs`);
+      if (resumeBatchId) {
+        console.log(`[AI Enrich] Resuming batch: ${resumeBatchId}`);
+      }
+
+      const enrichedRecords: PreparedRecord[] = [];
+      const errors: Array<{ ecli: string; error: string }> = [];
+
+      // Process each ECLI: fetch metadata + full text, generate AI summary
+      for (let i = 0; i < eclis.length; i++) {
+        const ecli = eclis[i];
+        
+        try {
+          console.log(`[${i + 1}/${eclis.length}] Processing ${ecli}...`);
+          
+          // Step 1: Fetch metadata only (lightweight, no full text yet)
+          const metadata = await fetchDecisionContent(ecli);
+          
+          // Step 2: Check if already enriched (skip if has ai_title)
+          if (resumeBatchId && metadata.ai_title) {
+            console.log(`[${ecli}] Already enriched, skipping`);
+            enrichedRecords.push(metadata);
+            continue;
+          }
+          
+          // Step 3: Fetch full text for AI enrichment
+          console.log(`[${ecli}] Fetching full text...`);
+          const fullText = await fetchFullText(ecli);
+          
+          if (!fullText || fullText.trim().length < 100) {
+            console.warn(`[${ecli}] No full text available, skipping AI enrichment`);
+            enrichedRecords.push(metadata);
+            continue;
+          }
+          
+          // Step 4: Generate AI summary
+          console.log(`[${ecli}] Generating AI summary...`);
+          const aiSummary = await generateAISummary(fullText, ecli);
+          
+          // Step 5: Create clean enriched record (plain object, no circular refs)
+          const enrichedRecord: PreparedRecord = {
+            ecli: metadata.ecli,
+            title: metadata.title,
+            court: metadata.court,
+            decisionDate: metadata.decisionDate,
+            legalArea: metadata.legalArea,
+            procedureType: metadata.procedureType,
+            sourceUrl: `https://uitspraken.rechtspraak.nl/details?id=${ecli}`,
+            inhoudsindicatie: metadata.inhoudsindicatie,
+            source: metadata.source || 'api_search',
+            
+            // AI-generated fields
+            ai_title: aiSummary.title,
+            ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+            ai_feiten: aiSummary.feiten,
+            ai_geschil: aiSummary.geschil,
+            ai_beslissing: aiSummary.beslissing,
+            ai_motivering: aiSummary.motivering,
+          };
+          
+          enrichedRecords.push(enrichedRecord);
+          console.log(`[${ecli}] ✓ Enriched successfully`);
+          
+          // Rate limiting between API calls
+          if (i < eclis.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (error: any) {
+          console.error(`[${ecli}] Enrichment failed:`, error.message);
+          errors.push({
+            ecli,
+            error: error.message || 'Unknown error',
+          });
+        }
+      }
+
+      console.log(`[AI Enrich] Completed: ${enrichedRecords.length} enriched, ${errors.length} errors`);
+      
+      res.json({
+        success: true,
+        enrichedRecords,
+        errors,
+        stats: {
+          total: eclis.length,
+          enriched: enrichedRecords.length,
+          failed: errors.length,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error in /api/ai/enrich:', error);
+      res.status(500).json({ error: error.message || 'AI enrichment failed' });
+    }
+  });
+
   // Create or update batch from records (for accumulated multi-fetch workflow)
   app.post('/api/rechtspraak/create-batch', async (req: Request, res: Response) => {
     try {
