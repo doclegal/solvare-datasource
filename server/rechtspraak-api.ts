@@ -21,10 +21,58 @@ interface RechtspraakSearchResponse {
 }
 
 /**
+ * Convert year/month to date range for filtering
+ * Returns both dateFrom and dateTo to create a bounded range
+ * Uses manual YYYY-MM-DD formatting to avoid timezone issues
+ */
+function convertYearMonthToDates(year?: number, month?: number): { dateFrom?: string; dateTo?: string } {
+  if (!year) {
+    return {}; // No year specified, no filter
+  }
+  
+  // Helper to format manual date components as YYYY-MM-DD
+  const formatManualDate = (y: number, m: number, d: number): string => {
+    const yearStr = y.toString().padStart(4, '0');
+    const monthStr = m.toString().padStart(2, '0');
+    const dayStr = d.toString().padStart(2, '0');
+    return `${yearStr}-${monthStr}-${dayStr}`;
+  };
+  
+  if (month) {
+    // Specific month: e.g., January 2024 = 2024-01-01 to 2024-02-01
+    const fromDate = formatManualDate(year, month, 1);
+    
+    // Calculate next month (handle year rollover)
+    const toMonth = month === 12 ? 1 : month + 1;
+    const toYear = month === 12 ? year + 1 : year;
+    const toDate = formatManualDate(toYear, toMonth, 1);
+    
+    return { dateFrom: fromDate, dateTo: toDate };
+  } else {
+    // Whole year: e.g., 2024 = 2024-01-01 to 2025-01-01
+    const fromDate = formatManualDate(year, 1, 1);
+    const toDate = formatManualDate(year + 1, 1, 1);
+    
+    return { dateFrom: fromDate, dateTo: toDate };
+  }
+}
+
+/**
+ * Helper to format date as YYYY-MM-DD without timezone conversion
+ */
+function formatDateYYYYMMDD(date: Date): string {
+  const year = date.getFullYear().toString().padStart(4, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0'); // +1 because months are 0-indexed
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Convert a date period string to a start date for filtering
  * Uses the 'modified' field to filter on when the judgment was last updated in the database
  * Note: The Rechtspraak API does not support filtering on actual judgment date (uitspraakdatum),
  * only on publication/modification dates.
+ * Uses timezone-safe formatting to avoid off-by-one-day errors
  */
 function convertPeriodToDates(period: string): { dateFrom?: string } {
   if (period === 'all' || !period) {
@@ -55,7 +103,7 @@ function convertPeriodToDates(period: string): { dateFrom?: string } {
   }
   
   return {
-    dateFrom: fromDate.toISOString().split('T')[0],
+    dateFrom: formatDateYYYYMMDD(fromDate),
   };
 }
 
@@ -65,8 +113,21 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
 }> {
   const params = new URLSearchParams();
   
-  // Convert period to start date for filtering
-  const { dateFrom } = convertPeriodToDates(filters.datePeriod || 'all');
+  // NEW: Year/Month filtering takes precedence over period filtering
+  let dateFrom: string | undefined;
+  let dateTo: string | undefined;
+  
+  if (filters.year) {
+    // Use specific year/month filtering (Methode 1)
+    const yearMonthDates = convertYearMonthToDates(filters.year, filters.month);
+    dateFrom = yearMonthDates.dateFrom;
+    dateTo = yearMonthDates.dateTo;
+    console.log(`[Rechtspraak API] Year/Month filtering: ${filters.year}${filters.month ? '/' + filters.month : ''} → ${dateFrom} to ${dateTo}`);
+  } else {
+    // Fall back to relative period filtering (Methode 2)
+    const periodDates = convertPeriodToDates(filters.datePeriod || 'all');
+    dateFrom = periodDates.dateFrom;
+  }
   
   // Filter on Civielrecht or specific subcategory
   const subcategoryId = filters.civilSubcategory || 'all';
@@ -86,12 +147,17 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
   }
   
   // Add modified date filter if specified
-  // The API only supports filtering on modification date, not on judgment date
-  // We use a single 'modified' parameter with the start date to get all judgments
-  // modified on or after that date
+  // The API supports filtering on modification date with both start and end dates
+  // We use 'modified' parameter for the start date (inclusive)
+  // And optionally a second 'modified' parameter for the end date (exclusive) when doing year/month filtering
   if (dateFrom) {
     params.append('modified', dateFrom);
   }
+  
+  // Store dateTo for client-side filtering if needed
+  // The Rechtspraak API doesn't support upper bound in 'modified' parameter
+  // So we fetch results from dateFrom onwards and filter them client-side
+  const needsClientSideFiltering = !!dateTo;
   
   // Always filter for full documents only
   params.append('return', 'DOC');
@@ -173,12 +239,15 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
           court = getCourtName(courtCode);
         }
         
-        // Extract date
+        // Extract date (modified date for filtering)
         let decisionDate = '';
+        let modifiedDate = ''; // NEW: Store modified date for client-side filtering
         if (entry.updated) {
           decisionDate = entry.updated.split('T')[0];
+          modifiedDate = entry.updated.split('T')[0];
         } else if (entry.published) {
           decisionDate = entry.published.split('T')[0];
+          modifiedDate = entry.published.split('T')[0];
         }
         
         return {
@@ -187,6 +256,7 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
           court,
           decisionDate,
           summary,
+          modifiedDate, // NEW: Include for filtering
         };
       })
       // CRITICAL FILTER: Only keep records with valid Inhoudsindicatie
@@ -194,7 +264,7 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
       // - Empty summaries
       // - Single dash "-" (indicates missing summary)
       // - Whitespace-only summaries
-      .filter((record: EcliRecord) => {
+      .filter((record: any) => {
         const hasValidSummary = record.summary && 
                                record.summary.trim() !== '' && 
                                record.summary.trim() !== '-';
@@ -204,6 +274,31 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
         }
         
         return hasValidSummary;
+      })
+      // NEW: Client-side date range filtering for year/month precision
+      // The API doesn't support upper bound, so we filter here
+      .filter((record: any) => {
+        if (!needsClientSideFiltering || !dateTo) {
+          return true; // No upper bound needed
+        }
+        
+        // Filter out records modified on or after dateTo (exclusive upper bound)
+        const recordModified = record.modifiedDate;
+        if (!recordModified) {
+          return true; // Keep records without date (rare)
+        }
+        
+        const isBeforeDateTo = recordModified < dateTo;
+        if (!isBeforeDateTo) {
+          console.log(`[Rechtspraak API] Filtered out ${record.ecli} - modified ${recordModified} >= ${dateTo}`);
+        }
+        
+        return isBeforeDateTo;
+      })
+      // Clean up: Remove modifiedDate from final records (not part of EcliRecord type)
+      .map((record: any) => {
+        const { modifiedDate, ...cleanRecord } = record;
+        return cleanRecord as EcliRecord;
       });
     
     const filteredCount = entries.length - records.length;

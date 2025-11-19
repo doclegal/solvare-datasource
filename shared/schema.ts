@@ -46,6 +46,9 @@ export type PreparedRecord = z.infer<typeof preparedRecordSchema>;
 export const searchFiltersSchema = z.object({
   batchSize: z.number().default(50),
   datePeriod: z.string().optional().default("all"),
+  // NEW: Year/Month specific filtering (takes precedence over datePeriod)
+  year: z.number().optional(), // e.g., 2024
+  month: z.number().optional(), // 1-12 (optional, if not set = whole year)
   court: z.string().optional(),
   civilSubcategory: z.string().optional(),
   fullDocumentsOnly: z.boolean().default(false),

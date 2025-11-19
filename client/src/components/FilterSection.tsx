@@ -16,6 +16,8 @@ interface FilterSectionProps {
 export interface FilterParams {
   batchSize: number;
   datePeriod: string;
+  year?: number; // NEW: Specific year filtering
+  month?: number; // NEW: Specific month (1-12)
   court: string;
   civilSubcategory: string;
   fullDocumentsOnly: boolean;
@@ -33,11 +35,17 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
   const [batchSize, setBatchSize] = useState("50");
   const [datePeriod, setDatePeriod] = useState("10years");
   const [civilSubcategory, setCivilSubcategory] = useState("all");
+  // NEW: Year/Month specific filtering
+  const [selectedYear, setSelectedYear] = useState<string>("none");
+  const [selectedMonth, setSelectedMonth] = useState<string>("none");
 
   const handleFetch = () => {
     onFetch({
       batchSize: parseInt(batchSize) || 50,
       datePeriod,
+      // NEW: Pass year/month if selected (takes precedence over datePeriod)
+      year: selectedYear !== "none" ? parseInt(selectedYear) : undefined,
+      month: selectedMonth !== "none" ? parseInt(selectedMonth) : undefined,
       court: "all", // Always search all courts (Rechtbanken, Gerechtshoven, Hoge Raad)
       civilSubcategory,
       fullDocumentsOnly: true, // Always filter for full documents
@@ -48,8 +56,37 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
     setBatchSize("50");
     setDatePeriod("10years");
     setCivilSubcategory("all");
+    setSelectedYear("none");
+    setSelectedMonth("none");
     onReset();
   };
+
+  // Generate year options (2010-2025)
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years = [{ value: "none", label: "Geen specifiek jaar" }];
+    for (let year = currentYear; year >= 2010; year--) {
+      years.push({ value: year.toString(), label: year.toString() });
+    }
+    return years;
+  }, []);
+
+  // Month options (1-12)
+  const monthOptions = [
+    { value: "none", label: "Hele jaar" },
+    { value: "1", label: "Januari" },
+    { value: "2", label: "Februari" },
+    { value: "3", label: "Maart" },
+    { value: "4", label: "April" },
+    { value: "5", label: "Mei" },
+    { value: "6", label: "Juni" },
+    { value: "7", label: "Juli" },
+    { value: "8", label: "Augustus" },
+    { value: "9", label: "September" },
+    { value: "10", label: "Oktober" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ];
 
   return (
     <Card>
@@ -74,40 +111,84 @@ export default function FilterSection({ onFetch, onReset, isLoading = false }: F
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="date-period">Periode (max. 10 jaar)</Label>
-            <p className="text-xs text-muted-foreground mb-1">
-              Filtert op wijzigingsdatum (maximaal 10 jaar terug)
+            <Label className="text-base font-semibold">📅 Datum Filtering (kies één methode)</Label>
+            <p className="text-xs text-muted-foreground">
+              <strong>Methode 1:</strong> Specifiek jaar/maand (bijv. Januari 2024, OF heel 2024)<br />
+              <strong>Methode 2:</strong> Relatieve periode (bijv. "laatste 10 jaar")
             </p>
-            <Select value={datePeriod} onValueChange={setDatePeriod}>
-              <SelectTrigger id="date-period" data-testid="select-date-period">
-                <SelectValue placeholder="Selecteer periode" />
-              </SelectTrigger>
-              <SelectContent>
-                {datePeriodOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="civil-subcategory">Type civiele zaak</Label>
-            <Select value={civilSubcategory} onValueChange={setCivilSubcategory}>
-              <SelectTrigger id="civil-subcategory" data-testid="select-civil-subcategory">
-                <SelectValue placeholder="Selecteer type zaak" />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                {civilSubcategoriesData.map((cat: any) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="year-select">Jaar (Methode 1)</Label>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger id="year-select" data-testid="select-year">
+                  <SelectValue placeholder="Selecteer jaar" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {yearOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="month-select">Maand (laat "Hele jaar" voor volledig jaar)</Label>
+              <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={selectedYear === "none"}>
+                <SelectTrigger id="month-select" data-testid="select-month">
+                  <SelectValue placeholder="Hele jaar" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {monthOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="date-period">Periode (Methode 2)</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Alleen gebruikt als geen specifiek jaar gekozen
+              </p>
+              <Select value={datePeriod} onValueChange={setDatePeriod} disabled={selectedYear !== "none"}>
+                <SelectTrigger id="date-period" data-testid="select-date-period" className={selectedYear !== "none" ? "opacity-50" : ""}>
+                  <SelectValue placeholder="Selecteer periode" />
+                </SelectTrigger>
+                <SelectContent>
+                  {datePeriodOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="civil-subcategory">Type civiele zaak</Label>
+              <Select value={civilSubcategory} onValueChange={setCivilSubcategory}>
+                <SelectTrigger id="civil-subcategory" data-testid="select-civil-subcategory">
+                  <SelectValue placeholder="Selecteer type zaak" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {civilSubcategoriesData.map((cat: any) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
