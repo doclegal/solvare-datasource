@@ -16,7 +16,7 @@ interface SavedBatch {
 
 interface BatchManagerProps {
   currentRecords: PreparedRecord[];
-  onLoadBatch: (records: PreparedRecord[]) => void;
+  onLoadBatch: (batchId: string, records: PreparedRecord[]) => void;
   onResumeBatch?: (batchId: string, records: PreparedRecord[]) => void;
 }
 
@@ -94,7 +94,8 @@ export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatc
       const response = await apiRequest('GET', `/api/batches/${batchId}`);
       const data = await response.json();
 
-      onLoadBatch(data.batch.records);
+      // CRITICAL: Pass batchId so Home.tsx can prevent duplicate auto-saves
+      onLoadBatch(batchId, data.batch.records);
 
       toast({
         title: "Batch geladen",

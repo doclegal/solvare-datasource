@@ -27,6 +27,7 @@ export default function Home() {
   const { toast } = useToast();
   
   const fetchLockRef = useRef(false);
+  const autoSaveInProgressRef = useRef(false); // Prevent concurrent auto-saves
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString('nl-NL');
@@ -135,12 +136,20 @@ export default function Home() {
   };
 
   // 💾 AUTO-SAVE: Automatically save records to batch storage (if enabled)
-  // This prevents data loss on page refresh/server restart
+  // SAFETY: Only auto-saves on FIRST fetch (when currentBatchId is null)
+  // Uses ref-based guard to prevent race conditions from concurrent fetches
   const autoSaveBatch = async (records: PreparedRecord[]) => {
-    if (!ENABLE_AUTO_SAVE || records.length === 0) {
+    // Only auto-save if:
+    // 1. Feature flag is enabled
+    // 2. We have records to save
+    // 3. No batch exists yet (first fetch only)
+    // 4. Not already saving (prevent race condition)
+    if (!ENABLE_AUTO_SAVE || records.length === 0 || currentBatchId !== null || autoSaveInProgressRef.current) {
       return;
     }
 
+    autoSaveInProgressRef.current = true; // Set IMMEDIATELY (synchronous)
+    
     try {
       const response = await apiRequest('POST', '/api/batches/save', {
         records,
@@ -154,6 +163,8 @@ export default function Home() {
       // Silent fail - don't interrupt user flow with auto-save errors
       console.error('[Auto-save] Failed to save batch:', error);
       addLog(`⚠️ Auto-opslaan mislukt (records blijven in memory)`);
+    } finally {
+      autoSaveInProgressRef.current = false; // Clear when done
     }
   };
 
@@ -294,14 +305,11 @@ export default function Home() {
   };
 
   const handleRecordsDiscovered = (discoveredRecords: PreparedRecord[]) => {
-    const updatedRecords = [...preparedRecords, ...discoveredRecords];
-    setPreparedRecords(updatedRecords);
+    setPreparedRecords(prev => [...prev, ...discoveredRecords]);
     addLog(`✓ ${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`);
     
-    // 💾 AUTO-SAVE: Save all records (including newly discovered ones)
-    if (discoveredRecords.length > 0) {
-      autoSaveBatch(updatedRecords);
-    }
+    // Note: Discovery does NOT auto-save (only first fetch does)
+    // User must manually save if they want to persist discovered records
   };
 
   const countEnrichedRecords = (records: PreparedRecord[]): number => {
@@ -321,6 +329,9 @@ export default function Home() {
     
     // Load the batch records into the current state
     setPreparedRecords(records);
+    
+    // CRITICAL: Set currentBatchId to prevent auto-save from creating duplicate batch
+    setCurrentBatchId(batchId);
     
     const enrichedCount = countEnrichedRecords(records);
     const remainingCount = records.length - enrichedCount;
@@ -512,8 +523,12 @@ export default function Home() {
     }
   };
 
-  const handleLoadBatch = (records: PreparedRecord[]) => {
+  const handleLoadBatch = (batchId: string, records: PreparedRecord[]) => {
     setPreparedRecords(records);
+    
+    // CRITICAL: Set currentBatchId to prevent duplicate auto-saves
+    setCurrentBatchId(batchId);
+    
     const enrichedCount = countEnrichedRecords(records);
     toast({
       title: "Batch geladen",
