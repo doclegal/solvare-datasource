@@ -483,7 +483,7 @@ export default function Home() {
     <div className="min-h-screen bg-background flex flex-col">
       <Header isConnected={true} />
       
-      <main className="flex-1 max-w-7xl w-full mx-auto px-8 py-6 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-6 space-y-8">
         <WebSearchDiscovery onRecordsDiscovered={handleRecordsDiscovered} />
         
         <FilterSection
