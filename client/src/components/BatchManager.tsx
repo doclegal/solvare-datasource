@@ -18,9 +18,10 @@ interface BatchManagerProps {
   currentRecords: PreparedRecord[];
   onLoadBatch: (batchId: string, records: PreparedRecord[]) => void;
   onResumeBatch?: (batchId: string, records: PreparedRecord[]) => void;
+  onSaveBatch?: (batchId: string) => void;
 }
 
-export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatch }: BatchManagerProps) {
+export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatch, onSaveBatch }: BatchManagerProps) {
   const [savedBatches, setSavedBatches] = useState<SavedBatch[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -44,6 +45,11 @@ export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatc
       });
 
       const data = await response.json();
+
+      // CRITICAL: Notify Home.tsx of the saved batchId to prevent duplicate auto-saves
+      if (onSaveBatch && data.batchId) {
+        onSaveBatch(data.batchId);
+      }
 
       toast({
         title: "Opgeslagen",

@@ -536,6 +536,12 @@ export default function Home() {
     });
   };
 
+  const handleSaveBatch = (batchId: string) => {
+    // CRITICAL: Set currentBatchId when user manually saves to prevent duplicate auto-saves
+    setCurrentBatchId(batchId);
+    addLog(`💾 Handmatig opgeslagen: batch ${batchId.substring(0, 8)}...`);
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header isConnected={true} />
@@ -553,6 +559,7 @@ export default function Home() {
           currentRecords={preparedRecords}
           onLoadBatch={handleLoadBatch}
           onResumeBatch={handleResumeBatch}
+          onSaveBatch={handleSaveBatch}
         />
 
         <RecordPreparation

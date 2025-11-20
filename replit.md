@@ -15,6 +15,38 @@ This project is a web application designed to retrieve and process Dutch judicia
 5. **PostgreSQL Persistence**: All batches stored in database with 24-hour retention, surviving server restarts
 6. **Manual Upload**: Enriched records uploaded to Pinecone via manual button click (auto-upload worker disabled)
 
+**AUTO-SAVE FEATURE (November 2025)**: The system automatically saves fetched records to prevent data loss:
+1. **First-Fetch Auto-Save**: When users fetch records for the first time in a session, the system automatically saves them to PostgreSQL batch storage
+   - Silent background operation - no user action required
+   - Triggered immediately after successful fetch
+   - Creates batch with 24-hour retention
+2. **Safety Guarantees**: Multiple safeguards prevent duplicate batch creation:
+   - **First-Fetch-Only**: Auto-save triggers ONLY when no batch exists yet (`currentBatchId === null`)
+   - **Race Condition Guard**: Ref-based lock (`autoSaveInProgressRef`) prevents concurrent auto-saves from rapid double-clicks
+   - **Resume/Load Protection**: Loading or resuming a batch sets `currentBatchId`, preventing duplicate auto-saves on subsequent fetches
+   - **Silent Fail**: Errors don't interrupt user workflow - auto-save fails gracefully with log message
+3. **Behavior**:
+   - ✅ First fetch → auto-saves batch
+   - ❌ Second fetch in same session → no auto-save (batch already exists)
+   - ❌ Discovery adding records → no auto-save (user must manually save to include discovered records)
+   - ✅ Reset filters → clears batch ID, allows new auto-save on next fetch
+   - ✅ Clear records → clears batch ID, allows new auto-save on next fetch
+   - ❌ Resume batch → sets batch ID, prevents duplicate auto-save
+   - ❌ Load batch → sets batch ID, prevents duplicate auto-save
+4. **Rollback Instructions**: To disable auto-save, set feature flag in `client/src/pages/Home.tsx`:
+   ```typescript
+   const ENABLE_AUTO_SAVE = false; // Change from true to false
+   ```
+   - No API changes required
+   - Frontend-only modification
+   - Restores manual-save-only behavior
+5. **Implementation Details**:
+   - Location: `client/src/pages/Home.tsx` (lines 141-169)
+   - API endpoint: `POST /api/batches/save`
+   - Response includes: `{ success, batchId, recordCount, message }`
+   - State tracking: `currentBatchId` (null = no batch, string = batch exists)
+   - Guards: `autoSaveInProgressRef` (prevents concurrent saves)
+
 **ECLI Discovery Feature**: The system includes a modular web crawling feature that discovers ECLI numbers on external legal websites. Users provide URLs, the system crawls them (respecting robots.txt and implementing rate limiting), extracts ECLI patterns via regex, validates them against the Rechtspraak API, and automatically adds them to the processing pipeline.
 
 ## User Preferences
