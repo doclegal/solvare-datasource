@@ -146,18 +146,34 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
     params.append('creator', courtValue);
   }
   
-  // Add modified date filter if specified
-  // The API supports filtering on modification date with both start and end dates
-  // We use 'modified' parameter for the start date (inclusive)
-  // And optionally a second 'modified' parameter for the end date (exclusive) when doing year/month filtering
-  if (dateFrom) {
-    params.append('modified', dateFrom);
-  }
+  // Add date filter for year/month searches, or modified filter for relative period searches
+  // KEY DIFFERENCE:
+  // - 'date' parameter = JUDGMENT DATE (when court issued ruling) - used for HISTORICAL SEARCH
+  // - 'modified' parameter = PUBLICATION DATE (when record added to database) - used for INCREMENTAL UPDATES
+  // 
+  // For year/month filtering (e.g., "January 2010"), we use 'date' to find rulings issued in that period
+  // For relative periods (e.g., "last 10 years"), we use 'modified' for efficient incremental harvesting
   
-  // Store dateTo for client-side filtering if needed
-  // The Rechtspraak API doesn't support upper bound in 'modified' parameter
-  // So we fetch results from dateFrom onwards and filter them client-side
-  const needsClientSideFiltering = !!dateTo;
+  if (filters.year) {
+    // Year/Month filtering → Use 'date' parameter for judgment date
+    // This finds rulings that were DECIDED in the specified month/year
+    if (dateFrom) {
+      params.append('date', dateFrom);
+    }
+    if (dateTo) {
+      // For month filtering: exclusive upper bound (e.g., 2010-02-01 to exclude February)
+      // Adjust to inclusive bound by subtracting one day
+      const inclusiveDateTo = new Date(dateTo);
+      inclusiveDateTo.setDate(inclusiveDateTo.getDate() - 1);
+      params.append('date', inclusiveDateTo.toISOString().split('T')[0]);
+    }
+  } else {
+    // Relative period filtering → Use 'modified' parameter for publication date
+    // This finds rulings that were PUBLISHED/UPDATED in the specified period
+    if (dateFrom) {
+      params.append('modified', dateFrom);
+    }
+  }
   
   // Always filter for full documents only
   params.append('return', 'DOC');
@@ -239,15 +255,12 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
           court = getCourtName(courtCode);
         }
         
-        // Extract date (modified date for filtering)
+        // Extract decision date (when the case was decided, from ECLI or updated field)
         let decisionDate = '';
-        let modifiedDate = ''; // NEW: Store modified date for client-side filtering
         if (entry.updated) {
           decisionDate = entry.updated.split('T')[0];
-          modifiedDate = entry.updated.split('T')[0];
         } else if (entry.published) {
           decisionDate = entry.published.split('T')[0];
-          modifiedDate = entry.published.split('T')[0];
         }
         
         return {
@@ -256,7 +269,6 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
           court,
           decisionDate,
           summary,
-          modifiedDate, // NEW: Include for filtering
         };
       })
       // CRITICAL FILTER: Only keep records with valid Inhoudsindicatie
@@ -274,31 +286,6 @@ export async function searchDecisions(filters: SearchFilters): Promise<{
         }
         
         return hasValidSummary;
-      })
-      // NEW: Client-side date range filtering for year/month precision
-      // The API doesn't support upper bound, so we filter here
-      .filter((record: any) => {
-        if (!needsClientSideFiltering || !dateTo) {
-          return true; // No upper bound needed
-        }
-        
-        // Filter out records modified on or after dateTo (exclusive upper bound)
-        const recordModified = record.modifiedDate;
-        if (!recordModified) {
-          return true; // Keep records without date (rare)
-        }
-        
-        const isBeforeDateTo = recordModified < dateTo;
-        if (!isBeforeDateTo) {
-          console.log(`[Rechtspraak API] Filtered out ${record.ecli} - modified ${recordModified} >= ${dateTo}`);
-        }
-        
-        return isBeforeDateTo;
-      })
-      // Clean up: Remove modifiedDate from final records (not part of EcliRecord type)
-      .map((record: any) => {
-        const { modifiedDate, ...cleanRecord } = record;
-        return cleanRecord as EcliRecord;
       });
     
     const filteredCount = entries.length - records.length;
