@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Header from "@/components/Header";
 import FilterSection, { type FilterParams } from "@/components/FilterSection";
 import RecordPreparation, { type PreparedRecord } from "@/components/RecordPreparation";
@@ -28,11 +28,54 @@ export default function Home() {
   
   const fetchLockRef = useRef(false);
   const autoSaveInProgressRef = useRef(false); // Prevent concurrent auto-saves
+  const autoRestoreAttemptedRef = useRef(false); // Track if auto-restore was already attempted
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString('nl-NL');
     setExportLogs(prev => [...prev, `[${timestamp}] ${message}`]);
   };
+
+  // 🔄 AUTO-RESTORE: Automatically load the most recent batch on page load
+  // This ensures data persistence across page refreshes
+  useEffect(() => {
+    // Only attempt auto-restore once per page load
+    if (!ENABLE_AUTO_SAVE || autoRestoreAttemptedRef.current) {
+      return;
+    }
+
+    autoRestoreAttemptedRef.current = true;
+
+    const autoRestoreLastBatch = async () => {
+      try {
+        const response = await apiRequest('GET', '/api/batches/list');
+        const data = await response.json();
+
+        if (data.batches && data.batches.length > 0) {
+          // Get most recent batch (first in list, sorted by created_at DESC)
+          const latestBatch = data.batches[0];
+
+          // Auto-load only if batch is recent (within 24 hours)
+          const batchAge = Date.now() - new Date(latestBatch.created_at).getTime();
+          const hoursOld = batchAge / (1000 * 60 * 60);
+
+          if (hoursOld < 24) {
+            setPreparedRecords(latestBatch.records);
+            setCurrentBatchId(latestBatch.id);
+            
+            const enrichedCount = latestBatch.records.filter((r: PreparedRecord) => r.ai_title).length;
+            console.log(`[Auto-restore] Loaded batch ${latestBatch.id.substring(0, 8)}... with ${latestBatch.records.length} records (${enrichedCount} AI-verrijkt)`);
+            
+            // Silent restore - no toast notification to avoid annoying users
+          }
+        }
+      } catch (error) {
+        // Silent fail - auto-restore is a convenience feature, not critical
+        console.error('[Auto-restore] Failed to load last batch:', error);
+      }
+    };
+
+    autoRestoreLastBatch();
+  }, []); // Empty deps = run once on mount
 
   const handleFetchDecisions = async (filters: FilterParams) => {
     if (fetchLockRef.current) {
