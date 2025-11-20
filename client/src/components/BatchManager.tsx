@@ -240,7 +240,8 @@ export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatc
                 {savedBatches.length} opgeslagen batch{savedBatches.length !== 1 ? 'es' : ''}
               </p>
               {savedBatches.map((batch) => {
-                const isIncomplete = batch.enrichedRecords < batch.totalRecords && batch.enrichedRecords > 0;
+                const isIncomplete = batch.enrichedRecords < batch.totalRecords;
+                const isNotStarted = batch.enrichedRecords === 0;
                 
                 return (
                   <div
@@ -251,20 +252,25 @@ export default function BatchManager({ currentRecords, onLoadBatch, onResumeBatc
                   >
                     <div className="flex items-center gap-3">
                       <div>
-                        <p className="text-sm font-medium">
-                          {batch.totalRecords} records
+                        <div className="text-sm font-medium flex items-center flex-wrap gap-2">
+                          <span>{batch.totalRecords} records</span>
                           {batch.enrichedRecords > 0 && (
-                            <Badge variant="secondary" className="ml-2">
+                            <Badge variant="secondary">
                               {batch.enrichedRecords} AI-verrijkt
                             </Badge>
                           )}
-                          {isIncomplete && (
-                            <Badge variant="outline" className="ml-2 text-amber-600 border-amber-600">
+                          {isNotStarted && (
+                            <Badge variant="outline" className="text-blue-600 border-blue-600">
+                              Nog niet verrijkt
+                            </Badge>
+                          )}
+                          {isIncomplete && !isNotStarted && (
+                            <Badge variant="outline" className="text-amber-600 border-amber-600">
                               Incompleet
                             </Badge>
                           )}
-                        </p>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        </div>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                           <Clock className="h-3 w-3" />
                           {formatTimeAgo(batch.createdAt)}
                         </p>
