@@ -8,6 +8,10 @@ import BatchManager from "@/components/BatchManager";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
+// ⚙️ FEATURE FLAG: Auto-save batches after fetching records
+// Set to false to disable auto-save and restore manual-only behavior
+const ENABLE_AUTO_SAVE = true;
+
 export default function Home() {
   // Simple state - no persistence, no batching
   const [preparedRecords, setPreparedRecords] = useState<PreparedRecord[]>([]);
@@ -19,6 +23,7 @@ export default function Home() {
   const [enrichAllProgress, setEnrichAllProgress] = useState<{ current: number; total: number } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportLogs, setExportLogs] = useState<string[]>([]);
+  const [currentBatchId, setCurrentBatchId] = useState<string | null>(null); // Track current batch for auto-save
   const { toast } = useToast();
   
   const fetchLockRef = useRef(false);
@@ -98,6 +103,12 @@ export default function Home() {
       setPreparedRecords(contentData.records);
       setTotalResults(searchData.total || contentData.records.length);
       
+      // 💾 AUTO-SAVE: Automatically save to batch storage (if enabled)
+      // This happens asynchronously and won't block the UI
+      if (contentData.records.length > 0) {
+        autoSaveBatch(contentData.records);
+      }
+      
       let description = `${contentData.successful} nieuwe civiele uitspraken opgehaald.`;
       if (checkData.alreadyProcessed > 0) {
         description += ` ${checkData.alreadyProcessed} al verwerkt (overgeslagen).`;
@@ -123,15 +134,40 @@ export default function Home() {
     }
   };
 
+  // 💾 AUTO-SAVE: Automatically save records to batch storage (if enabled)
+  // This prevents data loss on page refresh/server restart
+  const autoSaveBatch = async (records: PreparedRecord[]) => {
+    if (!ENABLE_AUTO_SAVE || records.length === 0) {
+      return;
+    }
+
+    try {
+      const response = await apiRequest('POST', '/api/batches/save', {
+        records,
+      });
+
+      const data = await response.json();
+      setCurrentBatchId(data.batchId);
+      
+      addLog(`💾 Auto-opgeslagen: ${records.length} records (batch: ${data.batchId.substring(0, 8)}...)`);
+    } catch (error: any) {
+      // Silent fail - don't interrupt user flow with auto-save errors
+      console.error('[Auto-save] Failed to save batch:', error);
+      addLog(`⚠️ Auto-opslaan mislukt (records blijven in memory)`);
+    }
+  };
+
   const handleResetFilters = () => {
     setPreparedRecords([]);
     setTotalResults(0);
     setExportLogs([]);
+    setCurrentBatchId(null); // Clear batch ID on reset
   };
 
   const handleClearRecords = () => {
     setPreparedRecords([]);
     setExportLogs([]);
+    setCurrentBatchId(null); // Clear batch ID on clear
   };
 
   // Verrijk ALLE records met AI samenvattingen
@@ -258,8 +294,14 @@ export default function Home() {
   };
 
   const handleRecordsDiscovered = (discoveredRecords: PreparedRecord[]) => {
-    setPreparedRecords(prev => [...prev, ...discoveredRecords]);
+    const updatedRecords = [...preparedRecords, ...discoveredRecords];
+    setPreparedRecords(updatedRecords);
     addLog(`✓ ${discoveredRecords.length} nieuwe ECLI's toegevoegd via discovery`);
+    
+    // 💾 AUTO-SAVE: Save all records (including newly discovered ones)
+    if (discoveredRecords.length > 0) {
+      autoSaveBatch(updatedRecords);
+    }
   };
 
   const countEnrichedRecords = (records: PreparedRecord[]): number => {
