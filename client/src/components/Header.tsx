@@ -134,32 +134,57 @@ export default function Header({ isConnected = true }: HeaderProps) {
         <h1 className="text-lg md:text-2xl font-medium truncate">Rechtspraak Ingestie Tool</h1>
         <p className="text-xs md:text-sm text-muted-foreground truncate">Nederlandse Uitspraken → Pinecone Vector Opslag</p>
       </div>
-      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+      <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={handleDeleteWithoutAI}
+          disabled={isDeleting}
+          data-testid="button-delete-without-ai"
+          className="md:hidden"
+          title="Verwijder Zonder AI"
+        >
+          <Trash2 className={`w-4 h-4 ${isDeleting ? 'animate-pulse' : ''}`} />
+        </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleDeleteWithoutAI}
           disabled={isDeleting}
-          data-testid="button-delete-without-ai"
+          data-testid="button-delete-without-ai-desktop"
           className="hidden md:flex"
         >
           <Trash2 className={`w-4 h-4 mr-2 ${isDeleting ? 'animate-pulse' : ''}`} />
           {isDeleting ? 'Verwijderen...' : 'Verwijder Zonder AI'}
+        </Button>
+        
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={handleUpdateCourtLevels}
+          disabled={isUpdating}
+          data-testid="button-update-court-levels"
+          className="md:hidden"
+          title="Update Court Levels"
+        >
+          <RefreshCw className={`w-4 h-4 ${isUpdating ? 'animate-spin' : ''}`} />
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleUpdateCourtLevels}
           disabled={isUpdating}
-          data-testid="button-update-court-levels"
+          data-testid="button-update-court-levels-desktop"
           className="hidden md:flex"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${isUpdating ? 'animate-spin' : ''}`} />
           {isUpdating ? 'Updaten...' : 'Update Court Levels'}
         </Button>
+        
         <Badge 
           variant={isConnected ? "default" : "secondary"}
           data-testid="badge-connection-status"
+          className="hidden md:inline-flex"
         >
           {isConnected ? "Klaar" : "Niet Verbonden"}
         </Badge>
