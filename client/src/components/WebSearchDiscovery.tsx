@@ -39,7 +39,7 @@ interface Props {
   onRecordsDiscovered: (records: PreparedRecord[]) => void;
 }
 
-const DEFAULT_DOMAINS = [
+const DEFAULT_URLS = [
   'recht.nl',
   'cassatieblog.nl',
   'avdr.nl',
@@ -50,7 +50,7 @@ const DEFAULT_DOMAINS = [
 export default function WebSearchDiscovery({ onRecordsDiscovered }: Props) {
   const [query, setQuery] = useState('ECLI:NL: huurrecht');
   const [domains, setDomains] = useState<DomainInput[]>(
-    DEFAULT_DOMAINS.map((d, i) => ({ id: `domain-${i}`, domain: d, isActive: true }))
+    DEFAULT_URLS.map((d, i) => ({ id: `domain-${i}`, domain: d, isActive: true }))
   );
   const [isSearching, setIsSearching] = useState(false);
   const [progress, setProgress] = useState<string[]>([]);
@@ -201,10 +201,10 @@ export default function WebSearchDiscovery({ onRecordsDiscovered }: Props) {
           </p>
         </div>
 
-        {/* Domain Filters */}
+        {/* URL/Domain Filters */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label data-testid="label-domains">Bronnen (domeinen)</Label>
+            <Label data-testid="label-domains">Bronnen (URLs of domeinen)</Label>
             <Button
               type="button"
               variant="outline"
@@ -233,7 +233,7 @@ export default function WebSearchDiscovery({ onRecordsDiscovered }: Props) {
                 <Input
                   value={domain.domain}
                   onChange={(e) => updateDomain(domain.id, e.target.value)}
-                  placeholder="bijv: recht.nl"
+                  placeholder="bijv: https://example.nl/category/ of recht.nl"
                   disabled={!domain.isActive}
                   data-testid={`input-domain-${domain.id}`}
                 />
@@ -250,7 +250,7 @@ export default function WebSearchDiscovery({ onRecordsDiscovered }: Props) {
             ))}
           </div>
           <p className="text-sm text-muted-foreground">
-            Laat leeg om het hele web te doorzoeken. Actieve bronnen worden grijs na gebruik.
+            Voer domein (recht.nl) of volledige URL in. URLs met paginering (bijv. /category/privaatrecht/) worden automatisch doorlopen (page/2/, page/3/, etc.).
           </p>
         </div>
 

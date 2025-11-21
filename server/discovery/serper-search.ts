@@ -93,5 +93,5 @@ export function extractECLIs(text: string): string[] {
   
   // Normalize to uppercase and deduplicate
   const normalized = matches.map(ecli => ecli.toUpperCase());
-  return [...new Set(normalized)];
+  return Array.from(new Set(normalized));
 }
