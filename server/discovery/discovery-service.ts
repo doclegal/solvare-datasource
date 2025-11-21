@@ -46,7 +46,7 @@ export async function discoverEclisFromSearch(
     }
     
     try {
-      const { eclis: urlEclis, urlsScanned } = await crawlUrlWithPagination(url, {
+      const { eclis: urlEclis, ecliToUrlMap } = await crawlUrlWithPagination(url, {
         maxPages: 10,
         onProgress: async (progress) => {
           if (onProgress) {
@@ -59,15 +59,16 @@ export async function discoverEclisFromSearch(
         },
       });
       
-      // Add discovered ECLIs with source URL
+      // Add discovered ECLIs with correct source URL (from the page where it was found)
       urlEclis.forEach(ecli => {
         allEclis.add(ecli);
         if (!ecliSources.has(ecli)) {
           ecliSources.set(ecli, []);
         }
-        // Use first scanned URL as source
-        if (urlsScanned.length > 0 && !ecliSources.get(ecli)!.includes(urlsScanned[0])) {
-          ecliSources.get(ecli)!.push(urlsScanned[0]);
+        // Use the ACTUAL URL where this ECLI was found (not just the base URL)
+        const sourceUrl = ecliToUrlMap.get(ecli);
+        if (sourceUrl && !ecliSources.get(ecli)!.includes(sourceUrl)) {
+          ecliSources.get(ecli)!.push(sourceUrl);
         }
       });
       

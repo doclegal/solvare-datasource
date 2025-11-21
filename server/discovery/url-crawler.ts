@@ -81,8 +81,8 @@ export interface CrawlProgress {
  * Crawl a URL with automatic pagination
  * Stops when:
  * - Max pages reached
- * - No new ECLIs found on a page (empty page = end of pagination)
- * - HTTP errors
+ * - 2 consecutive pages with no NEW ECLIs (allows skipping empty pages)
+ * - HTTP errors on consecutive pages
  */
 export async function crawlUrlWithPagination(
   url: string,
@@ -90,11 +90,12 @@ export async function crawlUrlWithPagination(
     maxPages?: number;
     onProgress?: (progress: CrawlProgress) => Promise<void>;
   } = {}
-): Promise<{ eclis: string[]; urlsScanned: string[] }> {
+): Promise<{ eclis: string[]; ecliToUrlMap: Map<string, string> }> {
   const { maxPages = 10, onProgress } = options;
   
   const allEclis = new Set<string>();
-  const urlsScanned: string[] = [];
+  const ecliToUrlMap = new Map<string, string>(); // Track which URL each ECLI came from
+  let consecutiveEmptyPages = 0;
   
   if (onProgress) {
     await onProgress({
@@ -122,24 +123,23 @@ export async function crawlUrlWithPagination(
     }
     
     const eclis = await crawlUrl(pageUrl);
-    urlsScanned.push(pageUrl);
     
-    // If no ECLIs found on this page, assume pagination ended
-    if (eclis.length === 0 && i > 0) {
-      if (onProgress) {
-        await onProgress({
-          type: 'url_complete',
-          message: `Paginering gestopt: geen nieuwe ECLI's op pagina ${pageNumber}`,
-          totalEclis: allEclis.size,
-        });
-      }
-      break;
-    }
-    
-    // Add new ECLIs
+    // Check if we found any NEW ECLIs on this page
     const previousCount = allEclis.size;
-    eclis.forEach(ecli => allEclis.add(ecli));
+    eclis.forEach(ecli => {
+      if (!allEclis.has(ecli)) {
+        allEclis.add(ecli);
+        ecliToUrlMap.set(ecli, pageUrl); // Track source URL for this ECLI
+      }
+    });
     const newEclisCount = allEclis.size - previousCount;
+    
+    // Track consecutive empty pages (no NEW ECLIs)
+    if (newEclisCount === 0) {
+      consecutiveEmptyPages++;
+    } else {
+      consecutiveEmptyPages = 0; // Reset counter when we find new ECLIs
+    }
     
     if (onProgress && newEclisCount > 0) {
       await onProgress({
@@ -148,6 +148,18 @@ export async function crawlUrlWithPagination(
         eclisFound: newEclisCount,
         totalEclis: allEclis.size,
       });
+    }
+    
+    // Stop if 2 consecutive pages yielded no NEW ECLIs (likely end of pagination)
+    if (consecutiveEmptyPages >= 2 && i > 0) {
+      if (onProgress) {
+        await onProgress({
+          type: 'url_complete',
+          message: `Paginering gestopt: geen nieuwe ECLI's na 2 pagina's`,
+          totalEclis: allEclis.size,
+        });
+      }
+      break;
     }
     
     // Rate limiting between pages
@@ -164,6 +176,6 @@ export async function crawlUrlWithPagination(
   
   return {
     eclis: Array.from(allEclis),
-    urlsScanned,
+    ecliToUrlMap,
   };
 }
