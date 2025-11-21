@@ -3,6 +3,7 @@ import { validateECLI } from './validator';
 import { fetchDecisionContent } from '../rechtspraak-api';
 import type { PreparedRecord } from '@shared/schema';
 import axios from 'axios';
+import { isFullUrl, crawlUrlWithPagination } from './url-crawler';
 
 export interface DiscoveryProgress {
   type: 'search_start' | 'search_results' | 'url_fetch' | 'ecli_found' | 
@@ -31,8 +32,65 @@ export async function discoverEclisFromSearch(
   const allEclis = new Set<string>();
   const ecliSources = new Map<string, string[]>(); // ECLI -> source URLs
   
-  // If domains specified, search each domain separately
-  const searchDomains = domains.length > 0 ? domains : [''];
+  // Separate URLs from domains
+  const urls = domains.filter(d => isFullUrl(d));
+  const domainsOnly = domains.filter(d => !isFullUrl(d));
+  
+  // First, crawl any provided URLs with pagination
+  for (const url of urls) {
+    if (onProgress) {
+      await onProgress({
+        type: 'search_start',
+        message: `Crawling URL met paginering: ${url}`,
+      });
+    }
+    
+    try {
+      const { eclis: urlEclis, urlsScanned } = await crawlUrlWithPagination(url, {
+        maxPages: 10,
+        onProgress: async (progress) => {
+          if (onProgress) {
+            await onProgress({
+              type: 'url_fetch',
+              message: progress.message,
+              url: progress.url,
+            });
+          }
+        },
+      });
+      
+      // Add discovered ECLIs with source URL
+      urlEclis.forEach(ecli => {
+        allEclis.add(ecli);
+        if (!ecliSources.has(ecli)) {
+          ecliSources.set(ecli, []);
+        }
+        // Use first scanned URL as source
+        if (urlsScanned.length > 0 && !ecliSources.get(ecli)!.includes(urlsScanned[0])) {
+          ecliSources.get(ecli)!.push(urlsScanned[0]);
+        }
+      });
+      
+      if (onProgress) {
+        await onProgress({
+          type: 'ecli_found',
+          message: `${urlEclis.length} ECLI's gevonden via URL crawling`,
+          totalEclis: allEclis.size,
+        });
+      }
+    } catch (error: any) {
+      console.error(`[Discovery] URL crawling failed for ${url}:`, error);
+      if (onProgress) {
+        await onProgress({
+          type: 'error',
+          message: `URL crawling mislukt: ${error.message}`,
+        });
+      }
+    }
+  }
+  
+  // Then, search domains using Serper (if any)
+  const searchDomains = domainsOnly.length > 0 ? domainsOnly : (urls.length === 0 ? [''] : []);
   
   for (const domain of searchDomains) {
     if (onProgress) {
