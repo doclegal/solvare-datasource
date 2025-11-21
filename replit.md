@@ -4,28 +4,37 @@
 
 This project is a web application designed to retrieve and process Dutch judicial rulings from the Rechtspraak.nl Open Data API. Its primary purpose is to extract full-text content, apply quality filters, and prepare this data for storage as vector records in Pinecone, enabling semantic search capabilities. The application focuses on ingesting cases with valid "Inhoudsindicatie" (official summaries) and uses a PostgreSQL database for duplicate tracking, ensuring data quality and preventing redundant processing across different namespaces.
 
-**AI ENRICHMENT WITH RESUME (November 2025)**: The system features a robust AI enrichment pipeline with automatic resume functionality:
+**AI ENRICHMENT WITH REAL-TIME UPLOAD (November 2025)**: The system features a robust AI enrichment pipeline with automatic Pinecone upload:
 1. User starts AI enrichment for any number of records (no limit)
-2. **Batch Resume**: If enrichment is interrupted (server restart, errors), users can resume from the BatchManager:
+2. **Real-Time Upload**: Each enriched record is IMMEDIATELY uploaded to Pinecone:
+   - After AI enrichment succeeds, record is instantly uploaded to correct namespace
+   - Toast notification: "Record wordt geüpload" → "Upload voltooid"
+   - No manual upload step required - fully automated workflow
+   - Namespace routing preserved (WEB_ECLI vs ECLI_NL based on `source` field)
+3. **Batch Resume**: If enrichment is interrupted (server restart, errors), users can resume from the BatchManager:
    - Incomplete batches show a "Hervat" (Resume) button
    - Only non-enriched records are processed (skips records with `ai_title`)
    - Preserves all metadata including `source` field for correct namespace routing
-3. **Error Resilience**: Individual record failures don't abort the entire batch - enrichment continues with remaining records
-4. **Progress Tracking**: Real-time SSE streaming shows progress, errors, and completion status
-5. **PostgreSQL Persistence**: All batches stored in database with 24-hour retention, surviving server restarts
-6. **Manual Upload**: Enriched records uploaded to Pinecone via manual button click (auto-upload worker disabled)
+4. **Error Resilience**: Individual record failures don't abort the entire batch - enrichment continues with remaining records
+5. **Progress Tracking**: Real-time SSE streaming shows progress, errors, and completion status
+6. **PostgreSQL Persistence**: All batches stored in database with 24-hour retention, surviving server restarts
 
-**AUTO-SAVE FEATURE (November 2025)**: The system automatically saves fetched records to prevent data loss:
+**AUTO-SAVE + AUTO-RESTORE FEATURE (November 2025)**: The system automatically saves fetched records and restores them on page load for complete data persistence:
 1. **First-Fetch Auto-Save**: When users fetch records for the first time in a session, the system automatically saves them to PostgreSQL batch storage
    - Silent background operation - no user action required
    - Triggered immediately after successful fetch
    - Creates batch with 24-hour retention
-2. **Safety Guarantees**: Multiple safeguards prevent duplicate batch creation:
+2. **Auto-Restore on Page Load**: When the page loads, the system automatically loads the most recent batch (if < 24 hours old)
+   - Runs once on component mount via `useEffect`
+   - Silent restoration - no toast notification to avoid annoying users
+   - Records appear immediately in UI without user action
+   - Combines with auto-save to provide full persistence workflow
+3. **Safety Guarantees**: Multiple safeguards prevent duplicate batch creation:
    - **First-Fetch-Only**: Auto-save triggers ONLY when no batch exists yet (`currentBatchId === null`)
    - **Race Condition Guard**: Ref-based lock (`autoSaveInProgressRef`) prevents concurrent auto-saves from rapid double-clicks
    - **Resume/Load Protection**: Loading or resuming a batch sets `currentBatchId`, preventing duplicate auto-saves on subsequent fetches
-   - **Silent Fail**: Errors don't interrupt user workflow - auto-save fails gracefully with log message
-3. **Behavior**:
+   - **Silent Fail**: Errors don't interrupt user workflow - auto-save/restore fails gracefully with log message
+4. **Behavior**:
    - ✅ First fetch → auto-saves batch
    - ❌ Second fetch in same session → no auto-save (batch already exists)
    - ❌ Discovery adding records → no auto-save (user must manually save to include discovered records)
@@ -33,19 +42,20 @@ This project is a web application designed to retrieve and process Dutch judicia
    - ✅ Clear records → clears batch ID, allows new auto-save on next fetch
    - ❌ Resume batch → sets batch ID, prevents duplicate auto-save
    - ❌ Load batch → sets batch ID, prevents duplicate auto-save
-4. **Rollback Instructions**: To disable auto-save, set feature flag in `client/src/pages/Home.tsx`:
+   - ✅ **Page refresh → auto-restores last batch (< 24h old)**
+5. **Rollback Instructions**: To disable auto-save + auto-restore, set feature flag in `client/src/pages/Home.tsx`:
    ```typescript
    const ENABLE_AUTO_SAVE = false; // Change from true to false
    ```
    - No API changes required
    - Frontend-only modification
    - Restores manual-save-only behavior
-5. **Implementation Details**:
-   - Location: `client/src/pages/Home.tsx` (lines 141-169)
-   - API endpoint: `POST /api/batches/save`
-   - Response includes: `{ success, batchId, recordCount, message }`
+6. **Implementation Details**:
+   - Auto-save location: `client/src/pages/Home.tsx` (lines 141-169)
+   - Auto-restore location: `client/src/pages/Home.tsx` (lines 41-81)
+   - API endpoints: `POST /api/batches/save`, `GET /api/batches/list`
    - State tracking: `currentBatchId` (null = no batch, string = batch exists)
-   - Guards: `autoSaveInProgressRef` (prevents concurrent saves)
+   - Guards: `autoSaveInProgressRef` (prevents concurrent saves), `autoRestoreAttemptedRef` (prevents duplicate restore)
 
 **ECLI Discovery Feature**: The system includes a modular web crawling feature that discovers ECLI numbers on external legal websites. Users provide URLs, the system crawls them (respecting robots.txt and implementing rate limiting), extracts ECLI patterns via regex, validates them against the Rechtspraak API, and automatically adds them to the processing pipeline.
 

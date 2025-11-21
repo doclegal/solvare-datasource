@@ -281,13 +281,14 @@ export default function Home() {
     });
   };
 
-  // NIEUWE FUNCTIE: Test AI samenvatting voor 1 record
+  // NIEUWE FUNCTIE: Test AI samenvatting voor 1 record + direct upload naar Pinecone
   const handleTestAISummary = async (ecli: string) => {
     setTestingSummary(prev => ({ ...prev, [ecli]: { loading: true, summary: null, error: null } }));
     
     try {
       const rechtspraakUrl = `https://uitspraken.rechtspraak.nl/details?id=${ecli}`;
       
+      // Step 1: AI Enrichment
       const response = await fetch('/api/ai/test-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -309,28 +310,42 @@ export default function Home() {
         [ecli]: { loading: false, summary: data.summary, error: null } 
       }));
       
-      // BELANGRIJK: Merge AI summary into preparedRecords for Pinecone upload
+      // BELANGRIJK: Create enriched record object FIRST
+      // Find the original record from state
+      const originalRecord = preparedRecords.find(r => r.ecli === ecli);
+      if (!originalRecord) {
+        throw new Error(`Record ${ecli} not found in preparedRecords`);
+      }
+      
+      // Create enriched version
+      const enrichedRecord: PreparedRecord = {
+        ...originalRecord,
+        ai_title: data.summary.title,
+        ai_inhoudsindicatie: data.summary.inhoudsindicatie,
+        ai_feiten: data.summary.feiten,
+        ai_geschil: data.summary.geschil,
+        ai_beslissing: data.summary.beslissing,
+        ai_motivering: data.summary.motivering,
+      };
+      
+      // Update state with enriched record
       setPreparedRecords(prev => prev.map(record => {
         if (record.ecli === ecli) {
-          return {
-            ...record,
-            ai_title: data.summary.title,
-            ai_inhoudsindicatie: data.summary.inhoudsindicatie,
-            ai_feiten: data.summary.feiten,
-            ai_geschil: data.summary.geschil,
-            ai_beslissing: data.summary.beslissing,
-            ai_motivering: data.summary.motivering,
-          };
+          return enrichedRecord;
         }
         return record;
       }));
       
       addLog(`✓ ${ecli} verrijkt met AI samenvatting`);
       
+      // Step 2: Direct upload naar Pinecone
       toast({
-        title: 'AI Samenvatting gereed',
-        description: `${ecli} kan nu geüpload worden naar Pinecone`,
+        title: 'Record wordt geüpload',
+        description: `${ecli} wordt nu naar Pinecone verstuurd...`,
       });
+      
+      await uploadSingleRecordToPinecone(enrichedRecord);
+      
     } catch (error: any) {
       setTestingSummary(prev => ({ 
         ...prev, 
@@ -344,6 +359,88 @@ export default function Home() {
         description: error.message,
         variant: 'destructive',
       });
+    }
+  };
+
+  // Upload single enriched record to Pinecone immediately
+  const uploadSingleRecordToPinecone = async (record: PreparedRecord) => {
+    try {
+      const indexHost = "rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io";
+      
+      // Determine namespace based on source
+      const namespace = record.source === 'web_search' ? 'WEB_ECLI' : 'ECLI_NL';
+      
+      addLog(`📤 Uploading ${record.ecli} naar ${namespace}...`);
+      
+      const response = await fetch('/api/pinecone/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          indexHost,
+          namespace, // Will be overridden by backend's source-based routing
+          records: [record], // Single record array
+          batchSize: 1,
+          includeNonEnriched: false, // Only enriched records
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: HTTP ${response.status} - ${errorText}`);
+      }
+
+      // Read SSE stream for progress
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) {
+        throw new Error('No response body reader available');
+      }
+      
+      let uploadCompleted = false;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const eventData = JSON.parse(line.slice(6));
+              
+              if (eventData.type === 'complete') {
+                uploadCompleted = true;
+                addLog(`✓ ${record.ecli} geüpload naar ${namespace}`);
+                toast({
+                  title: 'Upload voltooid',
+                  description: `${record.ecli} succesvol naar Pinecone (${namespace})`,
+                });
+              } else if (eventData.type === 'error') {
+                throw new Error(eventData.message || 'Upload error');
+              }
+            } catch (parseError) {
+              // Ignore parse errors for incomplete chunks
+            }
+          }
+        }
+      }
+      
+      if (!uploadCompleted) {
+        console.warn(`[Upload] Stream ended but no 'complete' event received`);
+      }
+    } catch (error: any) {
+      console.error(`[Upload] Error uploading ${record.ecli}:`, error);
+      addLog(`✗ Upload ${record.ecli}: ${error.message}`);
+      toast({
+        title: 'Upload fout',
+        description: `${record.ecli}: ${error.message}`,
+        variant: 'destructive',
+      });
+      throw error; // Re-throw to prevent silent failures
     }
   };
 
