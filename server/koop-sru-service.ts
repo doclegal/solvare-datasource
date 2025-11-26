@@ -12,6 +12,7 @@
 import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import crypto from 'crypto';
+import https from 'https';
 import type { BwbRegulation, LawChunk } from '@shared/schema';
 
 const SRU_BASE_URL = 'https://zoekservice.overheid.nl/sru/Search';
@@ -236,21 +237,47 @@ export async function getValidRegulationVersion(
 ): Promise<{ xmlUrl: string; validFrom: string; validTo: string | null } | null> {
   try {
     // Query for specific BWB ID with validity date
-    const query = `dcterms.identifier=${bwbId} AND overheidbwb.geldigheidsdatum=${validityDate}`;
+    // CRITICAL: Use == for exact match on identifier, lowercase 'and' for boolean
+    const query = `dcterms.identifier==${bwbId} and overheidbwb.geldigheidsdatum=${validityDate}`;
     
-    const params = new URLSearchParams({
-      'x-connection': BWB_CONNECTION,
-      'operation': 'searchRetrieve',
-      'version': '2.0',
-      'query': query,
-      'maximumRecords': '1',
+    // CRITICAL: URLSearchParams encodes spaces as '+' which KOOP SRU rejects (406)
+    // encodeURIComponent encodes '=' as '%3D' which also causes 406
+    // axios and fetch both re-encode the URL which causes 406
+    // Solution: Use native https module which preserves exact URL encoding
+    const encodedQuery = query.replace(/ /g, '%20');
+    const fullUrl = `${SRU_BASE_URL}?x-connection=${BWB_CONNECTION}&operation=searchRetrieve&version=2.0&query=${encodedQuery}&maximumRecords=1`;
+    console.log(`[KOOP SRU] Getting valid version for ${bwbId}: ${fullUrl}`);
+
+    // Use native https module to preserve exact URL encoding (fetch/axios re-encode and cause 406)
+    const data = await new Promise<string>((resolve, reject) => {
+      const parsedUrl = new URL(fullUrl);
+      const options = {
+        hostname: parsedUrl.hostname,
+        port: 443,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'GET',
+        timeout: 30000
+      };
+      
+      const req = https.request(options, (res) => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`Request failed with status code ${res.statusCode}`));
+          return;
+        }
+        let responseData = '';
+        res.on('data', chunk => responseData += chunk);
+        res.on('end', () => resolve(responseData));
+      });
+      
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+      req.end();
     });
-
-    const url = `${SRU_BASE_URL}?${params.toString()}`;
-    console.log(`[KOOP SRU] Getting valid version for ${bwbId}: ${url}`);
-
-    const response = await axios.get(url, { timeout: 30000 });
-    const parsed = xmlParser.parse(response.data);
+    
+    const parsed = xmlParser.parse(data);
 
     // Navigate to record
     const searchResponse = parsed['sru:searchRetrieveResponse'] || parsed['searchRetrieveResponse'] || parsed;
@@ -265,36 +292,49 @@ export async function getValidRegulationVersion(
     const record = Array.isArray(records) ? records[0] : records;
     const recordData = record['sru:recordData'] || record['recordData'] || record;
     const gzd = recordData['gzd:gzd'] || recordData['gzd'] || recordData;
-    const enrichedData = gzd['gzd:enrichedData'] || gzd['enrichedData'] || {};
-
-    // Extract XML URL for the consolidated text (toestand)
-    let xmlUrl = '';
-    const manifestation = enrichedData['overheidbwb:manifestation'] || enrichedData['manifestation'];
     
-    if (manifestation) {
-      const manifestations = Array.isArray(manifestation) ? manifestation : [manifestation];
-      for (const m of manifestations) {
-        const format = m['dcterms:format'] || m['format'];
-        const url = m['dcterms:identifier'] || m['identifier'] || m['@_href'] || m['_text'];
-        if (format?.includes('xml') || (typeof url === 'string' && url.endsWith('.xml'))) {
-          xmlUrl = typeof url === 'string' ? url : url?._text || '';
-          break;
+    // Extract from originalData for validity dates
+    const originalData = gzd['originalData'] || gzd['gzd:originalData'] || {};
+    const meta = originalData['overheidbwb:meta'] || originalData['meta'] || {};
+    const bwbipm = meta['bwbipm'] || meta['overheidbwb:bwbipm'] || {};
+    
+    // Extract from enrichedData for XML URL
+    const enrichedData = gzd['enrichedData'] || gzd['gzd:enrichedData'] || {};
+
+    // Extract XML URL from locatie_toestand (repository URL)
+    let xmlUrl = enrichedData['overheidbwb:locatie_toestand'] || enrichedData['locatie_toestand'] || '';
+    
+    if (typeof xmlUrl !== 'string') {
+      xmlUrl = xmlUrl?._text || xmlUrl?.['#text'] || '';
+    }
+
+    // Fallback: try manifestation
+    if (!xmlUrl) {
+      const manifestation = enrichedData['overheidbwb:manifestation'] || enrichedData['manifestation'];
+      if (manifestation) {
+        const manifestations = Array.isArray(manifestation) ? manifestation : [manifestation];
+        for (const m of manifestations) {
+          const format = m['dcterms:format'] || m['format'];
+          const mUrl = m['dcterms:identifier'] || m['identifier'] || m['@_href'] || m['_text'];
+          if (format?.includes('xml') || (typeof mUrl === 'string' && mUrl.endsWith('.xml'))) {
+            xmlUrl = typeof mUrl === 'string' ? mUrl : mUrl?._text || '';
+            break;
+          }
         }
       }
     }
 
-    // Alternative: construct URL from BWB ID
+    // Last fallback: construct from BWB ID and validity date
     if (!xmlUrl) {
-      xmlUrl = `https://wetten.overheid.nl/${bwbId}/xml`;
+      xmlUrl = `https://repository.officiele-overheidspublicaties.nl/bwb/${bwbId}/${validityDate}_0/xml/${bwbId}_${validityDate}_0.xml`;
     }
 
-    // Extract validity dates
+    // Extract validity dates from bwbipm
     let validFrom = '';
     let validTo: string | null = null;
 
-    const geldigheid = enrichedData['overheidbwb:geldigheid'] || enrichedData['geldigheid'] || {};
-    const startDate = geldigheid['overheidbwb:start'] || geldigheid['start'];
-    const endDate = geldigheid['overheidbwb:einde'] || geldigheid['einde'];
+    const startDate = bwbipm['overheidbwb:geldigheidsperiode_startdatum'] || bwbipm['geldigheidsperiode_startdatum'];
+    const endDate = bwbipm['overheidbwb:geldigheidsperiode_einddatum'] || bwbipm['geldigheidsperiode_einddatum'];
 
     if (typeof startDate === 'string') {
       validFrom = startDate;
@@ -303,9 +343,9 @@ export async function getValidRegulationVersion(
     }
 
     if (typeof endDate === 'string') {
-      validTo = endDate;
+      validTo = endDate === '9999-12-31' ? null : endDate;
     } else if (endDate?._text) {
-      validTo = endDate._text;
+      validTo = endDate._text === '9999-12-31' ? null : endDate._text;
     }
 
     console.log(`[KOOP SRU] Found version: ${xmlUrl}, valid from ${validFrom} to ${validTo || 'ongoing'}`);
