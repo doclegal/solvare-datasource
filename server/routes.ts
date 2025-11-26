@@ -816,18 +816,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Check duplicates for web search records (WEB_ECLI namespace)
         const webEclis = webSearchRecords.map((r: any) => r.ecli);
-        const webDuplicateStatus = webEclis.length > 0 
-          ? await storage.checkDuplicates(webEclis, 'WEB_ECLI')
-          : {};
-        const webNewRecords = webSearchRecords.filter((r: any) => !webDuplicateStatus[r.ecli]);
+        const webDuplicateCheck = webEclis.length > 0 
+          ? await storage.checkDuplicates('WEB_ECLI', webEclis)
+          : { total: 0, alreadyProcessed: 0, newEclis: 0, statuses: [] };
+        
+        // Build map for quick lookup
+        const webProcessedSet = new Set(
+          webDuplicateCheck.statuses.filter(s => s.isProcessed).map(s => s.ecli)
+        );
+        const webNewRecords = webSearchRecords.filter((r: any) => !webProcessedSet.has(r.ecli));
         const webDuplicateCount = webSearchRecords.length - webNewRecords.length;
         
         // Check duplicates for API search records (ECLI_NL namespace)
         const apiEclis = apiSearchRecords.map((r: any) => r.ecli);
-        const apiDuplicateStatus = apiEclis.length > 0
-          ? await storage.checkDuplicates(apiEclis, 'ECLI_NL')
-          : {};
-        const apiNewRecords = apiSearchRecords.filter((r: any) => !apiDuplicateStatus[r.ecli]);
+        const apiDuplicateCheck = apiEclis.length > 0
+          ? await storage.checkDuplicates('ECLI_NL', apiEclis)
+          : { total: 0, alreadyProcessed: 0, newEclis: 0, statuses: [] };
+        
+        // Build map for quick lookup
+        const apiProcessedSet = new Set(
+          apiDuplicateCheck.statuses.filter(s => s.isProcessed).map(s => s.ecli)
+        );
+        const apiNewRecords = apiSearchRecords.filter((r: any) => !apiProcessedSet.has(r.ecli));
         const apiDuplicateCount = apiSearchRecords.length - apiNewRecords.length;
         
         const totalDuplicates = webDuplicateCount + apiDuplicateCount;
