@@ -146,6 +146,29 @@ export const insertProcessedEcliSchema = createInsertSchema(processedEclis).omit
 export type InsertProcessedEcli = z.infer<typeof insertProcessedEcliSchema>;
 export type ProcessedEcli = typeof processedEclis.$inferSelect;
 
+// Duplicate check request/response schemas
+export const checkDuplicatesRequestSchema = z.object({
+  namespace: z.string(),
+  eclis: z.array(z.string()).max(200), // Cap at 200 ECLIs per request
+});
+
+export const ecliStatusSchema = z.object({
+  ecli: z.string(),
+  isProcessed: z.boolean(),
+  uploadedAt: z.string().optional(), // ISO timestamp
+});
+
+export const checkDuplicatesResponseSchema = z.object({
+  total: z.number(),
+  alreadyProcessed: z.number(),
+  newEclis: z.number(),
+  statuses: z.array(ecliStatusSchema),
+});
+
+export type CheckDuplicatesRequest = z.infer<typeof checkDuplicatesRequestSchema>;
+export type EcliStatus = z.infer<typeof ecliStatusSchema>;
+export type CheckDuplicatesResponse = z.infer<typeof checkDuplicatesResponseSchema>;
+
 // Database table: Enriched batches (persistent storage for AI-enriched records)
 export const enrichedBatches = pgTable("enriched_batches", {
   id: serial("id").primaryKey(),

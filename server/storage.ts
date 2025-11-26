@@ -1,8 +1,8 @@
-import type { PreparedRecord, PreparedBatch } from '@shared/schema';
-import { enrichedBatches, enrichedBatchRecords } from '@shared/schema';
+import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus } from '@shared/schema';
+import { enrichedBatches, enrichedBatchRecords, processedEclis } from '@shared/schema';
 import { randomUUID } from 'crypto';
 import { db } from './db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 
 // Storage interface for prepared record batches
 // Supports both in-memory (fast, temporary) and PostgreSQL (persistent) storage
@@ -17,6 +17,9 @@ export interface IStorage {
   
   // Incremental enrichment methods (PostgreSQL-only)
   upsertEnrichedRecord(batchId: string, record: PreparedRecord): Promise<void>;
+  
+  // Duplicate checking
+  checkDuplicates(namespace: string, eclis: string[]): Promise<CheckDuplicatesResponse>;
 }
 
 export class MemStorage implements IStorage {
@@ -90,6 +93,22 @@ export class MemStorage implements IStorage {
   async upsertEnrichedRecord(batchId: string, record: PreparedRecord): Promise<void> {
     // MemStorage doesn't support incremental updates
     throw new Error('MemStorage does not support incremental enrichment updates');
+  }
+  
+  async checkDuplicates(namespace: string, eclis: string[]): Promise<CheckDuplicatesResponse> {
+    // MemStorage doesn't have persistent duplicate tracking
+    // Return all as new ECLIs
+    const statuses: EcliStatus[] = eclis.map(ecli => ({
+      ecli,
+      isProcessed: false,
+    }));
+    
+    return {
+      total: eclis.length,
+      alreadyProcessed: 0,
+      newEclis: eclis.length,
+      statuses,
+    };
   }
 }
 
@@ -229,6 +248,52 @@ export class PgStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(enrichedBatches.batchId, batchId));
+  }
+  
+  async checkDuplicates(namespace: string, eclis: string[]): Promise<CheckDuplicatesResponse> {
+    if (eclis.length === 0) {
+      return {
+        total: 0,
+        alreadyProcessed: 0,
+        newEclis: 0,
+        statuses: [],
+      };
+    }
+    
+    // Query processed_eclis table for this namespace
+    const processedRecords = await db
+      .select()
+      .from(processedEclis)
+      .where(
+        and(
+          eq(processedEclis.namespace, namespace),
+          inArray(processedEclis.ecli, eclis)
+        )
+      );
+    
+    // Create map for quick lookup
+    const processedMap = new Map(
+      processedRecords.map(record => [record.ecli, record.uploadedAt])
+    );
+    
+    // Build status for each ECLI
+    const statuses: EcliStatus[] = eclis.map(ecli => {
+      const uploadedAt = processedMap.get(ecli);
+      return {
+        ecli,
+        isProcessed: !!uploadedAt,
+        uploadedAt: uploadedAt?.toISOString(),
+      };
+    });
+    
+    const alreadyProcessed = statuses.filter(s => s.isProcessed).length;
+    
+    return {
+      total: eclis.length,
+      alreadyProcessed,
+      newEclis: eclis.length - alreadyProcessed,
+      statuses,
+    };
   }
 }
 

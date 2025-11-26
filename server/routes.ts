@@ -1342,7 +1342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Check which ECLIs are already processed
+  // Check which ECLIs are already processed (with detailed status per ECLI)
   app.post('/api/processed-eclis/check', async (req: Request, res: Response) => {
     try {
       const { eclis, namespace } = req.body;
@@ -1355,27 +1355,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Namespace is vereist' });
       }
       
-      // Query database for already processed ECLIs in this specific namespace
-      const processed = await db
-        .select({ ecli: processedEclis.ecli })
-        .from(processedEclis)
-        .where(
-          and(
-            eq(processedEclis.namespace, namespace),
-            inArray(processedEclis.ecli, eclis)
-          )
-        );
+      // Cap at 200 ECLIs per request for performance
+      if (eclis.length > 200) {
+        return res.status(400).json({ error: 'Maximaal 200 ECLIs per request' });
+      }
       
-      const processedEcliSet = new Set(processed.map(p => p.ecli));
-      const newEclis = eclis.filter(ecli => !processedEcliSet.has(ecli));
+      // Use storage method for duplicate checking with detailed status
+      const result = await storage.checkDuplicates(namespace, eclis);
       
-      res.json({
-        total: eclis.length,
-        alreadyProcessed: processed.length,
-        new: newEclis.length,
-        processedEclis: Array.from(processedEcliSet),
-        newEclis,
-      });
+      res.json(result);
     } catch (error: any) {
       console.error('Error checking processed ECLIs:', error);
       res.status(500).json({ error: error.message });
