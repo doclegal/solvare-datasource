@@ -1573,6 +1573,266 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // WETGEVING (Legislation) API Routes
+  // ============================================================================
+
+  // Search BWB regulations from KOOP SRU
+  app.get('/api/wetgeving/search', async (req: Request, res: Response) => {
+    try {
+      const { searchBwbRegulations, buildLawTypeQuery } = await import('./koop-sru-service');
+      
+      const query = req.query.query as string || '*';
+      const startRecord = parseInt(req.query.startRecord as string) || 1;
+      const maxRecords = Math.min(parseInt(req.query.maxRecords as string) || 100, 200);
+      const lawTypes = req.query.lawTypes as string;
+      
+      // Build query with optional law type filter
+      let finalQuery = query;
+      if (lawTypes) {
+        const types = lawTypes.split(',');
+        const typeQuery = buildLawTypeQuery(types);
+        finalQuery = query === '*' ? typeQuery : `(${query}) AND (${typeQuery})`;
+      }
+      
+      const result = await searchBwbRegulations(finalQuery, startRecord, maxRecords);
+      
+      // Check duplicates for returned regulations
+      const bwbIds = result.regulations.map(r => r.bwbId);
+      const duplicateStatus = await storage.checkLawDuplicates(bwbIds);
+      
+      // Merge duplicate status into regulations
+      const regulationsWithStatus = result.regulations.map(reg => {
+        const status = duplicateStatus.find(s => s.bwbId === reg.bwbId);
+        return {
+          ...reg,
+          isUploaded: status?.isUploaded || false,
+          uploadedAt: status?.uploadedAt,
+          chunkCount: status?.chunkCount,
+        };
+      });
+      
+      res.json({
+        ...result,
+        regulations: regulationsWithStatus,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/wetgeving/search:', error);
+      res.status(500).json({ 
+        error: error.message || 'Fout bij zoeken naar regelingen' 
+      });
+    }
+  });
+
+  // Get uploaded laws list
+  app.get('/api/wetgeving/uploaded', async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const laws = await storage.getUploadedLaws(limit);
+      res.json({ laws });
+    } catch (error: any) {
+      console.error('Error in /api/wetgeving/uploaded:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download and process selected regulations
+  app.post('/api/wetgeving/download', async (req: Request, res: Response) => {
+    try {
+      const { 
+        searchBwbRegulations, 
+        getValidRegulationVersion, 
+        downloadLegislationXml, 
+        parseLegislationToChunks 
+      } = await import('./koop-sru-service');
+      const { upsertLawChunksToPinecone } = await import('./pinecone-client');
+      
+      const { bwbIds, currentOnly = true } = req.body;
+      
+      if (!Array.isArray(bwbIds) || bwbIds.length === 0) {
+        return res.status(400).json({ error: 'BWB IDs zijn vereist' });
+      }
+      
+      // Set up SSE for progress streaming
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendProgress = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      
+      sendProgress({
+        type: 'start',
+        message: `Download gestart voor ${bwbIds.length} regelingen...`,
+        total: bwbIds.length,
+      });
+      
+      const today = new Date().toISOString().split('T')[0];
+      const results: any[] = [];
+      const errors: any[] = [];
+      let processedCount = 0;
+      let totalChunks = 0;
+      
+      for (const bwbId of bwbIds) {
+        try {
+          sendProgress({
+            type: 'processing',
+            message: `Verwerken: ${bwbId}`,
+            current: processedCount + 1,
+            total: bwbIds.length,
+          });
+          
+          // Get valid version info
+          const versionInfo = currentOnly 
+            ? await getValidRegulationVersion(bwbId, today)
+            : { xmlUrl: `https://wetten.overheid.nl/${bwbId}/xml`, validFrom: today, validTo: null };
+          
+          if (!versionInfo) {
+            errors.push({ bwbId, error: 'Geen geldige versie gevonden' });
+            processedCount++;
+            continue;
+          }
+          
+          // Download XML
+          const { content: xmlContent, hash: xmlHash } = await downloadLegislationXml(bwbId, versionInfo.xmlUrl);
+          
+          // Check if already uploaded with same hash
+          const isAlreadyUploaded = await storage.isLawVersionUploaded(bwbId, xmlHash);
+          if (isAlreadyUploaded) {
+            sendProgress({
+              type: 'skipped',
+              message: `${bwbId} is al geüpload (ongewijzigd)`,
+              bwbId,
+            });
+            processedCount++;
+            continue;
+          }
+          
+          // Get title from search
+          const searchResult = await searchBwbRegulations(`dcterms.identifier=${bwbId}`, 1, 1);
+          const title = searchResult.regulations[0]?.title || `Regeling ${bwbId}`;
+          const lawType = searchResult.regulations[0]?.lawType || 'onbekend';
+          
+          // Parse XML into chunks
+          const chunks = parseLegislationToChunks(
+            xmlContent,
+            bwbId,
+            title,
+            versionInfo.validFrom,
+            versionInfo.validTo
+          );
+          
+          if (chunks.length === 0) {
+            errors.push({ bwbId, error: 'Geen chunks kunnen extraheren' });
+            processedCount++;
+            continue;
+          }
+          
+          sendProgress({
+            type: 'chunked',
+            message: `${bwbId}: ${chunks.length} chunks geëxtraheerd`,
+            bwbId,
+            chunkCount: chunks.length,
+          });
+          
+          // Upload to Pinecone
+          const namespace = currentOnly ? 'laws-current' : 'laws-historic';
+          await upsertLawChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
+          
+          // Track in database
+          await storage.trackUploadedLaw({
+            bwbId,
+            title,
+            lawType,
+            validFrom: versionInfo.validFrom,
+            validTo: versionInfo.validTo,
+            xmlHash,
+            chunkCount: chunks.length,
+            namespace,
+          });
+          
+          totalChunks += chunks.length;
+          results.push({
+            bwbId,
+            title,
+            chunkCount: chunks.length,
+            validFrom: versionInfo.validFrom,
+            validTo: versionInfo.validTo,
+          });
+          
+          sendProgress({
+            type: 'uploaded',
+            message: `${bwbId}: ${chunks.length} chunks geüpload naar Pinecone`,
+            bwbId,
+            chunkCount: chunks.length,
+          });
+          
+        } catch (error: any) {
+          console.error(`Error processing ${bwbId}:`, error);
+          errors.push({ bwbId, error: error.message });
+          
+          sendProgress({
+            type: 'error',
+            message: `Fout bij ${bwbId}: ${error.message}`,
+            bwbId,
+          });
+        }
+        
+        processedCount++;
+        
+        // Rate limiting delay
+        if (processedCount < bwbIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      sendProgress({
+        type: 'complete',
+        message: `Download voltooid: ${results.length} regelingen, ${totalChunks} chunks`,
+        results,
+        errors,
+        totalChunks,
+      });
+      
+      res.end();
+    } catch (error: any) {
+      console.error('Error in /api/wetgeving/download:', error);
+      
+      const errorData = `data: ${JSON.stringify({
+        type: 'error',
+        message: error.message || 'Download failed',
+      })}\n\n`;
+      res.write(errorData);
+      res.end();
+    }
+  });
+
+  // Check duplicate status for BWB IDs
+  app.post('/api/wetgeving/check-duplicates', async (req: Request, res: Response) => {
+    try {
+      const { bwbIds } = req.body;
+      
+      if (!Array.isArray(bwbIds)) {
+        return res.status(400).json({ error: 'BWB IDs array is vereist' });
+      }
+      
+      const statuses = await storage.checkLawDuplicates(bwbIds);
+      
+      const uploaded = statuses.filter(s => s.isUploaded).length;
+      
+      res.json({
+        total: bwbIds.length,
+        uploaded,
+        new: bwbIds.length - uploaded,
+        statuses,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/wetgeving/check-duplicates:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 

@@ -1,8 +1,8 @@
-import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus } from '@shared/schema';
-import { enrichedBatches, enrichedBatchRecords, processedEclis } from '@shared/schema';
+import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus, LawUploadStatus, InsertUploadedLaw } from '@shared/schema';
+import { enrichedBatches, enrichedBatchRecords, processedEclis, uploadedLaws } from '@shared/schema';
 import { randomUUID } from 'crypto';
 import { db } from './db';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, sql, inArray, or } from 'drizzle-orm';
 
 // Storage interface for prepared record batches
 // Supports both in-memory (fast, temporary) and PostgreSQL (persistent) storage
@@ -294,6 +294,110 @@ export class PgStorage implements IStorage {
       newEclis: eclis.length - alreadyProcessed,
       statuses,
     };
+  }
+
+  // ============================================================================
+  // WETGEVING (Legislation) Storage Methods
+  // ============================================================================
+
+  /**
+   * Check which laws have already been uploaded to Pinecone
+   */
+  async checkLawDuplicates(bwbIds: string[]): Promise<LawUploadStatus[]> {
+    if (bwbIds.length === 0) {
+      return [];
+    }
+
+    const uploadedRecords = await db
+      .select()
+      .from(uploadedLaws)
+      .where(inArray(uploadedLaws.bwbId, bwbIds));
+
+    const uploadedMap = new Map(
+      uploadedRecords.map(record => [record.bwbId, record])
+    );
+
+    return bwbIds.map(bwbId => {
+      const uploaded = uploadedMap.get(bwbId);
+      return {
+        bwbId,
+        isUploaded: !!uploaded,
+        uploadedAt: uploaded?.uploadedAt?.toISOString(),
+        chunkCount: uploaded?.chunkCount || undefined,
+      };
+    });
+  }
+
+  /**
+   * Check if a specific law version has been uploaded (by hash)
+   */
+  async isLawVersionUploaded(bwbId: string, xmlHash: string): Promise<boolean> {
+    const existing = await db
+      .select()
+      .from(uploadedLaws)
+      .where(
+        and(
+          eq(uploadedLaws.bwbId, bwbId),
+          eq(uploadedLaws.xmlHash, xmlHash)
+        )
+      )
+      .limit(1);
+
+    return existing.length > 0;
+  }
+
+  /**
+   * Track an uploaded law in the database
+   */
+  async trackUploadedLaw(law: InsertUploadedLaw): Promise<void> {
+    await db
+      .insert(uploadedLaws)
+      .values(law)
+      .onConflictDoUpdate({
+        target: [uploadedLaws.bwbId, uploadedLaws.validFrom, uploadedLaws.validTo],
+        set: {
+          title: law.title,
+          lawType: law.lawType,
+          xmlHash: law.xmlHash,
+          chunkCount: law.chunkCount,
+          namespace: law.namespace,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  /**
+   * Get all uploaded laws for display
+   */
+  async getUploadedLaws(limit: number = 100): Promise<Array<{
+    bwbId: string;
+    title: string;
+    lawType: string | null;
+    chunkCount: number;
+    uploadedAt: Date;
+  }>> {
+    const laws = await db
+      .select({
+        bwbId: uploadedLaws.bwbId,
+        title: uploadedLaws.title,
+        lawType: uploadedLaws.lawType,
+        chunkCount: uploadedLaws.chunkCount,
+        uploadedAt: uploadedLaws.uploadedAt,
+      })
+      .from(uploadedLaws)
+      .orderBy(sql`${uploadedLaws.uploadedAt} DESC`)
+      .limit(limit);
+
+    return laws;
+  }
+
+  /**
+   * Delete law tracking record (for re-upload)
+   */
+  async deleteLawRecord(bwbId: string): Promise<void> {
+    await db
+      .delete(uploadedLaws)
+      .where(eq(uploadedLaws.bwbId, bwbId));
   }
 }
 

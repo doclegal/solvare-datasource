@@ -1,5 +1,5 @@
 import { Pinecone } from '@pinecone-database/pinecone';
-import type { PreparedRecord, ChunkedRecord } from '@shared/schema';
+import type { PreparedRecord, ChunkedRecord, LawChunk } from '@shared/schema';
 import { detectCourtLevel } from './court-utils';
 
 let pineconeClient: Pinecone | null = null;
@@ -163,8 +163,8 @@ export async function upsertSingleRecordToPinecone(
     );
     
     const embedding = embeddingsResponse.data[0];
-    if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
-      throw new Error(`Failed to generate dense embedding for ECLI: ${record.ecli}`);
+    if (!embedding || !embedding.values || !Array.isArray(embedding.values)) {
+      throw new Error(`Failed to generate embedding for ECLI: ${record.ecli}`);
     }
     
     // Generate sparse vector
@@ -311,9 +311,9 @@ export async function upsertRecordsToPinecone(
         const embedding = embeddingsResponse.data[idx];
         const sparseVector = sparseVectors[idx];
         
-        // Type guard: ensure we have a dense embedding with values
-        if (!embedding || embedding.vectorType !== 'dense' || !('values' in embedding)) {
-          throw new Error(`Failed to generate dense embedding for ECLI: ${record.ecli}`);
+        // Type guard: ensure we have embedding with values
+        if (!embedding || !embedding.values || !Array.isArray(embedding.values)) {
+          throw new Error(`Failed to generate embedding for ECLI: ${record.ecli}`);
         }
         
         if (isChunkedRecord(record)) {
@@ -463,4 +463,127 @@ export async function upsertRecordsToPinecone(
   }
   
   return progress;
+}
+
+// ============================================================================
+// WETGEVING (Legislation) - Pinecone Upload Functions
+// ============================================================================
+
+/**
+ * Upsert legislation chunks to Pinecone with hybrid vectors (dense + sparse)
+ * Uses the same embedding model (multilingual-e5-large) as case law for consistency
+ * 
+ * Namespaces:
+ * - 'laws-current': Currently valid legislation
+ * - 'laws-historic': Historical versions (future use)
+ */
+export async function upsertLawChunksToPinecone(
+  chunks: LawChunk[],
+  indexHost: string,
+  namespace: string = 'laws-current',
+  batchSize: number = 50
+): Promise<{ success: number; errors: string[] }> {
+  const client = initializePinecone();
+  
+  // Extract index name from host for index access
+  const indexName = indexHost.split('.')[0];
+  const index = client.index(indexName, indexHost);
+  
+  console.log(`[Pinecone Laws] Upserting ${chunks.length} chunks to namespace: ${namespace}`);
+  
+  const errors: string[] = [];
+  let successCount = 0;
+  
+  // Enforce Pinecone Inference API limit (max 96 per batch)
+  const safeBatchSize = Math.min(batchSize, 96);
+  
+  // Process in batches
+  for (let i = 0; i < chunks.length; i += safeBatchSize) {
+    const batch = chunks.slice(i, i + safeBatchSize);
+    
+    try {
+      // Step 1: Generate embeddings using Pinecone's Inference API (not index.inference)
+      const textsToEmbed = batch.map(chunk => chunk.text);
+      
+      const embeddingResponse = await client.inference.embed(
+        'multilingual-e5-large',
+        textsToEmbed,
+        { inputType: 'passage' }
+      );
+      
+      // Step 2: Build vectors with metadata
+      const vectors = batch.map((chunk, idx) => {
+        const embedding = embeddingResponse.data[idx];
+        
+        // Type guard: ensure we have embedding with values (SDK may return various shapes)
+        if (!embedding || !('values' in embedding) || !Array.isArray(embedding.values)) {
+          throw new Error(`Failed to generate embedding for BWB: ${chunk.bwbId}`);
+        }
+        
+        const sparseVector = generateSparseVector(chunk.text);
+        
+        // Build rich metadata for filtered queries
+        const metadata: Record<string, any> = {
+          text: chunk.text.substring(0, 30000), // Truncate for metadata limit
+          bwb_id: chunk.bwbId,
+          title: chunk.title,
+          type: 'wetgeving', // Distinguish from rechtspraak
+          is_current: chunk.isCurrent,
+        };
+        
+        if (chunk.articleNumber) {
+          metadata.article_number = chunk.articleNumber;
+        }
+        if (chunk.paragraphNumber) {
+          metadata.paragraph_number = chunk.paragraphNumber;
+        }
+        if (chunk.sectionTitle) {
+          metadata.section_title = chunk.sectionTitle;
+        }
+        if (chunk.validFrom) {
+          metadata.valid_from = chunk.validFrom;
+        }
+        if (chunk.validTo) {
+          metadata.valid_to = chunk.validTo;
+        }
+        if (chunk.chunkIndex !== undefined) {
+          metadata.chunk_index = chunk.chunkIndex;
+        }
+        if (chunk.totalChunks !== undefined) {
+          metadata.total_chunks = chunk.totalChunks;
+        }
+        
+        return {
+          id: chunk.id,
+          values: embedding.values,
+          sparseValues: sparseVector,
+          metadata,
+        };
+      });
+      
+      // Step 3: Upsert to Pinecone
+      await index.namespace(namespace).upsert(vectors);
+      
+      successCount += batch.length;
+      console.log(`[Pinecone Laws] Uploaded batch ${Math.floor(i / batchSize) + 1}: ${batch.length} chunks`);
+      
+    } catch (error: any) {
+      console.error(`[Pinecone Laws] Error upserting batch at index ${i}:`, error);
+      batch.forEach(chunk => {
+        errors.push(`${chunk.id}: ${error.message}`);
+      });
+    }
+    
+    // Rate limiting delay between batches
+    if (i + batchSize < chunks.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  
+  console.log(`[Pinecone Laws] Upload complete: ${successCount} success, ${errors.length} errors`);
+  
+  return {
+    success: successCount,
+    errors,
+  };
 }

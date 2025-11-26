@@ -1,0 +1,188 @@
+You are updating my existing app in this Replit project. Language of the app: DUTCH.
+The app already fetches and processes Dutch case law (Rechtspraak) and uploads chunks to Pinecone.
+Extend the app WITHOUT rewriting everything from scratch, and reuse the existing architecture, coding style, and Pinecone client setup.
+My Pinecone API key is already available as a secret/environment variable in Replit.
+
+Add the following new functionality to fetch and index Dutch legislation (wetten en regelingen) from the official Dutch government sources (KOOP / overheid.nl):
+
+List all laws / regulations (BWB-regelingen) and make them searchable in the UI
+
+Fetch the list of regulations from the KOOP SRU “BWB” connection.
+
+Use the SRU endpoint: https://zoekservice.overheid.nl/sru/Search?x-connection=BWB
+
+Use an SRU query that returns all BWB regulations (for example, on dcterms.identifier and/or dcterms.type, and page through the results).
+
+Parse the SRU XML and extract at least:
+
+BWB identifier (BWBR…)
+
+Official title (citeertitel / title of the regulation)
+
+Type (wet, amvb, ministeriële regeling, etc.)
+
+Store this list in memory or a small local cache (e.g. a JSON file or SQLite) to avoid re-fetching on every request.
+
+Build a simple UI component/page where:
+
+The full list of regulations is shown in a table or list.
+
+There is a search box that filters the list client-side by title and BWB-id as the user types.
+
+Allow the user to select which laws / regulations to download
+
+Next to each regulation in the list, add a checkbox.
+
+Allow selecting multiple regulations.
+
+Add a “Select all on this page” option.
+
+The selection must be available to the backend when we press the download button.
+
+Option to download only the CURRENTLY VALID version
+
+Add a checkbox (global option) saying e.g. “Download only the currently valid version (exclude historical versions)”.
+
+When this option is checked, the backend must only fetch the version of each regulation that is valid on “today’s date”.
+
+Use the KOOP SRU BWB endpoint again, with a query that specifies both the BWB-id and the validity date (overheidbwb.geldigheidsdatum=<today>).
+
+If this option is NOT checked, you may keep the logic prepared to support multiple versions later, but for now still focus on downloading just one version per regulation for simplicity.
+
+Download button to actually fetch the selected regulations (current-only if chosen)
+
+Add a “Download selected regulations” button.
+
+When clicked:
+
+Read the list of selected BWB-ids from the UI.
+
+For each selected BWB-id:
+
+Call the SRU service (x-connection=BWB) with a query like dcterms.identifier==<BWB-ID> AND overheidbwb.geldigheidsdatum=<today> when “current-only” is enabled.
+
+From the SRU response, extract the link to the XML of the consolidated text (the toestand XML).
+
+Download the XML content for each selected regulation.
+
+Handle errors robustly: network failures, missing XML, etc. Log clearly but don’t crash the whole app.
+
+(second 4 in user spec) Temporarily store the downloaded XML files
+
+Save each downloaded XML file into a temporary folder inside the Replit project, e.g. ./tmp/laws/.
+
+Use a naming convention like:
+
+<BWB-ID>_<valid-from>_<valid-until>.xml
+
+Make sure the temporary folder is created if it doesn’t exist.
+
+It’s OK if these files are ephemeral; they can be overwritten on subsequent runs.
+
+Chunk the legislation and upload to Pinecone
+
+For each downloaded XML file:
+
+Parse the XML.
+
+Extract the structure into chunks at article/paragraph level, e.g.:
+
+one chunk per article or per numbered paragraph (artikel / lid).
+
+preserve article numbers and headings.
+
+For each chunk, build a record with:
+
+id: a stable unique ID like <BWB-ID>#<article-number>#<paragraph-number>#<valid-from>
+
+text: the plain text content of that chunk (no XML tags)
+
+metadata:
+
+bwb_id
+
+title (official title of the regulation)
+
+article_number
+
+paragraph_number
+
+valid_from (date)
+
+valid_to (date or null for open-ended)
+
+is_current (boolean, based on whether this version is valid as of “today”)
+
+Use the existing Pinecone client and index from the project.
+
+If there is already an index for case law, you may either:
+
+reuse that index but use a separate namespace for laws (see next point), or
+
+create a new dedicated index for legislation, depending on what’s already configured.
+
+Upsert the chunks to Pinecone using batch upsert calls (respect the recommended batch size in the Pinecone docs).
+
+(Filled in by you) Logical namespaces and smart searchability
+
+Set up Pinecone namespaces in a logical way so that the legislation chunks are easy to query and maintain:
+
+Use one namespace for currently valid legislation, e.g. "laws-current".
+
+Optionally prepare a second namespace for historical versions in the future, e.g. "laws-historic", even if we don’t use it yet.
+
+When the user checked “only current version”, upsert the chunks into the "laws-current" namespace.
+
+Ensure the metadata is rich enough to support filtered queries later, e.g.:
+
+Filter by bwb_id to retrieve all chunks from a specific code/book.
+
+Filter by is_current == true to guarantee that only currently valid law is searched.
+
+Filter by article_number or ranges for article-based retrieval.
+
+Make the chunking strategy semantic-search friendly:
+
+Chunks should not be too small (single sentences) or too large (entire book); target roughly 200–500 words per chunk, but align with article/paragraph boundaries.
+
+Keep headings, article numbers, and subheadings in the text so that search results show clear context.
+
+Keep the existing case-law search functionality intact, but factor the code so that in the future I can:
+
+run semantic search over case law, laws, or both,
+
+and apply simple filters like namespace="laws-current" and bwb_id=<some-id>.
+
+Avoid re-uploading duplicates (track uploaded regulations and validity)
+
+Add a simple persistence layer (e.g. a local SQLite database file uploaded_laws.db or a JSON file stored in the project) to track what has already been uploaded to Pinecone.
+
+For each regulation-version that you upload, store at least:
+
+bwb_id
+
+valid_from
+
+valid_to
+
+a checksum or hash of the XML or of (bwb_id + valid_from + valid_to)
+
+Before downloading and re-uploading a regulation, check this store:
+
+If the same BWB-id with the same validity period and the same hash is already recorded as uploaded, skip uploading it again.
+
+If the XML has changed (hash differs), allow re-upload and update the record.
+
+This way, pressing the download button multiple times will not create duplicate vectors in Pinecone for the same version of the same law.
+
+General requirements:
+
+All text in Dutch.
+
+Keep the UI simple but functional (no heavy styling is required).
+
+Do not break or remove the existing Rechtspraak functionality.
+
+Keep code modular: separate SRU fetching/parsing, XML parsing/chunking, Pinecone upload, and persistence tracking into logically named modules or functions.
+
+Add clear comments explaining how to extend to more regulations or to include historical versions later.

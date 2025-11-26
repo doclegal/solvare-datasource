@@ -286,3 +286,86 @@ export type InsertDiscoverySearchRun = z.infer<typeof insertDiscoverySearchRunSc
 export type DiscoverySearchRun = typeof discoverySearchRuns.$inferSelect;
 export type InsertDiscoveryResult = z.infer<typeof insertDiscoveryResultSchema>;
 export type DiscoveryResult = typeof discoveryResults.$inferSelect;
+
+// ============================================================================
+// WETGEVING (Legislation) - BWB Regulations from KOOP/overheid.nl
+// ============================================================================
+
+// Database table: Track uploaded legislation to Pinecone
+export const uploadedLaws = pgTable("uploaded_laws", {
+  id: serial("id").primaryKey(),
+  bwbId: varchar("bwb_id", { length: 50 }).notNull(), // e.g., BWBR0001840
+  title: text("title").notNull(), // Official title (citeertitel)
+  lawType: varchar("law_type", { length: 100 }), // wet, amvb, ministeriële regeling, etc.
+  validFrom: varchar("valid_from", { length: 20 }), // ISO date string
+  validTo: varchar("valid_to", { length: 20 }), // ISO date string or null for open-ended
+  xmlHash: varchar("xml_hash", { length: 64 }).notNull(), // SHA-256 hash of XML content
+  chunkCount: integer("chunk_count").notNull().default(0),
+  namespace: varchar("namespace", { length: 100 }).notNull().default("laws-current"),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Unique constraint on BWB ID + validity period
+  uniqueBwbValidity: uniqueIndex("unique_bwb_validity").on(table.bwbId, table.validFrom, table.validTo),
+  bwbIdIdx: index("bwb_id_idx").on(table.bwbId),
+  namespaceIdx: index("law_namespace_idx").on(table.namespace),
+}));
+
+// Zod schemas for legislation
+export const insertUploadedLawSchema = createInsertSchema(uploadedLaws).omit({
+  id: true,
+  uploadedAt: true,
+  updatedAt: true,
+});
+
+export type InsertUploadedLaw = z.infer<typeof insertUploadedLawSchema>;
+export type UploadedLaw = typeof uploadedLaws.$inferSelect;
+
+// BWB Regulation record from SRU search
+export const bwbRegulationSchema = z.object({
+  bwbId: z.string(), // e.g., BWBR0001840
+  title: z.string(), // Official title
+  lawType: z.string().optional(), // wet, amvb, etc.
+  publisher: z.string().optional(),
+  dateModified: z.string().optional(),
+  xmlUrl: z.string().optional(), // URL to XML content
+  isSelected: z.boolean().optional().default(false), // UI selection state
+});
+
+export type BwbRegulation = z.infer<typeof bwbRegulationSchema>;
+
+// Legislation chunk for Pinecone
+export const lawChunkSchema = z.object({
+  id: z.string(), // <BWB-ID>#<article>#<paragraph>#<valid-from>
+  text: z.string(), // Plain text content
+  bwbId: z.string(),
+  title: z.string(),
+  articleNumber: z.string().optional(),
+  paragraphNumber: z.string().optional(),
+  sectionTitle: z.string().optional(),
+  validFrom: z.string().optional(),
+  validTo: z.string().optional(),
+  isCurrent: z.boolean().default(true),
+  chunkIndex: z.number().optional(),
+  totalChunks: z.number().optional(),
+});
+
+export type LawChunk = z.infer<typeof lawChunkSchema>;
+
+// Request to check duplicate laws
+export const checkDuplicateLawsRequestSchema = z.object({
+  bwbIds: z.array(z.string()),
+  validFrom: z.string().optional(),
+});
+
+export type CheckDuplicateLawsRequest = z.infer<typeof checkDuplicateLawsRequestSchema>;
+
+// Response for duplicate law check
+export const lawUploadStatusSchema = z.object({
+  bwbId: z.string(),
+  isUploaded: z.boolean(),
+  uploadedAt: z.string().optional(),
+  chunkCount: z.number().optional(),
+});
+
+export type LawUploadStatus = z.infer<typeof lawUploadStatusSchema>;
