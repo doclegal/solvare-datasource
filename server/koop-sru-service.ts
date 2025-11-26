@@ -397,6 +397,7 @@ export async function downloadLegislationXml(
 
 /**
  * Parse legislation XML and extract chunks at article/paragraph level
+ * Now includes full hierarchical structure: boek, titel, afdeling, paragraaf
  * Target chunk size: 200-500 words, aligned with article/paragraph boundaries
  */
 export function parseLegislationToChunks(
@@ -418,8 +419,8 @@ export function parseLegislationToChunks(
     const wetBesluit = wetgeving['wet-besluit'] || wetgeving['regeling'] || wetgeving;
     const wettekst = wetBesluit['wettekst'] || wetBesluit['regeling-tekst'] || wetBesluit;
 
-    // Find all articles
-    const articles = findAllArticles(wettekst);
+    // Find all articles WITH their hierarchical context
+    const articles = findAllArticlesWithHierarchy(wettekst);
     
     let chunkIndex = 0;
     
@@ -427,6 +428,29 @@ export function parseLegislationToChunks(
       const articleNumber = article.number || `${chunkIndex + 1}`;
       const articleTitle = article.title || '';
       const articleContent = article.content || '';
+      const hierarchy = article.hierarchy;
+      const structurePath = buildStructurePath(hierarchy);
+      
+      // Base chunk data with hierarchy
+      const baseChunkData = {
+        bwbId,
+        title,
+        articleNumber,
+        sectionTitle: articleTitle,
+        validFrom,
+        validTo: validTo || undefined,
+        isCurrent,
+        // Hierarchical structure
+        boekNummer: hierarchy.boekNummer,
+        boekTitel: hierarchy.boekTitel,
+        titelNummer: hierarchy.titelNummer,
+        titelNaam: hierarchy.titelNaam,
+        afdelingNummer: hierarchy.afdelingNummer,
+        afdelingNaam: hierarchy.afdelingNaam,
+        paragraafNummer: hierarchy.paragraafNummer,
+        paragraafNaam: hierarchy.paragraafNaam,
+        structurePath: structurePath || undefined,
+      };
       
       // Check if article is small enough for one chunk (< 500 words)
       const wordCount = articleContent.split(/\s+/).length;
@@ -434,15 +458,9 @@ export function parseLegislationToChunks(
       if (wordCount <= 500) {
         // Single chunk for this article
         chunks.push({
+          ...baseChunkData,
           id: `${bwbId}#art${articleNumber}#${validFrom}`,
-          text: formatChunkText(articleNumber, articleTitle, articleContent),
-          bwbId,
-          title,
-          articleNumber,
-          sectionTitle: articleTitle,
-          validFrom,
-          validTo: validTo || undefined,
-          isCurrent,
+          text: formatChunkTextWithHierarchy(articleNumber, articleTitle, articleContent, hierarchy),
           chunkIndex,
         });
         chunkIndex++;
@@ -454,16 +472,10 @@ export function parseLegislationToChunks(
           for (let i = 0; i < paragraphs.length; i++) {
             const para = paragraphs[i];
             chunks.push({
+              ...baseChunkData,
               id: `${bwbId}#art${articleNumber}#lid${para.number || i + 1}#${validFrom}`,
-              text: formatChunkText(articleNumber, articleTitle, para.content, para.number),
-              bwbId,
-              title,
-              articleNumber,
+              text: formatChunkTextWithHierarchy(articleNumber, articleTitle, para.content, hierarchy, para.number),
               paragraphNumber: para.number?.toString() || (i + 1).toString(),
-              sectionTitle: articleTitle,
-              validFrom,
-              validTo: validTo || undefined,
-              isCurrent,
               chunkIndex,
             });
             chunkIndex++;
@@ -473,16 +485,10 @@ export function parseLegislationToChunks(
           const textChunks = splitTextBySize(articleContent, 400);
           for (let i = 0; i < textChunks.length; i++) {
             chunks.push({
+              ...baseChunkData,
               id: `${bwbId}#art${articleNumber}#chunk${i + 1}#${validFrom}`,
-              text: formatChunkText(articleNumber, articleTitle, textChunks[i]),
-              bwbId,
-              title,
-              articleNumber,
+              text: formatChunkTextWithHierarchy(articleNumber, articleTitle, textChunks[i], hierarchy),
               paragraphNumber: textChunks.length > 1 ? `deel${i + 1}` : undefined,
-              sectionTitle: articleTitle,
-              validFrom,
-              validTo: validTo || undefined,
-              isCurrent,
               chunkIndex,
             });
             chunkIndex++;
@@ -517,7 +523,9 @@ export function parseLegislationToChunks(
       chunk.totalChunks = totalChunks;
     }
 
-    console.log(`[KOOP Parse] ${bwbId}: Extracted ${chunks.length} chunks`);
+    // Log hierarchy stats
+    const withHierarchy = chunks.filter(c => c.structurePath).length;
+    console.log(`[KOOP Parse] ${bwbId}: Extracted ${chunks.length} chunks (${withHierarchy} with hierarchy)`);
     return chunks;
   } catch (error: any) {
     console.error(`[KOOP Parse] Error parsing ${bwbId}:`, error.message);
@@ -540,42 +548,200 @@ export function parseLegislationToChunks(
   }
 }
 
-interface ArticleData {
+/**
+ * Hierarchical context tracking during XML traversal
+ * Dutch law structure: Boek > Titel > Afdeling > Paragraaf > Artikel > Lid
+ */
+interface HierarchyContext {
+  boekNummer?: string;
+  boekTitel?: string;
+  titelNummer?: string;
+  titelNaam?: string;
+  afdelingNummer?: string;
+  afdelingNaam?: string;
+  paragraafNummer?: string;
+  paragraafNaam?: string;
+}
+
+interface ArticleWithHierarchy {
   number: string;
   title: string;
   content: string;
   paragraphs: { number: string; content: string }[];
+  hierarchy: HierarchyContext;
 }
 
 /**
- * Find all articles in the legislation structure
+ * Build structure path for filtering (e.g., "boek:7|titel:4|afdeling:1")
  */
-function findAllArticles(node: any, articles: ArticleData[] = []): ArticleData[] {
+function buildStructurePath(hierarchy: HierarchyContext): string {
+  const parts: string[] = [];
+  if (hierarchy.boekNummer) parts.push(`boek:${hierarchy.boekNummer}`);
+  if (hierarchy.titelNummer) parts.push(`titel:${hierarchy.titelNummer}`);
+  if (hierarchy.afdelingNummer) parts.push(`afdeling:${hierarchy.afdelingNummer}`);
+  if (hierarchy.paragraafNummer) parts.push(`paragraaf:${hierarchy.paragraafNummer}`);
+  return parts.join('|');
+}
+
+/**
+ * Extract number and title from a structural element's 'kop' (header)
+ */
+function extractKopInfo(node: any): { nummer: string; naam: string } {
+  const kop = node['kop'] || {};
+  
+  // Extract number
+  let nummer = '';
+  const nr = kop['nr'] || node['@_nr'] || node['nr'] || '';
+  if (typeof nr === 'string') {
+    nummer = nr;
+  } else if (nr?._text) {
+    nummer = nr._text;
+  }
+  
+  // Extract title/name
+  let naam = '';
+  const titel = kop['titel'] || kop['title'] || kop['label'] || '';
+  if (typeof titel === 'string') {
+    naam = titel;
+  } else if (titel?._text) {
+    naam = titel._text;
+  }
+  
+  return { nummer: nummer.trim(), naam: naam.trim() };
+}
+
+/**
+ * Recursively find all articles with their hierarchical context
+ * Tracks boek, titel, afdeling, paragraaf as we descend the XML tree
+ */
+function findAllArticlesWithHierarchy(
+  node: any,
+  context: HierarchyContext = {},
+  articles: ArticleWithHierarchy[] = []
+): ArticleWithHierarchy[] {
   if (!node || typeof node !== 'object') return articles;
 
-  // Check if this is an article node
+  // Create a copy of context to modify for this level
+  let currentContext = { ...context };
+
+  // Check for structural elements and update context
+  // BWB XML uses: boek, hoofdstuk, titel, afdeling, paragraaf
+  
+  // Boek (Book)
+  if (node['boek']) {
+    const boeken = Array.isArray(node['boek']) ? node['boek'] : [node['boek']];
+    for (const boek of boeken) {
+      const info = extractKopInfo(boek);
+      const boekContext = { 
+        ...currentContext, 
+        boekNummer: info.nummer || currentContext.boekNummer,
+        boekTitel: info.naam || currentContext.boekTitel,
+        // Reset lower levels when entering a new book
+        titelNummer: undefined,
+        titelNaam: undefined,
+        afdelingNummer: undefined,
+        afdelingNaam: undefined,
+        paragraafNummer: undefined,
+        paragraafNaam: undefined,
+      };
+      findAllArticlesWithHierarchy(boek, boekContext, articles);
+    }
+  }
+
+  // Hoofdstuk (Chapter) - treat as titel equivalent
+  if (node['hoofdstuk']) {
+    const hoofdstukken = Array.isArray(node['hoofdstuk']) ? node['hoofdstuk'] : [node['hoofdstuk']];
+    for (const hoofdstuk of hoofdstukken) {
+      const info = extractKopInfo(hoofdstuk);
+      const hoofdstukContext = { 
+        ...currentContext, 
+        titelNummer: info.nummer || currentContext.titelNummer,
+        titelNaam: info.naam || currentContext.titelNaam,
+        afdelingNummer: undefined,
+        afdelingNaam: undefined,
+        paragraafNummer: undefined,
+        paragraafNaam: undefined,
+      };
+      findAllArticlesWithHierarchy(hoofdstuk, hoofdstukContext, articles);
+    }
+  }
+
+  // Titel (Title/Chapter)
+  if (node['titel'] && typeof node['titel'] === 'object') {
+    const titels = Array.isArray(node['titel']) ? node['titel'] : [node['titel']];
+    for (const titel of titels) {
+      // Check if this is a structural titel element (has children) or just text
+      if (typeof titel === 'object' && (titel['artikel'] || titel['afdeling'] || titel['paragraaf'] || titel['kop'])) {
+        const info = extractKopInfo(titel);
+        const titelContext = { 
+          ...currentContext, 
+          titelNummer: info.nummer || currentContext.titelNummer,
+          titelNaam: info.naam || currentContext.titelNaam,
+          afdelingNummer: undefined,
+          afdelingNaam: undefined,
+          paragraafNummer: undefined,
+          paragraafNaam: undefined,
+        };
+        findAllArticlesWithHierarchy(titel, titelContext, articles);
+      }
+    }
+  }
+
+  // Afdeling (Section)
+  if (node['afdeling']) {
+    const afdelingen = Array.isArray(node['afdeling']) ? node['afdeling'] : [node['afdeling']];
+    for (const afdeling of afdelingen) {
+      const info = extractKopInfo(afdeling);
+      const afdelingContext = { 
+        ...currentContext, 
+        afdelingNummer: info.nummer || currentContext.afdelingNummer,
+        afdelingNaam: info.naam || currentContext.afdelingNaam,
+        paragraafNummer: undefined,
+        paragraafNaam: undefined,
+      };
+      findAllArticlesWithHierarchy(afdeling, afdelingContext, articles);
+    }
+  }
+
+  // Paragraaf (Subsection) - note: this is different from 'lid' (paragraph within article)
+  if (node['paragraaf']) {
+    const paragrafen = Array.isArray(node['paragraaf']) ? node['paragraaf'] : [node['paragraaf']];
+    for (const paragraaf of paragrafen) {
+      const info = extractKopInfo(paragraaf);
+      const paragraafContext = { 
+        ...currentContext, 
+        paragraafNummer: info.nummer || currentContext.paragraafNummer,
+        paragraafNaam: info.naam || currentContext.paragraafNaam,
+      };
+      findAllArticlesWithHierarchy(paragraaf, paragraafContext, articles);
+    }
+  }
+
+  // Check if this node contains articles
   if (node['artikel'] || node['article']) {
-    const artikel = node['artikel'] || node['article'];
-    const artikelArray = Array.isArray(artikel) ? artikel : [artikel];
+    const artikelen = node['artikel'] || node['article'];
+    const artikelArray = Array.isArray(artikelen) ? artikelen : [artikelen];
     
     for (const art of artikelArray) {
-      const articleData = parseArticle(art);
+      const articleData = parseArticleWithHierarchy(art, currentContext);
       if (articleData) {
         articles.push(articleData);
       }
     }
   }
 
-  // Recursively search in children
+  // Recursively search other children (skip already processed structural elements)
+  const processedKeys = new Set(['boek', 'hoofdstuk', 'titel', 'afdeling', 'paragraaf', 'artikel', 'article']);
+  
   for (const key of Object.keys(node)) {
-    if (key.startsWith('@_') || key === '_text') continue;
+    if (key.startsWith('@_') || key === '_text' || processedKeys.has(key)) continue;
     const child = node[key];
     if (Array.isArray(child)) {
       for (const item of child) {
-        findAllArticles(item, articles);
+        findAllArticlesWithHierarchy(item, currentContext, articles);
       }
     } else if (typeof child === 'object') {
-      findAllArticles(child, articles);
+      findAllArticlesWithHierarchy(child, currentContext, articles);
     }
   }
 
@@ -583,9 +749,9 @@ function findAllArticles(node: any, articles: ArticleData[] = []): ArticleData[]
 }
 
 /**
- * Parse a single article node
+ * Parse a single article node with its hierarchical context
  */
-function parseArticle(node: any): ArticleData | null {
+function parseArticleWithHierarchy(node: any, hierarchy: HierarchyContext): ArticleWithHierarchy | null {
   if (!node) return null;
 
   // Extract article number
@@ -636,7 +802,13 @@ function parseArticle(node: any): ArticleData | null {
 
   if (!content && paragraphs.length === 0) return null;
 
-  return { number, title, content, paragraphs };
+  return { 
+    number: number.trim(), 
+    title: title.trim(), 
+    content, 
+    paragraphs,
+    hierarchy: { ...hierarchy }
+  };
 }
 
 /**
@@ -685,6 +857,69 @@ function formatChunkText(
     header += `\nLid ${paragraphNumber}`;
   }
   return `${header}\n\n${content}`;
+}
+
+/**
+ * Format chunk text with full hierarchical context for better AI understanding
+ * Includes: Boek > Titel > Afdeling > Paragraaf > Artikel > Lid
+ */
+function formatChunkTextWithHierarchy(
+  articleNumber: string,
+  articleTitle: string,
+  content: string,
+  hierarchy: HierarchyContext,
+  paragraphNumber?: string
+): string {
+  const lines: string[] = [];
+  
+  // Build hierarchical context header
+  const contextParts: string[] = [];
+  
+  if (hierarchy.boekNummer) {
+    let boekText = `Boek ${hierarchy.boekNummer}`;
+    if (hierarchy.boekTitel) boekText += `: ${hierarchy.boekTitel}`;
+    contextParts.push(boekText);
+  }
+  
+  if (hierarchy.titelNummer) {
+    let titelText = `Titel ${hierarchy.titelNummer}`;
+    if (hierarchy.titelNaam) titelText += `: ${hierarchy.titelNaam}`;
+    contextParts.push(titelText);
+  }
+  
+  if (hierarchy.afdelingNummer) {
+    let afdelingText = `Afdeling ${hierarchy.afdelingNummer}`;
+    if (hierarchy.afdelingNaam) afdelingText += `: ${hierarchy.afdelingNaam}`;
+    contextParts.push(afdelingText);
+  }
+  
+  if (hierarchy.paragraafNummer) {
+    let paragraafText = `§ ${hierarchy.paragraafNummer}`;
+    if (hierarchy.paragraafNaam) paragraafText += `: ${hierarchy.paragraafNaam}`;
+    contextParts.push(paragraafText);
+  }
+  
+  // Add hierarchical context if present
+  if (contextParts.length > 0) {
+    lines.push(contextParts.join(' > '));
+    lines.push('');
+  }
+  
+  // Add article header
+  let header = `Artikel ${articleNumber}`;
+  if (articleTitle) {
+    header += ` - ${articleTitle}`;
+  }
+  lines.push(header);
+  
+  if (paragraphNumber) {
+    lines.push(`Lid ${paragraphNumber}`);
+  }
+  
+  lines.push('');
+  lines.push(content);
+  
+  return lines.join('\n');
 }
 
 /**
