@@ -917,7 +917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             allResults.push({ 
               namespace: 'WEB_ECLI', 
               successCount: 0,
-              errorCount: webSearchRecords.length,
+              errorCount: webNewRecords.length,
               errors: [{ ecli: 'batch', error: error.message }]
             });
             sendProgress({
@@ -983,7 +983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             allResults.push({ 
               namespace: 'ECLI_NL', 
               successCount: 0,
-              errorCount: apiSearchRecords.length,
+              errorCount: apiNewRecords.length,
               errors: [{ ecli: 'batch', error: error.message }]
             });
             sendProgress({
