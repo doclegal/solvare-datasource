@@ -334,18 +334,39 @@ export const bwbRegulationSchema = z.object({
 
 export type BwbRegulation = z.infer<typeof bwbRegulationSchema>;
 
-// Legislation chunk for Pinecone
+// Legislation chunk for Pinecone with full hierarchical structure
+// Dutch law structure: Boek > Titel > Afdeling > Paragraaf > Artikel > Lid
 export const lawChunkSchema = z.object({
   id: z.string(), // <BWB-ID>#<article>#<paragraph>#<valid-from>
   text: z.string(), // Plain text content
   bwbId: z.string(),
-  title: z.string(),
-  articleNumber: z.string().optional(),
-  paragraphNumber: z.string().optional(),
-  sectionTitle: z.string().optional(),
+  title: z.string(), // Full regulation title (e.g., "Burgerlijk Wetboek Boek 7")
+  
+  // Hierarchical structure (from BWB XML)
+  boekNummer: z.string().optional(),     // Book number (e.g., "7")
+  boekTitel: z.string().optional(),      // Book title (e.g., "Bijzondere overeenkomsten")
+  titelNummer: z.string().optional(),    // Title/Chapter number (e.g., "4")
+  titelNaam: z.string().optional(),      // Title name (e.g., "Huur")
+  afdelingNummer: z.string().optional(), // Section number (e.g., "1")
+  afdelingNaam: z.string().optional(),   // Section name (e.g., "Algemene bepalingen")
+  paragraafNummer: z.string().optional(),// Subsection number (e.g., "2")
+  paragraafNaam: z.string().optional(),  // Subsection name (e.g., "Verplichtingen van de verhuurder")
+  
+  // Article and paragraph info
+  articleNumber: z.string().optional(),  // Article number (e.g., "7:201" or "201")
+  paragraphNumber: z.string().optional(),// Lid number (e.g., "1", "2")
+  sectionTitle: z.string().optional(),   // Article title if present
+  
+  // Hierarchical path for easy filtering/grouping
+  // Format: "boek:7|titel:4|afdeling:1|paragraaf:2"
+  structurePath: z.string().optional(),
+  
+  // Validity dates
   validFrom: z.string().optional(),
   validTo: z.string().optional(),
   isCurrent: z.boolean().default(true),
+  
+  // Chunk metadata
   chunkIndex: z.number().optional(),
   totalChunks: z.number().optional(),
 });
