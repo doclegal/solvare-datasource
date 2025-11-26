@@ -37,6 +37,12 @@ interface SruSearchResult {
  * @param query - CQL query string (optional, defaults to all regulations)
  * @param startRecord - Starting position for pagination (1-based)
  * @param maxRecords - Maximum records per page (default 100)
+ * 
+ * CQL Query Examples:
+ * - All regulations since 2000: dcterms.modified>=2000-01-01
+ * - Specific BWB ID: dcterms.identifier=BWBR0001840
+ * - By type: dcterms.type=wet
+ * - Search in title: dcterms.title any "burgerlijk"
  */
 export async function searchBwbRegulations(
   query: string = '*',
@@ -44,12 +50,31 @@ export async function searchBwbRegulations(
   maxRecords: number = 100
 ): Promise<SruSearchResult> {
   try {
+    // Build effective CQL query
+    // The SRU API doesn't support wildcard (*), so we use a date filter to get all records
+    let effectiveQuery = query;
+    if (query === '*' || query === '' || !query) {
+      // Default: all regulations (using a date that captures everything)
+      effectiveQuery = 'dcterms.modified>=1900-01-01';
+    } else if (!query.includes('=') && !query.includes('>') && !query.includes('<')) {
+      // If it's a simple search term, search in title/identifier
+      // First try to detect if it's a BWB ID
+      if (query.match(/^BWBR\d+$/i)) {
+        effectiveQuery = `dcterms.identifier=${query.toUpperCase()}`;
+      } else {
+        // Use overheidbwb.titel with 'all' relation for free text search
+        // BWB SRU supports: =, adj, any, all operators for titel field
+        // 'all' matches all terms in the query across title fields (citeertitel, officiële-titel, niet-officiële-titel)
+        effectiveQuery = `overheidbwb.titel all "${query}"`;
+      }
+    }
+    
     // Build SRU request URL
     const params = new URLSearchParams({
       'x-connection': BWB_CONNECTION,
       'operation': 'searchRetrieve',
       'version': '2.0',
-      'query': query,
+      'query': effectiveQuery,
       'startRecord': startRecord.toString(),
       'maximumRecords': maxRecords.toString(),
     });
