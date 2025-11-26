@@ -36,8 +36,8 @@ export default function Landing() {
                   <li>Ministeriële regelingen</li>
                   <li>Europese verordeningen</li>
                 </ul>
-                <div className="mt-4 text-xs text-amber-600 dark:text-amber-400">
-                  Binnenkort beschikbaar
+                <div className="mt-4 text-xs text-green-600 dark:text-green-400">
+                  Beschikbaar
                 </div>
               </CardContent>
             </Card>
