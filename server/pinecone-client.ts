@@ -523,6 +523,7 @@ export async function upsertLawChunksToPinecone(
         const sparseVector = generateSparseVector(chunk.text);
         
         // Build rich metadata for filtered queries
+        // Includes full hierarchical structure for AI context awareness
         const metadata: Record<string, any> = {
           text: chunk.text.substring(0, 30000), // Truncate for metadata limit
           bwb_id: chunk.bwbId,
@@ -531,6 +532,37 @@ export async function upsertLawChunksToPinecone(
           is_current: chunk.isCurrent,
         };
         
+        // Hierarchical structure (Boek > Titel > Afdeling > Paragraaf)
+        if (chunk.boekNummer) {
+          metadata.boek_nummer = chunk.boekNummer;
+        }
+        if (chunk.boekTitel) {
+          metadata.boek_titel = chunk.boekTitel;
+        }
+        if (chunk.titelNummer) {
+          metadata.titel_nummer = chunk.titelNummer;
+        }
+        if (chunk.titelNaam) {
+          metadata.titel_naam = chunk.titelNaam;
+        }
+        if (chunk.afdelingNummer) {
+          metadata.afdeling_nummer = chunk.afdelingNummer;
+        }
+        if (chunk.afdelingNaam) {
+          metadata.afdeling_naam = chunk.afdelingNaam;
+        }
+        if (chunk.paragraafNummer) {
+          metadata.paragraaf_nummer = chunk.paragraafNummer;
+        }
+        if (chunk.paragraafNaam) {
+          metadata.paragraaf_naam = chunk.paragraafNaam;
+        }
+        // Structure path for easy hierarchical filtering (e.g., "boek:7|titel:4|afdeling:1")
+        if (chunk.structurePath) {
+          metadata.structure_path = chunk.structurePath;
+        }
+        
+        // Article and paragraph info
         if (chunk.articleNumber) {
           metadata.article_number = chunk.articleNumber;
         }
@@ -540,12 +572,16 @@ export async function upsertLawChunksToPinecone(
         if (chunk.sectionTitle) {
           metadata.section_title = chunk.sectionTitle;
         }
+        
+        // Validity dates
         if (chunk.validFrom) {
           metadata.valid_from = chunk.validFrom;
         }
         if (chunk.validTo) {
           metadata.valid_to = chunk.validTo;
         }
+        
+        // Chunk position metadata
         if (chunk.chunkIndex !== undefined) {
           metadata.chunk_index = chunk.chunkIndex;
         }
