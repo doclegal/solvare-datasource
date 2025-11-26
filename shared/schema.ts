@@ -38,6 +38,10 @@ export const preparedRecordSchema = z.object({
   ai_geschil: z.string().optional(),
   ai_beslissing: z.string().optional(),
   ai_motivering: z.string().optional(),
+  
+  // Duplicate detection fields (added by frontend useDuplicateCheck hook)
+  isDuplicate: z.boolean().optional(),
+  uploadedAt: z.string().optional(),
 });
 
 export type PreparedRecord = z.infer<typeof preparedRecordSchema>;

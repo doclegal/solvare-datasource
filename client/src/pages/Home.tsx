@@ -124,7 +124,10 @@ export default function Home() {
       );
       const checkData = await checkResponse.json();
       
-      const eclisToFetch = checkData.newEclis;
+      // Extract only NEW (not yet processed) ECLIs from statuses
+      const eclisToFetch = checkData.statuses
+        .filter((s: any) => !s.isProcessed)
+        .map((s: any) => s.ecli);
       
       if (eclisToFetch.length === 0) {
         toast({
