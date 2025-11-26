@@ -1,8 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2, ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface HeaderProps {
   isConnected?: boolean;
@@ -130,9 +131,16 @@ export default function Header({ isConnected = true }: HeaderProps) {
 
   return (
     <header className="border-b bg-card h-16 flex items-center justify-between px-4 md:px-8">
-      <div className="min-w-0 flex-shrink">
-        <h1 className="text-lg md:text-2xl font-medium truncate">Rechtspraak Ingestie Tool</h1>
-        <p className="text-xs md:text-sm text-muted-foreground truncate">Nederlandse Uitspraken → Pinecone Vector Opslag</p>
+      <div className="flex items-center gap-3 min-w-0 flex-shrink">
+        <Link href="/">
+          <Button variant="ghost" size="icon" data-testid="button-back-home" title="Terug naar startpagina">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-lg md:text-2xl font-medium truncate">Rechtspraak Ingestie Tool</h1>
+          <p className="text-xs md:text-sm text-muted-foreground truncate">Nederlandse Uitspraken → Pinecone Vector Opslag</p>
+        </div>
       </div>
       <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
         <Button
