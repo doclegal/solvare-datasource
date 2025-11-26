@@ -8,7 +8,7 @@ export default function Landing() {
       <div className="max-w-4xl w-full">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-foreground mb-4">
-            Juridische Data Ingestie Tool
+            Juridische Databronnen
           </h1>
           <p className="text-lg text-muted-foreground">
             Upload en verwerk juridische documenten naar Pinecone voor semantisch zoeken

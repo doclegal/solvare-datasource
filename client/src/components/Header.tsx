@@ -138,7 +138,7 @@ export default function Header({ isConnected = true }: HeaderProps) {
           </Button>
         </Link>
         <div>
-          <h1 className="text-lg md:text-2xl font-medium truncate">Rechtspraak Ingestie Tool</h1>
+          <h1 className="text-lg md:text-2xl font-medium truncate">Juridische Databronnen</h1>
           <p className="text-xs md:text-sm text-muted-foreground truncate">Nederlandse Uitspraken → Pinecone Vector Opslag</p>
         </div>
       </div>
