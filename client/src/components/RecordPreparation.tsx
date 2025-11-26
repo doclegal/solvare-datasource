@@ -46,7 +46,7 @@ interface ChunksByEcli {
 
 interface RecordPreparationProps {
   ecliCount: number;
-  preparedRecords: PreparedRecord[];
+  preparedRecords: Array<PreparedRecord & { isDuplicate?: boolean; uploadedAt?: string }>;
   chunkedData?: { chunksByEcli: Record<string, ChunksByEcli>; allChunks: ChunkedRecord[] } | null;
   onPrepareChunks?: (useLLM: boolean) => void;
   onFetchContent: () => void;
@@ -59,6 +59,9 @@ interface RecordPreparationProps {
   isLoading?: boolean;
   isPreparingChunks?: boolean;
   isEnrichingWithAI?: boolean;
+  isCheckingDuplicates?: boolean;
+  duplicateCount?: number;
+  newCount?: number;
 }
 
 const SECTION_TYPE_LABELS: Record<string, string> = {
@@ -94,6 +97,9 @@ export default function RecordPreparation({
   isLoading = false,
   isPreparingChunks = false,
   isEnrichingWithAI = false,
+  isCheckingDuplicates = false,
+  duplicateCount = 0,
+  newCount = 0,
 }: RecordPreparationProps) {
   const [expandedText, setExpandedText] = useState<Set<string>>(new Set());
   const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
@@ -139,12 +145,36 @@ export default function RecordPreparation({
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-4">
-          <div>
+          <div className="flex-1">
             <CardTitle>Metadata Records</CardTitle>
             <CardDescription>
               {chunkedData 
                 ? `${chunkedData.allChunks.length} chunks voorbereid uit ${preparedRecords.length} uitspraken`
-                : `Civielrechtelijke uitspraken met metadata${preparedRecords.length > 0 ? ` • ${preparedRecords.length} records` : ''}`
+                : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span>Civielrechtelijke uitspraken met metadata{preparedRecords.length > 0 ? ` • ${preparedRecords.length} records` : ''}</span>
+                    {preparedRecords.length > 0 && (
+                      <>
+                        {isCheckingDuplicates ? (
+                          <Badge variant="outline" className="text-xs">Controleren...</Badge>
+                        ) : (
+                          <>
+                            {duplicateCount > 0 && (
+                              <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                {duplicateCount} al geüpload
+                              </Badge>
+                            )}
+                            {newCount > 0 && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                {newCount} nieuw
+                              </Badge>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )
               }
             </CardDescription>
           </div>
@@ -270,6 +300,14 @@ export default function RecordPreparation({
                           className="text-xs"
                         >
                           {record.source === 'web_search' ? '🌐 Web Search → WEB_ECLI' : '📋 API → ECLI_NL'}
+                        </Badge>
+                      )}
+                      {record.isDuplicate !== undefined && (
+                        <Badge 
+                          variant="outline"
+                          className={`text-xs ${record.isDuplicate ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300'}`}
+                        >
+                          {record.isDuplicate ? '✓ Al geüpload' : '✨ Nieuw'}
                         </Badge>
                       )}
                       <span className="text-muted-foreground">•</span>

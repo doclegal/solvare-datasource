@@ -7,6 +7,7 @@ import WebSearchDiscovery from "@/components/WebSearchDiscovery";
 import BatchManager from "@/components/BatchManager";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useDuplicateCheck } from "@/hooks/useDuplicateCheck";
 
 // ⚙️ FEATURE FLAG: Auto-save batches after fetching records
 // Set to false to disable auto-save and restore manual-only behavior
@@ -29,6 +30,9 @@ export default function Home() {
   const fetchLockRef = useRef(false);
   const autoSaveInProgressRef = useRef(false); // Prevent concurrent auto-saves
   const autoRestoreAttemptedRef = useRef(false); // Track if auto-restore was already attempted
+  
+  // 🔍 DUPLICATE CHECK: Automatically check if records are already uploaded to Pinecone
+  const { records: recordsWithDuplicateStatus, isChecking: isCheckingDuplicates, duplicateCount, newCount } = useDuplicateCheck(preparedRecords);
 
   const addLog = (message: string) => {
     const timestamp = new Date().toLocaleTimeString('nl-NL');
@@ -704,7 +708,7 @@ export default function Home() {
 
         <RecordPreparation
           ecliCount={preparedRecords.length}
-          preparedRecords={preparedRecords}
+          preparedRecords={recordsWithDuplicateStatus}
           onFetchContent={() => {}} 
           onClear={handleClearRecords}
           onEnrichAllRecords={handleEnrichAllRecords}
@@ -712,6 +716,9 @@ export default function Home() {
           testingSummary={testingSummary}
           enrichAllProgress={enrichAllProgress}
           isEnrichingWithAI={isEnrichingWithAI}
+          isCheckingDuplicates={isCheckingDuplicates}
+          duplicateCount={duplicateCount}
+          newCount={newCount}
         />
 
         <PineconeExport
