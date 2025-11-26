@@ -52,6 +52,7 @@ interface SearchResponse {
   totalRecords: number;
   startRecord: number;
   maxRecords: number;
+  allBwbIds?: string[];
 }
 
 export default function Wetgeving() {
@@ -64,6 +65,8 @@ export default function Wetgeving() {
   const [downloadLogs, setDownloadLogs] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [allBwbIds, setAllBwbIds] = useState<string[]>([]);
+  const [isLoadingAllIds, setIsLoadingAllIds] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -101,6 +104,7 @@ export default function Wetgeving() {
     setActiveQuery(searchQuery || '*');
     setCurrentPage(1);
     setSelectedIds(new Set());
+    setAllBwbIds([]); // Reset cached IDs for new search
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -111,7 +115,6 @@ export default function Wetgeving() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    setSelectedIds(new Set());
   };
 
   const toggleSelection = (bwbId: string) => {
@@ -126,14 +129,68 @@ export default function Wetgeving() {
     });
   };
 
-  const selectAll = () => {
-    const newIds = new Set<string>();
+  const selectAllOnPage = () => {
+    const newIds = new Set(selectedIds);
     filteredRegulations.forEach(reg => {
       if (!reg.isUploaded) {
         newIds.add(reg.bwbId);
       }
     });
     setSelectedIds(newIds);
+  };
+
+  const selectAllResults = async () => {
+    if (allBwbIds.length > 0) {
+      // Use cached IDs
+      const uploadedSet = new Set(regulations.filter(r => r.isUploaded).map(r => r.bwbId));
+      const newIds = new Set(allBwbIds.filter(id => !uploadedSet.has(id)));
+      setSelectedIds(newIds);
+      toast({
+        title: 'Geselecteerd',
+        description: `${newIds.size} nieuwe regelingen geselecteerd`,
+      });
+      return;
+    }
+
+    setIsLoadingAllIds(true);
+    try {
+      // Fetch all BWB IDs for current query
+      const params = new URLSearchParams({
+        query: activeQuery,
+        startRecord: '1',
+        maxRecords: '10000', // Get all IDs
+        idsOnly: 'true',
+      });
+      const response = await fetch(`/api/wetgeving/search?${params}`);
+      if (!response.ok) throw new Error('Kon niet alle IDs ophalen');
+      
+      const data = await response.json();
+      const fetchedIds = data.allBwbIds || data.regulations.map((r: BwbRegulation) => r.bwbId);
+      setAllBwbIds(fetchedIds);
+      
+      // Check which are already uploaded
+      const checkResponse = await apiRequest('POST', '/api/wetgeving/check-duplicates', { bwbIds: fetchedIds });
+      const checkData = await checkResponse.json();
+      const uploadedSet = new Set<string>(
+        checkData.statuses.filter((s: any) => s.isUploaded).map((s: any) => s.bwbId)
+      );
+      
+      const newIds = new Set<string>(fetchedIds.filter((id: string) => !uploadedSet.has(id)));
+      setSelectedIds(newIds);
+      
+      toast({
+        title: 'Geselecteerd',
+        description: `${newIds.size} nieuwe regelingen geselecteerd (${uploadedSet.size} al geüpload)`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Fout',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingAllIds(false);
+    }
   };
 
   const deselectAll = () => {
@@ -171,10 +228,7 @@ export default function Wetgeving() {
     let bwbIdsToProcess = selectedBwbIds;
     
     try {
-      const checkResponse = await apiRequest('/api/wetgeving/check-duplicates', {
-        method: 'POST',
-        body: JSON.stringify({ bwbIds: selectedBwbIds }),
-      });
+      const checkResponse = await apiRequest('POST', '/api/wetgeving/check-duplicates', { bwbIds: selectedBwbIds });
       
       const checkData = await checkResponse.json();
       
@@ -367,11 +421,23 @@ export default function Wetgeving() {
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={selectAll} 
-                  data-testid="button-select-all"
+                  onClick={selectAllResults}
+                  data-testid="button-select-all-results"
+                  disabled={isDownloading || isLoadingAllIds}
+                >
+                  {isLoadingAllIds ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : null}
+                  Selecteer alle ({totalRecords})
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={selectAllOnPage} 
+                  data-testid="button-select-page"
                   disabled={isDownloading}
                 >
-                  Selecteer nieuw
+                  Selecteer pagina
                 </Button>
                 <Button 
                   variant="outline" 
@@ -380,7 +446,7 @@ export default function Wetgeving() {
                   data-testid="button-deselect-all"
                   disabled={isDownloading}
                 >
-                  Deselecteer alles
+                  Deselecteer
                 </Button>
                 <Button 
                   onClick={handleDownload}
@@ -418,58 +484,43 @@ export default function Wetgeving() {
                 <p>Geen regelingen gevonden</p>
               </div>
             ) : (
-              <ScrollArea className="h-[400px]">
-                <div className="space-y-2">
+              <ScrollArea className="h-[500px]">
+                <div className="divide-y">
                   {filteredRegulations.map((reg) => (
                     <div
                       key={reg.bwbId}
-                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                        selectedIds.has(reg.bwbId) ? 'bg-primary/5 border-primary/30' : 'hover:bg-muted/50'
-                      } ${reg.isUploaded ? 'opacity-60' : ''}`}
+                      className={`flex items-center gap-3 py-2 px-1 transition-colors cursor-pointer ${
+                        selectedIds.has(reg.bwbId) ? 'bg-primary/5' : 'hover:bg-muted/50'
+                      } ${reg.isUploaded ? 'opacity-50' : ''}`}
+                      onClick={() => !isDownloading && toggleSelection(reg.bwbId)}
                       data-testid={`regulation-item-${reg.bwbId}`}
                     >
                       <Checkbox
                         checked={selectedIds.has(reg.bwbId)}
                         onCheckedChange={() => toggleSelection(reg.bwbId)}
                         disabled={isDownloading}
+                        onClick={(e) => e.stopPropagation()}
                         data-testid={`checkbox-regulation-${reg.bwbId}`}
                       />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span 
-                            className="font-mono text-sm text-primary"
-                            data-testid={`text-bwbid-${reg.bwbId}`}
-                          >
-                            {reg.bwbId}
-                          </span>
-                          {reg.lawType && (
-                            <Badge variant="outline" className="text-xs">
-                              {reg.lawType}
-                            </Badge>
-                          )}
-                          {reg.isUploaded && (
-                            <Badge 
-                              variant="secondary" 
-                              className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              data-testid={`badge-uploaded-${reg.bwbId}`}
-                            >
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Geüpload {reg.chunkCount ? `(${reg.chunkCount} chunks)` : ''}
-                            </Badge>
-                          )}
-                        </div>
-                        <p 
-                          className="text-sm mt-1 line-clamp-2"
-                          data-testid={`text-title-${reg.bwbId}`}
-                        >
-                          {reg.title}
-                        </p>
-                        {reg.dateModified && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Laatst gewijzigd: {reg.dateModified}
-                          </p>
-                        )}
-                      </div>
+                      <span 
+                        className="font-mono text-xs text-muted-foreground w-28 shrink-0"
+                        data-testid={`text-bwbid-${reg.bwbId}`}
+                      >
+                        {reg.bwbId}
+                      </span>
+                      <span 
+                        className="text-sm flex-1 truncate"
+                        data-testid={`text-title-${reg.bwbId}`}
+                        title={reg.title}
+                      >
+                        {reg.title}
+                      </span>
+                      {reg.isUploaded && (
+                        <CheckCircle2 
+                          className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" 
+                          data-testid={`icon-uploaded-${reg.bwbId}`}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
