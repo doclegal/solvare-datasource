@@ -500,11 +500,29 @@ export default function Home() {
       return;
     }
 
+    // Filter out duplicates - only enrich new records
+    const recordsToEnrich = preparedRecords.filter(r => !r.isDuplicate);
+    
+    if (recordsToEnrich.length === 0) {
+      toast({
+        title: 'Geen nieuwe records',
+        description: 'Alle records zijn al geüpload',
+        variant: 'destructive',
+      });
+      addLog('⚠️ Geen nieuwe records om te verrijken (alle records zijn al geüpload)');
+      return;
+    }
+
+    const duplicateCount = preparedRecords.length - recordsToEnrich.length;
+    if (duplicateCount > 0) {
+      addLog(`📋 ${duplicateCount} duplicaten overgeslagen, ${recordsToEnrich.length} nieuwe records worden verrijkt`);
+    }
+
     setIsEnrichingWithAI(true);
 
     try {
-      // CLEAN REBUILD: Extract ONLY ECLIs - no complex objects, no circular refs
-      const eclis = preparedRecords.map(r => r.ecli);
+      // CLEAN REBUILD: Extract ONLY ECLIs from new records - no complex objects, no circular refs
+      const eclis = recordsToEnrich.map(r => r.ecli);
       
       if (resumeBatchId) {
         addLog(`AI enrichment hervatten voor batch ${resumeBatchId} (${eclis.length} records)...`);

@@ -810,40 +810,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error(`${recordsWithoutSource.length} records hebben geen 'source' veld. Alle records moeten getagd zijn als 'web_search' of 'api_search'.`);
         }
         
+        // DUPLICATE DETECTION: Filter out already uploaded records
         const webSearchRecords = config.records.filter((r: any) => r.source === 'web_search');
         const apiSearchRecords = config.records.filter((r: any) => r.source === 'api_search');
+        
+        // Check duplicates for web search records (WEB_ECLI namespace)
+        const webEclis = webSearchRecords.map((r: any) => r.ecli);
+        const webDuplicateStatus = webEclis.length > 0 
+          ? await storage.checkDuplicates(webEclis, 'WEB_ECLI')
+          : {};
+        const webNewRecords = webSearchRecords.filter((r: any) => !webDuplicateStatus[r.ecli]);
+        const webDuplicateCount = webSearchRecords.length - webNewRecords.length;
+        
+        // Check duplicates for API search records (ECLI_NL namespace)
+        const apiEclis = apiSearchRecords.map((r: any) => r.ecli);
+        const apiDuplicateStatus = apiEclis.length > 0
+          ? await storage.checkDuplicates(apiEclis, 'ECLI_NL')
+          : {};
+        const apiNewRecords = apiSearchRecords.filter((r: any) => !apiDuplicateStatus[r.ecli]);
+        const apiDuplicateCount = apiSearchRecords.length - apiNewRecords.length;
+        
+        const totalDuplicates = webDuplicateCount + apiDuplicateCount;
+        
+        if (totalDuplicates > 0) {
+          console.log(`[Pinecone Export] ${totalDuplicates} duplicaten uitgefilterd (${webDuplicateCount} WEB_ECLI, ${apiDuplicateCount} ECLI_NL)`);
+        }
+        
+        // Update config.records to only include new records
+        config.records = [...webNewRecords, ...apiNewRecords];
+        
+        if (config.records.length === 0) {
+          throw new Error('Geen nieuwe records om te uploaden. Alle records zijn al geüpload naar Pinecone.');
+        }
+        
         const unknownSourceRecords = config.records.filter((r: any) => r.source !== 'web_search' && r.source !== 'api_search');
         
         if (unknownSourceRecords.length > 0) {
           console.warn(`[Pinecone Export] WARNING: ${unknownSourceRecords.length} records met onbekende source:`, unknownSourceRecords.map((r: any) => `${r.ecli} (${r.source})`));
         }
         
-        console.log(`[Pinecone Export] Web Search records: ${webSearchRecords.length} → WEB_ECLI namespace`);
-        console.log(`[Pinecone Export] API Search records: ${apiSearchRecords.length} → ECLI_NL namespace`);
+        console.log(`[Pinecone Export] Web Search records: ${webNewRecords.length} → WEB_ECLI namespace`);
+        console.log(`[Pinecone Export] API Search records: ${apiNewRecords.length} → ECLI_NL namespace`);
         
         sendProgress({
           type: 'start',
-          message: `Export naar Pinecone gestart (${webSearchRecords.length} web search, ${apiSearchRecords.length} API search)...`,
+          message: `Export naar Pinecone gestart (${webNewRecords.length} web search, ${apiNewRecords.length} API search)...`,
           totalRecords: config.records.length,
-          webSearchCount: webSearchRecords.length,
-          apiSearchCount: apiSearchRecords.length,
+          webSearchCount: webNewRecords.length,
+          apiSearchCount: apiNewRecords.length,
         });
         
         let totalUpserted = 0;
         let allResults: any[] = [];
         
         // Export web search records to WEB_ECLI namespace
-        if (webSearchRecords.length > 0) {
+        if (webNewRecords.length > 0) {
           sendProgress({
             type: 'namespace_start',
-            message: `Exporteren naar WEB_ECLI namespace (${webSearchRecords.length} records)...`,
+            message: `Exporteren naar WEB_ECLI namespace (${webNewRecords.length} records)...`,
             namespace: 'WEB_ECLI',
           });
           
           try {
             const webResult = await upsertRecordsToPinecone(
               config.indexHost,
-              webSearchRecords,
+              webNewRecords,
               'WEB_ECLI', // Fixed namespace for web search
               config.batchSize,
               (progress) => {
@@ -899,17 +930,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Export API search records to ECLI_NL namespace
-        if (apiSearchRecords.length > 0) {
+        if (apiNewRecords.length > 0) {
           sendProgress({
             type: 'namespace_start',
-            message: `Exporteren naar ECLI_NL namespace (${apiSearchRecords.length} records)...`,
+            message: `Exporteren naar ECLI_NL namespace (${apiNewRecords.length} records)...`,
             namespace: 'ECLI_NL',
           });
           
           try {
             const apiResult = await upsertRecordsToPinecone(
               config.indexHost,
-              apiSearchRecords,
+              apiNewRecords,
               'ECLI_NL', // Fixed namespace for API search
               config.batchSize,
               (progress) => {
