@@ -362,17 +362,26 @@ export async function getValidRegulationVersion(
 }
 
 /**
- * Download and parse legislation XML
+ * Download and parse legislation XML from official KOOP repository
+ * Uses repository.officiele-overheidspublicaties.nl for pure XML content
+ * (wetten.overheid.nl/xml returns HTML, not valid BWB XML)
+ * 
  * @param bwbId - BWB identifier
- * @param xmlUrl - URL to XML content (optional, will be constructed if not provided)
+ * @param xmlUrl - URL to XML content (optional, will construct repository URL if not provided)
+ * @param validityDate - Date for which to get the valid version (defaults to today)
  */
 export async function downloadLegislationXml(
   bwbId: string,
-  xmlUrl?: string
+  xmlUrl?: string,
+  validityDate?: string
 ): Promise<{ content: string; hash: string }> {
   try {
-    // Construct URL if not provided
-    const url = xmlUrl || `https://wetten.overheid.nl/${bwbId}/xml`;
+    // Construct repository URL if not provided
+    // Format: https://repository.officiele-overheidspublicaties.nl/bwb/{BWBID}/geldend/{date}/{BWBID}.xml
+    const date = validityDate || new Date().toISOString().split('T')[0];
+    const repositoryUrl = `https://repository.officiele-overheidspublicaties.nl/bwb/${bwbId}/geldend/${date}/${bwbId}.xml`;
+    const url = xmlUrl || repositoryUrl;
+    
     console.log(`[KOOP XML] Downloading: ${url}`);
 
     const response = await axios.get(url, {
@@ -381,9 +390,32 @@ export async function downloadLegislationXml(
         'Accept': 'application/xml, text/xml',
       },
       maxContentLength: 50 * 1024 * 1024, // 50MB max
+      maxRedirects: 5,
     });
 
     const content = response.data;
+    
+    // Verify we got XML, not HTML (common issue with wetten.overheid.nl)
+    if (typeof content === 'string' && content.trim().startsWith('<!DOCTYPE HTML')) {
+      console.error(`[KOOP XML] Received HTML instead of XML for ${bwbId}, trying repository URL...`);
+      
+      // Try repository URL as fallback
+      if (url !== repositoryUrl) {
+        console.log(`[KOOP XML] Retrying with repository URL: ${repositoryUrl}`);
+        const retryResponse = await axios.get(repositoryUrl, {
+          timeout: 60000,
+          headers: { 'Accept': 'application/xml, text/xml' },
+          maxContentLength: 50 * 1024 * 1024,
+          maxRedirects: 5,
+        });
+        const retryContent = retryResponse.data;
+        const hash = crypto.createHash('sha256').update(retryContent).digest('hex');
+        console.log(`[KOOP XML] Downloaded ${bwbId}: ${retryContent.length} bytes, hash: ${hash.substring(0, 16)}...`);
+        return { content: retryContent, hash };
+      }
+      throw new Error('Ontvangen HTML in plaats van XML');
+    }
+    
     const hash = crypto.createHash('sha256').update(content).digest('hex');
 
     console.log(`[KOOP XML] Downloaded ${bwbId}: ${content.length} bytes, hash: ${hash.substring(0, 16)}...`);
@@ -584,30 +616,32 @@ function buildStructurePath(hierarchy: HierarchyContext): string {
 }
 
 /**
+ * Safely convert any value to string
+ */
+function toSafeString(val: any): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string') return val.trim();
+  if (typeof val === 'number') return val.toString();
+  if (val._text) return toSafeString(val._text);
+  if (val['#text']) return toSafeString(val['#text']);
+  return '';
+}
+
+/**
  * Extract number and title from a structural element's 'kop' (header)
  */
 function extractKopInfo(node: any): { nummer: string; naam: string } {
   const kop = node['kop'] || {};
   
   // Extract number
-  let nummer = '';
   const nr = kop['nr'] || node['@_nr'] || node['nr'] || '';
-  if (typeof nr === 'string') {
-    nummer = nr;
-  } else if (nr?._text) {
-    nummer = nr._text;
-  }
+  const nummer = toSafeString(nr);
   
   // Extract title/name
-  let naam = '';
   const titel = kop['titel'] || kop['title'] || kop['label'] || '';
-  if (typeof titel === 'string') {
-    naam = titel;
-  } else if (titel?._text) {
-    naam = titel._text;
-  }
+  const naam = toSafeString(titel);
   
-  return { nummer: nummer.trim(), naam: naam.trim() };
+  return { nummer, naam };
 }
 
 /**
@@ -648,7 +682,25 @@ function findAllArticlesWithHierarchy(
     }
   }
 
-  // Hoofdstuk (Chapter) - treat as titel equivalent
+  // Titeldeel (Title Part) - BWB uses this instead of "titel" for chapters
+  if (node['titeldeel']) {
+    const titeldelen = Array.isArray(node['titeldeel']) ? node['titeldeel'] : [node['titeldeel']];
+    for (const titeldeel of titeldelen) {
+      const info = extractKopInfo(titeldeel);
+      const titelContext = { 
+        ...currentContext, 
+        titelNummer: info.nummer || currentContext.titelNummer,
+        titelNaam: info.naam || currentContext.titelNaam,
+        afdelingNummer: undefined,
+        afdelingNaam: undefined,
+        paragraafNummer: undefined,
+        paragraafNaam: undefined,
+      };
+      findAllArticlesWithHierarchy(titeldeel, titelContext, articles);
+    }
+  }
+  
+  // Hoofdstuk (Chapter) - alternative structure used in some laws
   if (node['hoofdstuk']) {
     const hoofdstukken = Array.isArray(node['hoofdstuk']) ? node['hoofdstuk'] : [node['hoofdstuk']];
     for (const hoofdstuk of hoofdstukken) {
@@ -666,7 +718,7 @@ function findAllArticlesWithHierarchy(
     }
   }
 
-  // Titel (Title/Chapter)
+  // Titel (Title/Chapter) - some laws use this directly
   if (node['titel'] && typeof node['titel'] === 'object') {
     const titels = Array.isArray(node['titel']) ? node['titel'] : [node['titel']];
     for (const titel of titels) {
@@ -731,7 +783,7 @@ function findAllArticlesWithHierarchy(
   }
 
   // Recursively search other children (skip already processed structural elements)
-  const processedKeys = new Set(['boek', 'hoofdstuk', 'titel', 'afdeling', 'paragraaf', 'artikel', 'article']);
+  const processedKeys = new Set(['boek', 'titeldeel', 'hoofdstuk', 'titel', 'afdeling', 'paragraaf', 'artikel', 'article']);
   
   for (const key of Object.keys(node)) {
     if (key.startsWith('@_') || key === '_text' || processedKeys.has(key)) continue;
@@ -755,23 +807,13 @@ function parseArticleWithHierarchy(node: any, hierarchy: HierarchyContext): Arti
   if (!node) return null;
 
   // Extract article number
-  let number = '';
   const kop = node['kop'] || {};
   const nr = kop['nr'] || node['@_nr'] || node['nr'];
-  if (typeof nr === 'string') {
-    number = nr;
-  } else if (nr?._text) {
-    number = nr._text;
-  }
+  const number = toSafeString(nr);
 
   // Extract article title
-  let title = '';
   const tit = kop['titel'] || kop['title'] || '';
-  if (typeof tit === 'string') {
-    title = tit;
-  } else if (tit?._text) {
-    title = tit._text;
-  }
+  const title = toSafeString(tit);
 
   // Extract content
   let content = '';
