@@ -38,6 +38,7 @@ interface SruSearchResult {
  * @param query - CQL query string (optional, defaults to all regulations)
  * @param startRecord - Starting position for pagination (1-based)
  * @param maxRecords - Maximum records per page (default 100)
+ * @param excludeBES - Exclude BES (Bonaire, Sint Eustatius, Saba) regulations
  * 
  * CQL Query Examples:
  * - All regulations since 2000: dcterms.modified>=2000-01-01
@@ -48,7 +49,8 @@ interface SruSearchResult {
 export async function searchBwbRegulations(
   query: string = '*',
   startRecord: number = 1,
-  maxRecords: number = 100
+  maxRecords: number = 100,
+  excludeBES: boolean = true
 ): Promise<SruSearchResult> {
   try {
     // Build effective CQL query
@@ -68,6 +70,12 @@ export async function searchBwbRegulations(
         // 'all' matches all terms in the query across title fields (citeertitel, officiële-titel, niet-officiële-titel)
         effectiveQuery = `overheidbwb.titel all "${query}"`;
       }
+    }
+    
+    // Add BES filter if requested (exclude Bonaire, Sint Eustatius, Saba regulations)
+    // BES regulations have dcterms.type containing "-BES" suffix (e.g., "wet-BES", "amvb-BES")
+    if (excludeBES) {
+      effectiveQuery = `(${effectiveQuery}) not dcterms.type = wet-BES not dcterms.type = amvb-BES not dcterms.type = ministeriele-regeling-BES`;
     }
     
     // Build SRU request URL

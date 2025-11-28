@@ -61,6 +61,7 @@ export default function Wetgeving() {
   const [clientFilter, setClientFilter] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const [currentOnly, setCurrentOnly] = useState(true);
+  const [excludeBES, setExcludeBES] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [downloadLogs, setDownloadLogs] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
@@ -78,13 +79,14 @@ export default function Wetgeving() {
   };
 
   const { data, isLoading, refetch } = useQuery<SearchResponse>({
-    queryKey: ['/api/wetgeving/search', activeQuery, currentPage],
+    queryKey: ['/api/wetgeving/search', activeQuery, currentPage, excludeBES],
     queryFn: async () => {
       const startRecord = (currentPage - 1) * pageSize + 1;
       const params = new URLSearchParams({
         query: activeQuery,
         startRecord: startRecord.toString(),
         maxRecords: pageSize.toString(),
+        excludeBES: excludeBES.toString(),
       });
       const response = await fetch(`/api/wetgeving/search?${params}`);
       if (!response.ok) {
@@ -160,6 +162,7 @@ export default function Wetgeving() {
         startRecord: '1',
         maxRecords: '10000', // Get all IDs
         idsOnly: 'true',
+        excludeBES: excludeBES.toString(),
       });
       const response = await fetch(`/api/wetgeving/search?${params}`);
       if (!response.ok) throw new Error('Kon niet alle IDs ophalen');
@@ -392,7 +395,18 @@ export default function Wetgeving() {
               </Button>
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="excludeBES" 
+                  checked={excludeBES}
+                  onCheckedChange={(checked) => setExcludeBES(!!checked)}
+                  data-testid="checkbox-exclude-bes"
+                />
+                <label htmlFor="excludeBES" className="text-sm cursor-pointer">
+                  Alleen Nederland (geen BES-eilanden)
+                </label>
+              </div>
               <div className="flex items-center gap-2">
                 <Checkbox 
                   id="currentOnly" 

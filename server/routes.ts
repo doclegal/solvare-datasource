@@ -1586,6 +1586,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startRecord = parseInt(req.query.startRecord as string) || 1;
       const maxRecords = Math.min(parseInt(req.query.maxRecords as string) || 100, 200);
       const lawTypes = req.query.lawTypes as string;
+      const excludeBES = req.query.excludeBES !== 'false'; // Default true
       
       // Build query with optional law type filter
       let finalQuery = query;
@@ -1595,7 +1596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         finalQuery = query === '*' ? typeQuery : `(${query}) AND (${typeQuery})`;
       }
       
-      const result = await searchBwbRegulations(finalQuery, startRecord, maxRecords);
+      const result = await searchBwbRegulations(finalQuery, startRecord, maxRecords, excludeBES);
       
       // Check duplicates for returned regulations
       const bwbIds = result.regulations.map(r => r.bwbId);
