@@ -421,9 +421,9 @@ export default function LokaleRegelgeving() {
 
               <div className="flex items-center gap-2">
                 <Select
-                  value={selectedProvince}
+                  value={selectedProvince || "all"}
                   onValueChange={(value) => {
-                    setSelectedProvince(value);
+                    setSelectedProvince(value === "all" ? "" : value);
                     setCurrentPage(1);
                   }}
                 >
@@ -431,7 +431,7 @@ export default function LokaleRegelgeving() {
                     <SelectValue placeholder="Filter op provincie" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Alle provincies</SelectItem>
+                    <SelectItem value="all">Alle provincies</SelectItem>
                     {DUTCH_PROVINCES.map(province => (
                       <SelectItem key={province} value={province}>
                         {province}
