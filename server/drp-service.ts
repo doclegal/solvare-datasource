@@ -256,11 +256,20 @@ export async function downloadLocalRegulationXml(
   xmlUrl?: string
 ): Promise<{ content: string; hash: string }> {
   try {
-    // Construct repository URL if not provided
-    // CVDR IDs format: CVDR123456_1 (with version suffix)
-    const baseId = regulationId.split('_')[0];
-    const repositoryUrl = xmlUrl || 
-      `https://repository.officiele-overheidspublicaties.nl/cvdr/${baseId}/${regulationId}.xml`;
+    let repositoryUrl: string;
+    
+    if (xmlUrl) {
+      // Use the provided XML URL from the API response
+      repositoryUrl = xmlUrl;
+    } else {
+      // Construct repository URL as fallback
+      // CVDR IDs format: CVDR123456_1 (with version suffix)
+      // URL format: https://repository.officiele-overheidspublicaties.nl/cvdr/CVDR123456/1/xml/CVDR123456_1.xml
+      const parts = regulationId.split('_');
+      const baseId = parts[0]; // CVDR123456
+      const version = parts[1] || '1'; // Version number
+      repositoryUrl = `https://repository.officiele-overheidspublicaties.nl/cvdr/${baseId}/${version}/xml/${regulationId}.xml`;
+    }
     
     console.log(`[DRP Service] Downloading: ${repositoryUrl}`);
 

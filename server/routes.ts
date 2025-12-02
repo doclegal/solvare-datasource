@@ -1965,8 +1965,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             total: regulationIds.length,
           });
           
-          // Download XML
-          const { content: xmlContent, hash: xmlHash } = await downloadLocalRegulationXml(regulationId);
+          // Download XML - use xmlUrl from metadata if available
+          const { content: xmlContent, hash: xmlHash } = await downloadLocalRegulationXml(regulationId, regData.xmlUrl);
           
           // Check if already uploaded with same hash
           const isAlreadyUploaded = await storage.isLocalRegulationVersionUploaded(regulationId, xmlHash);
