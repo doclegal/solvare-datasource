@@ -2,11 +2,12 @@
 
 ## Overview
 
-This project is a web application designed to retrieve and process Dutch legal documents from multiple sources into a Pinecone vector database for semantic search. It supports three main data sources:
+This project is a web application designed to retrieve and process Dutch legal documents from multiple sources into a Pinecone vector database for semantic search. It supports four main data sources:
 
 1. **Rechtspraak.nl** - Court decisions with AI enrichment and quality filtering
 2. **BWB (Basis Wetten Bestand)** - National legislation via KOOP SRU API
 3. **CVDR (Decentrale Regelgeving)** - Provincial and municipal regulations via DRP API
+4. **DSO-LV (Digitaal Stelsel Omgevingswet)** - Environmental plans and regulations under the Omgevingswet
 
 The application uses PostgreSQL for duplicate tracking and ensures data quality by preventing redundant processing across different namespaces.
 
@@ -72,6 +73,14 @@ The application follows a client-server architecture with a React-based frontend
     - **Collection**: CVDR (Centrale Voorziening Decentrale Regelgeving)
     - **Format**: XML via SRU protocol
     - Used for provincial and municipal legislation discovery and download.
+
+- **DSO-LV API (Digitaal Stelsel Omgevingswet)**:
+    - **Base URL**: `https://service.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v8`
+    - **Authentication**: API key required (request at developer.omgevingswet.overheid.nl)
+    - **Secret**: `DSO_API_KEY`
+    - **Format**: JSON REST API
+    - **Document Types**: Omgevingsplan, Omgevingsverordening, Waterschapsverordening, Omgevingsvisie, Programma, Projectbesluit
+    - Used for searching and retrieving omgevingsdocumenten (environmental plans under the Omgevingswet).
 
 - **PostgreSQL (Neon)**:
     - Used for duplicate tracking and batch management.
