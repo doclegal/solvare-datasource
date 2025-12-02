@@ -1,0 +1,77 @@
+Update de Juridische Databronnen tool met de functionaliteit om ook te zoeken naar provinciale en gemeentelijke verordeningen zodat we deze op dezelfde manier kunnen oploaden naar Pinecone. Ik wil dat op de pagina waar gebruiker nu kan zoeken naar wetgeving (vanuit wetten.nl), de gebruiker ook op zoek kan naar verordeningen van provincies en gemeenten (officiele publicaties) en deze kan toevoegen aan Pinecone.
+
+Context:
+- The app already imports Dutch national legislation (from wetten.nl / Basiswettenbestand) into Pinecone.
+- Those law chunks are stored in a Pinecone index with namespaces like `laws-current`.
+- The app already has: HTTP client utilities, an embedding function, and a `pineconeClient` with an `upsert` helper.
+
+Goal:
+Add a **new import pipeline** for **provincial “omgevingsverordeningen”** (environmental ordinances) from the **Decentrale Regelgeving / DRP (API 2020-01)** or equivalent open data service and store them in a separate Pinecone namespace ('laws-local').
+
+High-level requirements:
+1. **Source: decentrale regelgeving (DRP / API 2020-01)**
+   - Implement a small client for the DRP API (Decentrale Regelgeving en Officiële Publicaties).
+   - Add a function that:
+     - Queries for regulations where the plan type (e.g. `Plansoort`) is “provinciale omgevingsverordening”.
+     - Returns a list of regulations with basic metadata: id (e.g. CVDR id or equivalent), title, jurisdiction (province), publication date, validity start/end, and current/expired status.
+
+2. **UI: selectable list of omgevingsverordeningen**
+   - Add a new screen or extend the existing “Wetgeving importeren” screen with a tab or section “Omgevingsverordeningen”.
+   - Show a paginated, searchable list of provincial omgevingsverordeningen from the DRP client.
+   - Allow the user to:
+     - Filter by province.
+     - Filter on “only current / in-force version”.
+     - Select multiple regulations via checkboxes.
+   - Add an “Import selected omgevingsverordeningen” button.
+
+3. **Fetching the full legal text**
+   - When the user confirms import:
+     - For each selected regulation, call the DRP API endpoint that returns the full legal text (usually XML/HTML).
+     - Always fetch the **latest in-force version** (based on validity metadata).
+   - Parse the response into a structured internal representation:
+     - Keep at least: regulation id, title, article numbers, paragraph/“lid” numbers, and a hierarchical structure path (chapter/section/article).
+
+4. **Chunking logic**
+   - Reuse the existing chunking strategy if there is one; otherwise implement:
+     - Chunk by article or group of paragraphs, preserving natural legal boundaries.
+     - Target a maximum chunk size similar to the existing national law chunks (e.g. N characters or tokens).
+   - Each chunk must contain:
+     - Plain text of the article/paragraph(s).
+     - Metadata: regulation id, title, article number, paragraph number(s), structure path, province, version date, and a boolean flag like `isCurrentVersion`.
+
+5. **Pinecone integration**
+   - Use the existing embedding function (same model as for other legislation) to create embeddings for each chunk.
+   - Upsert all omgevingsverordening chunks into a **separate Pinecone namespace**, for example:
+     - `laws-local`
+
+   - For every chunk created from an omgevingsverordening, the importer MUST attach a complete and consistent metadata object. This metadata is mandatory and must always include:
+
+- regulation_id (unique ID from DRP, e.g. CVDR-id)
+- regulation_title
+- jurisdiction (province)
+- type = "omgevingsverordening"
+- source = "decentrale_regelgeving"
+- article_number (e.g. "2.1")
+- paragraph_number or sub-paragraph identifier (if applicable)
+- seq_in_article (0, 1, 2… for correct reconstruction order)
+- structure_path (chapter/section/article hierarchy)
+- version_date
+- is_current_version (boolean)
+
+   - Make sure the index name comes from the existing configuration, and only the namespace is new.
+
+
+6. **Error handling, logging, and idempotency**
+   - Log:
+     - How many regulations were discovered and how many were imported.
+     - Per regulation: how many chunks were created and successfully upserted.
+   - If a regulation already exists in Pinecone for the same `regulation_id` and `version_date`, skip or update it in a predictable way to avoid duplicates.
+   - Show a simple status/result message in the UI when the import is complete (success count, error count).
+
+7. **Configuration**
+   - Make all DRP-related configuration items (base URL, API key if needed, etc.) configurable via environment variables.
+   - Reuse the existing HTTP client and configuration patterns used for the national legislation import.
+
+Important:
+- Focus ONLY on the new import pipeline and Pinecone namespace for provincial omgevingsverordeningen.
+- Do NOT change the current search logic yet; just make sure the omgevingsverordeningen vectors are correctly stored and queryable in a dedicated namespace.
