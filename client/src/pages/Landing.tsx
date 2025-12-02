@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Scale, BookOpen, MapPin } from "lucide-react";
+import { Scale, BookOpen, MapPin, FileText } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -15,7 +15,7 @@ export default function Landing() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Link href="/wetgeving">
             <Card 
               className="cursor-pointer transition-all hover-elevate h-full"
@@ -23,20 +23,19 @@ export default function Landing() {
             >
               <CardHeader className="text-center pb-2">
                 <div className="mx-auto mb-4 p-4 rounded-full bg-primary/10">
-                  <BookOpen className="h-12 w-12 text-primary" />
+                  <BookOpen className="h-10 w-10 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Wetgeving Uploaden</CardTitle>
+                <CardTitle className="text-lg">Wetgeving</CardTitle>
                 <CardDescription className="text-sm">
-                  Nationale wetgeving en regelgeving
+                  Nationale wetgeving
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center text-muted-foreground">
-                <ul className="space-y-1 text-sm">
+                <ul className="space-y-1 text-xs">
                   <li>Wetten en besluiten</li>
                   <li>Ministeriële regelingen</li>
-                  <li>Europese verordeningen</li>
                 </ul>
-                <div className="mt-4 text-xs text-green-600 dark:text-green-400">
+                <div className="mt-3 text-xs text-green-600 dark:text-green-400">
                   Beschikbaar
                 </div>
               </CardContent>
@@ -50,21 +49,46 @@ export default function Landing() {
             >
               <CardHeader className="text-center pb-2">
                 <div className="mx-auto mb-4 p-4 rounded-full bg-primary/10">
-                  <MapPin className="h-12 w-12 text-primary" />
+                  <MapPin className="h-10 w-10 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Lokale Regelgeving</CardTitle>
+                <CardTitle className="text-lg">Lokale Regelgeving</CardTitle>
                 <CardDescription className="text-sm">
-                  Provinciale en gemeentelijke verordeningen
+                  CVDR verordeningen
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center text-muted-foreground">
-                <ul className="space-y-1 text-sm">
+                <ul className="space-y-1 text-xs">
                   <li>Provinciale verordeningen</li>
                   <li>Gemeentelijke regelgeving</li>
-                  <li>APV's en beleidsdocumenten</li>
                 </ul>
-                <div className="mt-4 text-xs text-green-600 dark:text-green-400">
+                <div className="mt-3 text-xs text-green-600 dark:text-green-400">
                   Beschikbaar
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/omgevingsplannen">
+            <Card 
+              className="cursor-pointer transition-all hover-elevate h-full"
+              data-testid="card-omgevingsplannen"
+            >
+              <CardHeader className="text-center pb-2">
+                <div className="mx-auto mb-4 p-4 rounded-full bg-primary/10">
+                  <FileText className="h-10 w-10 text-primary" />
+                </div>
+                <CardTitle className="text-lg">Omgevingsplannen</CardTitle>
+                <CardDescription className="text-sm">
+                  DSO-LV documenten
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="text-center text-muted-foreground">
+                <ul className="space-y-1 text-xs">
+                  <li>Omgevingsplannen</li>
+                  <li>Omgevingsvisies</li>
+                </ul>
+                <div className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                  API-key vereist
                 </div>
               </CardContent>
             </Card>
@@ -77,20 +101,19 @@ export default function Landing() {
             >
               <CardHeader className="text-center pb-2">
                 <div className="mx-auto mb-4 p-4 rounded-full bg-primary/10">
-                  <Scale className="h-12 w-12 text-primary" />
+                  <Scale className="h-10 w-10 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Rechtspraak Uploaden</CardTitle>
+                <CardTitle className="text-lg">Rechtspraak</CardTitle>
                 <CardDescription className="text-sm">
-                  Uitspraken van Rechtspraak.nl
+                  Rechtspraak.nl
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center text-muted-foreground">
-                <ul className="space-y-1 text-sm">
-                  <li>Civielrechtelijke uitspraken</li>
-                  <li>AI-verrijking met GPT-3.5</li>
-                  <li>Duplicate detectie</li>
+                <ul className="space-y-1 text-xs">
+                  <li>Civiele uitspraken</li>
+                  <li>AI-verrijking</li>
                 </ul>
-                <div className="mt-4 text-xs text-green-600 dark:text-green-400">
+                <div className="mt-3 text-xs text-green-600 dark:text-green-400">
                   Beschikbaar
                 </div>
               </CardContent>

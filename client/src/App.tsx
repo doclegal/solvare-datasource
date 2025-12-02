@@ -7,6 +7,7 @@ import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
 import Wetgeving from "@/pages/Wetgeving";
 import LokaleRegelgeving from "@/pages/LokaleRegelgeving";
+import Omgevingsplannen from "@/pages/Omgevingsplannen";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/rechtspraak" component={Home} />
       <Route path="/wetgeving" component={Wetgeving} />
       <Route path="/lokale-regelgeving" component={LokaleRegelgeving} />
+      <Route path="/omgevingsplannen" component={Omgevingsplannen} />
       <Route component={NotFound} />
     </Switch>
   );

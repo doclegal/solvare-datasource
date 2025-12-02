@@ -2111,12 +2111,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // OMGEVINGSPLANNEN (Environmental Plans) API Routes - DSO-LV Integration
+  // ============================================================================
+
+  // Check DSO API status
+  app.get('/api/omgevingsplannen/status', async (req: Request, res: Response) => {
+    try {
+      const { isDsoApiKeyConfigured } = await import('./dso-service');
+      
+      res.json({
+        configured: isDsoApiKeyConfigured(),
+        message: isDsoApiKeyConfigured() 
+          ? 'DSO API is geconfigureerd' 
+          : 'DSO API-key is niet geconfigureerd. Vraag een key aan via developer.omgevingswet.overheid.nl',
+      });
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get municipalities list
+  app.get('/api/omgevingsplannen/municipalities', async (req: Request, res: Response) => {
+    try {
+      const { fetchMunicipalities } = await import('./dso-service');
+      const municipalities = await fetchMunicipalities();
+      res.json({ municipalities });
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/municipalities:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get provinces list
+  app.get('/api/omgevingsplannen/provinces', async (req: Request, res: Response) => {
+    try {
+      const { getProvinces } = await import('./dso-service');
+      const provinces = getProvinces();
+      res.json({ provinces });
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/provinces:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get document types
+  app.get('/api/omgevingsplannen/document-types', async (req: Request, res: Response) => {
+    try {
+      const { DSO_DOCUMENT_TYPES, DSO_AUTHORITY_TYPES } = await import('./dso-service');
+      res.json({ 
+        documentTypes: DSO_DOCUMENT_TYPES,
+        authorityTypes: DSO_AUTHORITY_TYPES,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/document-types:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Search omgevingsplannen
+  app.get('/api/omgevingsplannen/search', async (req: Request, res: Response) => {
+    try {
+      const { searchRegelingen, isDsoApiKeyConfigured } = await import('./dso-service');
+      
+      // Check if API key is configured
+      if (!isDsoApiKeyConfigured()) {
+        return res.status(503).json({ 
+          error: 'DSO API-key is niet geconfigureerd',
+          message: 'Vraag een gratis API-key aan via https://developer.omgevingswet.overheid.nl/formulieren/api-key-aanvragen-0/',
+          configured: false,
+        });
+      }
+      
+      const bevoegdGezag = req.query.bevoegdGezag as string | undefined;
+      const typeBevoegdGezag = req.query.typeBevoegdGezag as string | undefined;
+      const documentType = req.query.documentType as string | undefined;
+      const page = parseInt(req.query.page as string) || 0;
+      const pageSize = Math.min(parseInt(req.query.pageSize as string) || 50, 100);
+      const geldigOp = req.query.geldigOp as string | undefined;
+      
+      const result = await searchRegelingen({
+        bevoegdGezag,
+        typeBevoegdGezag,
+        documentType,
+        page,
+        pageSize,
+        geldigOp,
+      });
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/search:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get regeling details
+  app.get('/api/omgevingsplannen/regeling/:identificatie', async (req: Request, res: Response) => {
+    try {
+      const { getRegelingDetails, isDsoApiKeyConfigured } = await import('./dso-service');
+      
+      if (!isDsoApiKeyConfigured()) {
+        return res.status(503).json({ 
+          error: 'DSO API-key is niet geconfigureerd',
+          configured: false,
+        });
+      }
+      
+      const { identificatie } = req.params;
+      const details = await getRegelingDetails(identificatie);
+      
+      res.json(details);
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/regeling:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 
       status: 'ok',
       timestamp: new Date().toISOString(),
       pineconeConfigured: !!process.env.PINECONE_API_KEY,
+      dsoConfigured: !!process.env.DSO_API_KEY,
     });
   });
 
