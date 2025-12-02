@@ -75,11 +75,14 @@ The application follows a client-server architecture with a React-based frontend
     - Used for provincial and municipal legislation discovery and download.
 
 - **DSO-LV API (Digitaal Stelsel Omgevingswet)**:
-    - **Base URL**: `https://service.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v8`
+    - **Base URL (PRE-PRODUCTIE)**: `https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v7`
+    - **Base URL (Productie)**: `https://service.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v8`
+    - **Huidige omgeving**: PRE-PRODUCTIE (test data, beperkte filtermogelijkheden)
     - **Authentication**: API key required (request at developer.omgevingswet.overheid.nl)
-    - **Secret**: `DSO_API_KEY`
-    - **Format**: JSON REST API
+    - **Secret**: `DSO_API_KEY` (PRE-productie key)
+    - **Format**: JSON REST API (HAL+JSON)
     - **Document Types**: Omgevingsplan, Omgevingsverordening, Waterschapsverordening, Omgevingsvisie, Programma, Projectbesluit
+    - **Limitaties PRE-productie**: Filtering op typeBevoegdGezag/documentType niet ondersteund via API
     - Used for searching and retrieving omgevingsdocumenten (environmental plans under the Omgevingswet).
 
 - **PostgreSQL (Neon)**:

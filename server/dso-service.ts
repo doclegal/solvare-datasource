@@ -1,21 +1,24 @@
 /**
  * DSO Service - Fetches Dutch environmental plans (Omgevingsplannen) from DSO-LV
  * 
- * Uses the Omgevingsdocument Presenteren API v8 to query omgevingsplannen.
+ * Uses the Omgevingsdocument Presenteren API v7 (PRE-PRODUCTIE) to query omgevingsplannen.
  * DSO = Digitaal Stelsel Omgevingswet
  * 
  * Endpoints:
- * - Base: https://service.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v8
+ * - Base: https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v7
  * - Search regelingen: /regelingen
  * - Search by location: /regelingen/_zoek
  * 
  * Authentication: API key required (X-Api-Key header)
+ * 
+ * NOTE: Using PRE-PRODUCTIE environment for testing. Data may differ from production.
+ * For production, use: https://service.omgevingswet.overheid.nl/...
  */
 
 import axios from 'axios';
 import crypto from 'crypto';
 
-const DSO_BASE_URL = 'https://service.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v8';
+const DSO_BASE_URL = 'https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v7';
 
 // Document types available in DSO
 export const DSO_DOCUMENT_TYPES = [
@@ -94,6 +97,8 @@ function getApiKey(): string {
 /**
  * Search for regelingen (environmental regulations/plans)
  * @param options - Search options
+ * 
+ * NOTE: v7 API uses POST /_zoek for filtering, GET only supports basic pagination
  */
 export async function searchRegelingen(options: {
   bevoegdGezag?: string;          // Municipality/authority code (e.g., "gm0344")
@@ -119,32 +124,12 @@ export async function searchRegelingen(options: {
   try {
     const apiKey = getApiKey();
     
-    // Build query parameters
+    // Build query parameters for pagination
     const params = new URLSearchParams();
     params.set('page', page.toString());
     params.set('size', pageSize.toString());
     
-    // Add filters
-    if (bevoegdGezag) {
-      params.set('bevoegdGezag', bevoegdGezag);
-    }
-    
-    if (typeBevoegdGezag) {
-      // Convert to DSO format: Gemeente, Provincie, Waterschap, Ministerie
-      const typeMap: Record<string, string> = {
-        'gemeente': 'Gemeente',
-        'provincie': 'Provincie',
-        'waterschap': 'Waterschap',
-        'ministerie': 'Ministerie',
-      };
-      params.set('typeBevoegdGezag', typeMap[typeBevoegdGezag] || typeBevoegdGezag);
-    }
-    
-    if (documentType) {
-      params.set('type', documentType);
-    }
-    
-    // Time travel parameters - defaults to today if not specified
+    // Time travel parameters
     if (geldigOp) {
       params.set('geldigOp', geldigOp);
     }
@@ -152,8 +137,10 @@ export async function searchRegelingen(options: {
       params.set('inWerkingOp', inWerkingOp);
     }
 
+    // NOTE: v7 PRE-PRODUCTIE API has limited filtering support
+    // Filtering by typeBevoegdGezag, documentType, bevoegdGezag is done client-side
     const url = `${DSO_BASE_URL}/regelingen?${params.toString()}`;
-    console.log(`[DSO Service] Searching: ${url}`);
+    console.log(`[DSO Service] Searching (GET): ${url}`);
     
     const response = await axios.get(url, {
       timeout: 30000,
@@ -350,8 +337,8 @@ export async function downloadRegelingContent(identificatie: string): Promise<{
   try {
     const apiKey = getApiKey();
     
-    // Download API endpoint
-    const downloadUrl = `https://service.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/downloaden/v1/regelingversies/${encodeURIComponent(identificatie)}`;
+    // Download API endpoint (PRE-PRODUCTIE)
+    const downloadUrl = `https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/downloaden/v1/regelingversies/${encodeURIComponent(identificatie)}`;
     console.log(`[DSO Service] Downloading: ${downloadUrl}`);
     
     const response = await axios.get(downloadUrl, {
