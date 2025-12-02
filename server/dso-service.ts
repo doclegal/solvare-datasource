@@ -308,13 +308,25 @@ export async function searchRegelingenByLocation(options: {
 }
 
 /**
+ * Convert identificatie to URL-safe format for DSO API
+ * The DSO API expects slashes to be replaced with underscores in the URL path
+ * Example: /akn/nl/act/gm0074/2020/omgevingsplan -> _akn_nl_act_gm0074_2020_omgevingsplan
+ */
+function formatIdentificatieForUrl(identificatie: string): string {
+  // Replace all slashes with underscores
+  return identificatie.replace(/\//g, '_');
+}
+
+/**
  * Get details of a specific regeling
  */
 export async function getRegelingDetails(identificatie: string): Promise<any> {
   try {
     const apiKey = getApiKey();
     
-    const url = `${DSO_BASE_URL}/regelingen/${encodeURIComponent(identificatie)}`;
+    // Convert slashes to underscores for the URL path
+    const urlIdentificatie = formatIdentificatieForUrl(identificatie);
+    const url = `${DSO_BASE_URL}/regelingen/${urlIdentificatie}`;
     console.log(`[DSO Service] Getting details: ${url}`);
     
     const response = await axios.get(url, {
@@ -348,7 +360,9 @@ export async function downloadRegelingContent(identificatie: string): Promise<{
     const apiKey = getApiKey();
     
     // Download API endpoint (PRE-PRODUCTIE)
-    const downloadUrl = `https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/downloaden/v1/regelingversies/${encodeURIComponent(identificatie)}`;
+    // Convert slashes to underscores for the URL path
+    const urlIdentificatie = formatIdentificatieForUrl(identificatie);
+    const downloadUrl = `https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/downloaden/v1/regelingversies/${urlIdentificatie}`;
     console.log(`[DSO Service] Downloading: ${downloadUrl}`);
     
     const response = await axios.get(downloadUrl, {
@@ -486,8 +500,9 @@ export async function getRegelingTextContent(identificatie: string): Promise<{
     const apiKey = getApiKey();
     
     // Get the full regeling with its text content
-    // The Presenteren API v7 returns text in the regeling response
-    const url = `${DSO_BASE_URL}/regelingen/${encodeURIComponent(identificatie)}`;
+    // The Presenteren API v7 expects identificatie with underscores instead of slashes
+    const urlIdentificatie = formatIdentificatieForUrl(identificatie);
+    const url = `${DSO_BASE_URL}/regelingen/${urlIdentificatie}`;
     console.log(`[DSO Service] Getting text content: ${url}`);
     
     const response = await axios.get(url, {
