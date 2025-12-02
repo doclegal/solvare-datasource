@@ -1,5 +1,5 @@
-import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus, LawUploadStatus, InsertUploadedLaw } from '@shared/schema';
-import { enrichedBatches, enrichedBatchRecords, processedEclis, uploadedLaws } from '@shared/schema';
+import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus, LawUploadStatus, InsertUploadedLaw, LocalRegulationUploadStatus, InsertUploadedLocalRegulation } from '@shared/schema';
+import { enrichedBatches, enrichedBatchRecords, processedEclis, uploadedLaws, uploadedLocalRegulations } from '@shared/schema';
 import { randomUUID } from 'crypto';
 import { db } from './db';
 import { eq, and, sql, inArray, or } from 'drizzle-orm';
@@ -398,6 +398,116 @@ export class PgStorage implements IStorage {
     await db
       .delete(uploadedLaws)
       .where(eq(uploadedLaws.bwbId, bwbId));
+  }
+
+  // ============================================================================
+  // LOKALE REGELGEVING (Local Regulations) Storage Methods
+  // ============================================================================
+
+  /**
+   * Check which local regulations have already been uploaded to Pinecone
+   */
+  async checkLocalRegulationDuplicates(regulationIds: string[]): Promise<LocalRegulationUploadStatus[]> {
+    if (regulationIds.length === 0) {
+      return [];
+    }
+
+    const uploadedRecords = await db
+      .select()
+      .from(uploadedLocalRegulations)
+      .where(inArray(uploadedLocalRegulations.regulationId, regulationIds));
+
+    const uploadedMap = new Map(
+      uploadedRecords.map(record => [record.regulationId, record])
+    );
+
+    return regulationIds.map(regulationId => {
+      const uploaded = uploadedMap.get(regulationId);
+      return {
+        regulationId,
+        isUploaded: !!uploaded,
+        uploadedAt: uploaded?.uploadedAt?.toISOString(),
+        chunkCount: uploaded?.chunkCount || undefined,
+      };
+    });
+  }
+
+  /**
+   * Check if a specific local regulation version has been uploaded (by hash)
+   */
+  async isLocalRegulationVersionUploaded(regulationId: string, xmlHash: string): Promise<boolean> {
+    const existing = await db
+      .select()
+      .from(uploadedLocalRegulations)
+      .where(
+        and(
+          eq(uploadedLocalRegulations.regulationId, regulationId),
+          eq(uploadedLocalRegulations.xmlHash, xmlHash)
+        )
+      )
+      .limit(1);
+
+    return existing.length > 0;
+  }
+
+  /**
+   * Track an uploaded local regulation in the database
+   */
+  async trackUploadedLocalRegulation(regulation: InsertUploadedLocalRegulation): Promise<void> {
+    await db
+      .insert(uploadedLocalRegulations)
+      .values(regulation)
+      .onConflictDoUpdate({
+        target: [uploadedLocalRegulations.regulationId, uploadedLocalRegulations.versionDate],
+        set: {
+          title: regulation.title,
+          jurisdiction: regulation.jurisdiction,
+          jurisdictionType: regulation.jurisdictionType,
+          regulationType: regulation.regulationType,
+          xmlHash: regulation.xmlHash,
+          chunkCount: regulation.chunkCount,
+          namespace: regulation.namespace,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  /**
+   * Get all uploaded local regulations for display
+   */
+  async getUploadedLocalRegulations(limit: number = 100): Promise<Array<{
+    regulationId: string;
+    title: string;
+    jurisdiction: string;
+    jurisdictionType: string;
+    regulationType: string | null;
+    chunkCount: number;
+    uploadedAt: Date;
+  }>> {
+    const regulations = await db
+      .select({
+        regulationId: uploadedLocalRegulations.regulationId,
+        title: uploadedLocalRegulations.title,
+        jurisdiction: uploadedLocalRegulations.jurisdiction,
+        jurisdictionType: uploadedLocalRegulations.jurisdictionType,
+        regulationType: uploadedLocalRegulations.regulationType,
+        chunkCount: uploadedLocalRegulations.chunkCount,
+        uploadedAt: uploadedLocalRegulations.uploadedAt,
+      })
+      .from(uploadedLocalRegulations)
+      .orderBy(sql`${uploadedLocalRegulations.uploadedAt} DESC`)
+      .limit(limit);
+
+    return regulations;
+  }
+
+  /**
+   * Delete local regulation tracking record (for re-upload)
+   */
+  async deleteLocalRegulationRecord(regulationId: string): Promise<void> {
+    await db
+      .delete(uploadedLocalRegulations)
+      .where(eq(uploadedLocalRegulations.regulationId, regulationId));
   }
 }
 
