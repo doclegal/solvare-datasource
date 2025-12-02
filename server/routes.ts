@@ -1129,6 +1129,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // List vectors by ID prefix in Pinecone (useful for debugging)
+  app.post('/api/pinecone/list', async (req: Request, res: Response) => {
+    try {
+      const { prefix, namespace, limit = 100 } = req.body;
+      
+      if (!prefix) {
+        return res.status(400).json({ error: 'Prefix is vereist' });
+      }
+      
+      const apiKey = process.env.PINECONE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: 'PINECONE_API_KEY niet gevonden' });
+      }
+      
+      const { Pinecone } = await import('@pinecone-database/pinecone');
+      const pc = new Pinecone({ apiKey });
+      
+      const indexHost = 'rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io';
+      const indexName = indexHost.split('.')[0];
+      const index = pc.index(indexName, indexHost);
+      const ns = index.namespace(namespace || 'laws-current');
+      
+      // Use listPaginated to get vector IDs by prefix
+      const result = await ns.listPaginated({ prefix, limit });
+      
+      // Get vector IDs (filter out undefined)
+      const vectorIds = (result.vectors?.map(v => v.id).filter((id): id is string => id !== undefined)) || [];
+      
+      // Fetch full records for these IDs to see metadata
+      let records = {};
+      if (vectorIds.length > 0) {
+        const fetchResult = await ns.fetch(vectorIds);
+        records = fetchResult.records || {};
+      }
+      
+      res.json({
+        namespace: namespace || 'laws-current',
+        prefix,
+        found: vectorIds.length,
+        vectorIds,
+        records,
+      });
+    } catch (error: any) {
+      console.error('Error listing from Pinecone:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Re-upload existing Pinecone records with court_level metadata
   // Prioritizes AI-enriched versions to preserve expensive AI summaries
   app.post('/api/pinecone/update-court-levels', async (req: Request, res: Response) => {
