@@ -1834,6 +1834,283 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // LOKALE REGELGEVING (Local Regulations) API Routes
+  // ============================================================================
+
+  // Search local regulations from DRP (CVDR)
+  app.get('/api/lokale-regelgeving/search', async (req: Request, res: Response) => {
+    try {
+      const { searchLocalRegulations, getDutchProvinces } = await import('./drp-service');
+      
+      const query = req.query.query as string || '*';
+      const startRecord = parseInt(req.query.startRecord as string) || 1;
+      const maxRecords = Math.min(parseInt(req.query.maxRecords as string) || 50, 100);
+      const jurisdictionType = req.query.jurisdictionType as 'provincie' | 'gemeente' | undefined;
+      const jurisdiction = req.query.jurisdiction as string | undefined;
+      const currentOnly = req.query.currentOnly !== 'false'; // Default true
+      
+      const result = await searchLocalRegulations(
+        query, 
+        jurisdictionType, 
+        jurisdiction, 
+        currentOnly, 
+        startRecord, 
+        maxRecords
+      );
+      
+      // Check duplicates for returned regulations
+      const regulationIds = result.regulations.map(r => r.regulationId);
+      const duplicateStatus = await storage.checkLocalRegulationDuplicates(regulationIds);
+      
+      // Merge duplicate status into regulations
+      const regulationsWithStatus = result.regulations.map(reg => {
+        const status = duplicateStatus.find(s => s.regulationId === reg.regulationId);
+        return {
+          ...reg,
+          isUploaded: status?.isUploaded || false,
+          uploadedAt: status?.uploadedAt,
+          chunkCount: status?.chunkCount,
+        };
+      });
+      
+      res.json({
+        ...result,
+        regulations: regulationsWithStatus,
+        provinces: getDutchProvinces(),
+      });
+    } catch (error: any) {
+      console.error('Error in /api/lokale-regelgeving/search:', error);
+      res.status(500).json({ 
+        error: error.message || 'Fout bij zoeken naar lokale regelingen' 
+      });
+    }
+  });
+
+  // Get list of Dutch provinces
+  app.get('/api/lokale-regelgeving/provinces', async (req: Request, res: Response) => {
+    try {
+      const { getDutchProvinces } = await import('./drp-service');
+      res.json({ provinces: getDutchProvinces() });
+    } catch (error: any) {
+      console.error('Error in /api/lokale-regelgeving/provinces:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get uploaded local regulations list
+  app.get('/api/lokale-regelgeving/uploaded', async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const regulations = await storage.getUploadedLocalRegulations(limit);
+      res.json({ regulations });
+    } catch (error: any) {
+      console.error('Error in /api/lokale-regelgeving/uploaded:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download and process selected local regulations
+  app.post('/api/lokale-regelgeving/download', async (req: Request, res: Response) => {
+    try {
+      const { 
+        downloadLocalRegulationXml, 
+        parseLocalRegulationToChunks 
+      } = await import('./drp-service');
+      const { upsertLocalRegulationChunksToPinecone } = await import('./pinecone-client');
+      
+      const { regulationIds, regulationData, currentOnly = true } = req.body;
+      
+      if (!Array.isArray(regulationIds) || regulationIds.length === 0) {
+        return res.status(400).json({ error: 'Regulation IDs zijn vereist' });
+      }
+      
+      // regulationData is a map of regulationId -> metadata for faster lookup
+      const regulationMap = new Map<string, any>();
+      if (Array.isArray(regulationData)) {
+        regulationData.forEach((reg: any) => {
+          regulationMap.set(reg.regulationId, reg);
+        });
+      }
+      
+      // Set up SSE for progress streaming
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendProgress = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      
+      sendProgress({
+        type: 'start',
+        message: `Download gestart voor ${regulationIds.length} lokale regelingen...`,
+        total: regulationIds.length,
+      });
+      
+      const today = new Date().toISOString().split('T')[0];
+      const results: any[] = [];
+      const errors: any[] = [];
+      let processedCount = 0;
+      let totalChunks = 0;
+      
+      for (const regulationId of regulationIds) {
+        try {
+          const regData = regulationMap.get(regulationId) || {};
+          
+          sendProgress({
+            type: 'processing',
+            message: `Verwerken: ${regulationId}`,
+            current: processedCount + 1,
+            total: regulationIds.length,
+          });
+          
+          // Download XML
+          const { content: xmlContent, hash: xmlHash } = await downloadLocalRegulationXml(regulationId);
+          
+          // Check if already uploaded with same hash
+          const isAlreadyUploaded = await storage.isLocalRegulationVersionUploaded(regulationId, xmlHash);
+          if (isAlreadyUploaded) {
+            sendProgress({
+              type: 'skipped',
+              message: `${regulationId} is al geüpload (ongewijzigd)`,
+              regulationId,
+            });
+            processedCount++;
+            continue;
+          }
+          
+          const title = regData.title || `Regeling ${regulationId}`;
+          const jurisdiction = regData.jurisdiction || 'Onbekend';
+          const jurisdictionType = regData.jurisdictionType || 'gemeente';
+          const regulationType = regData.regulationType || 'verordening';
+          const versionDate = regData.validFrom || today;
+          const isCurrentVersion = regData.isCurrentVersion !== false;
+          
+          // Parse XML into chunks
+          const chunks = parseLocalRegulationToChunks(
+            xmlContent,
+            regulationId,
+            title,
+            jurisdiction,
+            jurisdictionType,
+            regulationType,
+            versionDate,
+            isCurrentVersion
+          );
+          
+          if (chunks.length === 0) {
+            errors.push({ regulationId, error: 'Geen chunks kunnen extraheren' });
+            processedCount++;
+            continue;
+          }
+          
+          sendProgress({
+            type: 'chunked',
+            message: `${regulationId}: ${chunks.length} chunks geëxtraheerd`,
+            regulationId,
+            chunkCount: chunks.length,
+          });
+          
+          // Upload to Pinecone
+          const namespace = 'laws-local';
+          await upsertLocalRegulationChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
+          
+          // Track in database
+          await storage.trackUploadedLocalRegulation({
+            regulationId,
+            title,
+            jurisdiction,
+            jurisdictionType,
+            regulationType,
+            validFrom: regData.validFrom,
+            validTo: regData.validTo,
+            versionDate,
+            xmlHash,
+            chunkCount: chunks.length,
+            namespace,
+          });
+          
+          totalChunks += chunks.length;
+          results.push({
+            regulationId,
+            title,
+            jurisdiction,
+            chunkCount: chunks.length,
+          });
+          
+          sendProgress({
+            type: 'uploaded',
+            message: `${regulationId}: ${chunks.length} chunks geüpload naar Pinecone`,
+            regulationId,
+            chunkCount: chunks.length,
+          });
+          
+        } catch (error: any) {
+          console.error(`Error processing ${regulationId}:`, error);
+          errors.push({ regulationId, error: error.message });
+          
+          sendProgress({
+            type: 'error',
+            message: `Fout bij ${regulationId}: ${error.message}`,
+            regulationId,
+          });
+        }
+        
+        processedCount++;
+        
+        // Rate limiting delay
+        if (processedCount < regulationIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      sendProgress({
+        type: 'complete',
+        message: `Download voltooid: ${results.length} regelingen, ${totalChunks} chunks`,
+        results,
+        errors,
+        totalChunks,
+      });
+      
+      res.end();
+    } catch (error: any) {
+      console.error('Error in /api/lokale-regelgeving/download:', error);
+      
+      const errorData = `data: ${JSON.stringify({
+        type: 'error',
+        message: error.message || 'Download failed',
+      })}\n\n`;
+      res.write(errorData);
+      res.end();
+    }
+  });
+
+  // Check duplicate status for regulation IDs
+  app.post('/api/lokale-regelgeving/check-duplicates', async (req: Request, res: Response) => {
+    try {
+      const { regulationIds } = req.body;
+      
+      if (!Array.isArray(regulationIds)) {
+        return res.status(400).json({ error: 'Regulation IDs array is vereist' });
+      }
+      
+      const statuses = await storage.checkLocalRegulationDuplicates(regulationIds);
+      
+      const uploaded = statuses.filter(s => s.isUploaded).length;
+      
+      res.json({
+        total: regulationIds.length,
+        uploaded,
+        new: regulationIds.length - uploaded,
+        statuses,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/lokale-regelgeving/check-duplicates:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 
