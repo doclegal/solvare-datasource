@@ -1648,7 +1648,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = await import('./koop-sru-service');
       const { upsertLawChunksToPinecone } = await import('./pinecone-client');
       
-      const { bwbIds, currentOnly = true } = req.body;
+      const { bwbIds, currentOnly = true, forceReupload = false } = req.body;
       
       if (!Array.isArray(bwbIds) || bwbIds.length === 0) {
         return res.status(400).json({ error: 'BWB IDs zijn vereist' });
@@ -1698,16 +1698,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Download XML
           const { content: xmlContent, hash: xmlHash } = await downloadLegislationXml(bwbId, versionInfo.xmlUrl);
           
-          // Check if already uploaded with same hash
-          const isAlreadyUploaded = await storage.isLawVersionUploaded(bwbId, xmlHash);
-          if (isAlreadyUploaded) {
-            sendProgress({
-              type: 'skipped',
-              message: `${bwbId} is al geüpload (ongewijzigd)`,
-              bwbId,
-            });
-            processedCount++;
-            continue;
+          // Check if already uploaded with same hash (skip check if forceReupload is true)
+          if (!forceReupload) {
+            const isAlreadyUploaded = await storage.isLawVersionUploaded(bwbId, xmlHash);
+            if (isAlreadyUploaded) {
+              sendProgress({
+                type: 'skipped',
+                message: `${bwbId} is al geüpload (ongewijzigd)`,
+                bwbId,
+              });
+              processedCount++;
+              continue;
+            }
           }
           
           // Get title from search
@@ -1919,7 +1921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = await import('./drp-service');
       const { upsertLocalRegulationChunksToPinecone } = await import('./pinecone-client');
       
-      const { regulationIds, regulationData, currentOnly = true } = req.body;
+      const { regulationIds, regulationData, currentOnly = true, forceReupload = false } = req.body;
       
       if (!Array.isArray(regulationIds) || regulationIds.length === 0) {
         return res.status(400).json({ error: 'Regulation IDs zijn vereist' });
@@ -1968,16 +1970,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Download XML - use xmlUrl from metadata if available
           const { content: xmlContent, hash: xmlHash } = await downloadLocalRegulationXml(regulationId, regData.xmlUrl);
           
-          // Check if already uploaded with same hash
-          const isAlreadyUploaded = await storage.isLocalRegulationVersionUploaded(regulationId, xmlHash);
-          if (isAlreadyUploaded) {
-            sendProgress({
-              type: 'skipped',
-              message: `${regulationId} is al geüpload (ongewijzigd)`,
-              regulationId,
-            });
-            processedCount++;
-            continue;
+          // Check if already uploaded with same hash (skip check if forceReupload is true)
+          if (!forceReupload) {
+            const isAlreadyUploaded = await storage.isLocalRegulationVersionUploaded(regulationId, xmlHash);
+            if (isAlreadyUploaded) {
+              sendProgress({
+                type: 'skipped',
+                message: `${regulationId} is al geüpload (ongewijzigd)`,
+                regulationId,
+              });
+              processedCount++;
+              continue;
+            }
           }
           
           const title = regData.title || `Regeling ${regulationId}`;

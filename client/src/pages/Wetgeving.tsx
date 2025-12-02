@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   BookOpen, 
   ArrowLeft, 
@@ -68,6 +78,9 @@ export default function Wetgeving() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [allBwbIds, setAllBwbIds] = useState<string[]>([]);
   const [isLoadingAllIds, setIsLoadingAllIds] = useState(false);
+  const [showReuploadDialog, setShowReuploadDialog] = useState(false);
+  const [uploadedIdsInSelection, setUploadedIdsInSelection] = useState<string[]>([]);
+  const [newIdsInSelection, setNewIdsInSelection] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -134,22 +147,19 @@ export default function Wetgeving() {
   const selectAllOnPage = () => {
     const newIds = new Set(selectedIds);
     filteredRegulations.forEach(reg => {
-      if (!reg.isUploaded) {
-        newIds.add(reg.bwbId);
-      }
+      newIds.add(reg.bwbId);
     });
     setSelectedIds(newIds);
   };
 
   const selectAllResults = async () => {
     if (allBwbIds.length > 0) {
-      // Use cached IDs
-      const uploadedSet = new Set(regulations.filter(r => r.isUploaded).map(r => r.bwbId));
-      const newIds = new Set(allBwbIds.filter(id => !uploadedSet.has(id)));
+      // Use cached IDs - select all, including uploaded ones
+      const newIds = new Set(allBwbIds);
       setSelectedIds(newIds);
       toast({
         title: 'Geselecteerd',
-        description: `${newIds.size} nieuwe regelingen geselecteerd`,
+        description: `${newIds.size} regelingen geselecteerd`,
       });
       return;
     }
@@ -171,19 +181,13 @@ export default function Wetgeving() {
       const fetchedIds = data.allBwbIds || data.regulations.map((r: BwbRegulation) => r.bwbId);
       setAllBwbIds(fetchedIds);
       
-      // Check which are already uploaded
-      const checkResponse = await apiRequest('POST', '/api/wetgeving/check-duplicates', { bwbIds: fetchedIds });
-      const checkData = await checkResponse.json();
-      const uploadedSet = new Set<string>(
-        checkData.statuses.filter((s: any) => s.isUploaded).map((s: any) => s.bwbId)
-      );
-      
-      const newIds = new Set<string>(fetchedIds.filter((id: string) => !uploadedSet.has(id)));
+      // Select all IDs, including uploaded ones
+      const newIds = new Set<string>(fetchedIds);
       setSelectedIds(newIds);
       
       toast({
         title: 'Geselecteerd',
-        description: `${newIds.size} nieuwe regelingen geselecteerd (${uploadedSet.size} al geüpload)`,
+        description: `${newIds.size} regelingen geselecteerd`,
       });
     } catch (error: any) {
       toast({
@@ -222,40 +226,38 @@ export default function Wetgeving() {
       return;
     }
 
+    // Check for already uploaded items
+    try {
+      const checkResponse = await apiRequest('POST', '/api/wetgeving/check-duplicates', { bwbIds: selectedBwbIds });
+      const checkData = await checkResponse.json();
+      
+      if (checkData.uploaded > 0) {
+        // Store both uploaded IDs and new IDs
+        const uploadedIds = checkData.statuses
+          .filter((s: any) => s.isUploaded)
+          .map((s: any) => s.bwbId);
+        const newIds = checkData.statuses
+          .filter((s: any) => !s.isUploaded)
+          .map((s: any) => s.bwbId);
+        setUploadedIdsInSelection(uploadedIds);
+        setNewIdsInSelection(newIds);
+        setShowReuploadDialog(true);
+        return;
+      }
+    } catch (error: any) {
+      console.error('Duplicate check error:', error);
+    }
+    
+    // No duplicates found, proceed with download
+    await executeDownload(selectedBwbIds, false);
+  };
+
+  const executeDownload = async (bwbIdsToProcess: string[], forceReupload: boolean) => {
     setIsDownloading(true);
     setDownloadLogs([]);
     setDownloadProgress(null);
     
-    addLog(`Controleren op duplicaten voor ${selectedBwbIds.length} regelingen...`);
-    
-    let bwbIdsToProcess = selectedBwbIds;
-    
-    try {
-      const checkResponse = await apiRequest('POST', '/api/wetgeving/check-duplicates', { bwbIds: selectedBwbIds });
-      
-      const checkData = await checkResponse.json();
-      
-      if (checkData.uploaded > 0) {
-        addLog(`${checkData.uploaded} regelingen al geüpload, worden overgeslagen`);
-        bwbIdsToProcess = checkData.statuses
-          .filter((s: any) => !s.isUploaded)
-          .map((s: any) => s.bwbId);
-        
-        if (bwbIdsToProcess.length === 0) {
-          toast({
-            title: 'Alle regelingen al geüpload',
-            description: `${checkData.uploaded} regelingen zijn al in Pinecone aanwezig`,
-          });
-          setIsDownloading(false);
-          return;
-        }
-      }
-    } catch (error: any) {
-      console.error('Duplicate check error:', error);
-      addLog(`Waarschuwing: duplicate check mislukt, alle IDs worden verwerkt`);
-    }
-    
-    addLog(`Download gestart voor ${bwbIdsToProcess.length} nieuwe regelingen...`);
+    addLog(`Download gestart voor ${bwbIdsToProcess.length} regelingen${forceReupload ? ' (inclusief her-upload)' : ''}...`);
 
     try {
       const response = await fetch('/api/wetgeving/download', {
@@ -264,6 +266,7 @@ export default function Wetgeving() {
         body: JSON.stringify({
           bwbIds: bwbIdsToProcess,
           currentOnly,
+          forceReupload,
         }),
       });
 
@@ -608,6 +611,42 @@ export default function Wetgeving() {
           </Card>
         )}
       </main>
+
+      <AlertDialog open={showReuploadDialog} onOpenChange={setShowReuploadDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regelingen opnieuw uploaden?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {uploadedIdsInSelection.length} van de geselecteerde regelingen zijn al eerder geüpload naar Pinecone.
+              {newIdsInSelection.length > 0 && ` Er zijn ook ${newIdsInSelection.length} nieuwe regelingen geselecteerd.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel data-testid="button-cancel-reupload">Annuleren</AlertDialogCancel>
+            {newIdsInSelection.length > 0 && (
+              <AlertDialogAction 
+                data-testid="button-new-only"
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                onClick={() => {
+                  setShowReuploadDialog(false);
+                  executeDownload(newIdsInSelection, false);
+                }}
+              >
+                Alleen nieuwe ({newIdsInSelection.length})
+              </AlertDialogAction>
+            )}
+            <AlertDialogAction 
+              data-testid="button-confirm-reupload"
+              onClick={() => {
+                setShowReuploadDialog(false);
+                executeDownload(Array.from(selectedIds), true);
+              }}
+            >
+              Alles uploaden ({selectedIds.size})
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

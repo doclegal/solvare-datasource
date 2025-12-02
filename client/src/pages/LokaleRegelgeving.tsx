@@ -14,6 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   MapPin, 
   ArrowLeft, 
@@ -93,6 +103,9 @@ export default function LokaleRegelgeving() {
   const [downloadLogs, setDownloadLogs] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showReuploadDialog, setShowReuploadDialog] = useState(false);
+  const [uploadedIdsInSelection, setUploadedIdsInSelection] = useState<string[]>([]);
+  const [newIdsInSelection, setNewIdsInSelection] = useState<string[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -166,9 +179,7 @@ export default function LokaleRegelgeving() {
   const selectAllOnPage = () => {
     const newIds = new Set(selectedIds);
     filteredRegulations.forEach(reg => {
-      if (!reg.isUploaded) {
-        newIds.add(reg.regulationId);
-      }
+      newIds.add(reg.regulationId);
     });
     setSelectedIds(newIds);
   };
@@ -200,42 +211,40 @@ export default function LokaleRegelgeving() {
       return;
     }
 
-    setIsDownloading(true);
-    setDownloadLogs([]);
-    setDownloadProgress(null);
-    
-    addLog(`Controleren op duplicaten voor ${selectedRegulationIds.length} regelingen...`);
-    
-    let regulationIdsToProcess = selectedRegulationIds;
-    
+    // Check for already uploaded items
     try {
       const checkResponse = await apiRequest('POST', '/api/lokale-regelgeving/check-duplicates', { 
         regulationIds: selectedRegulationIds 
       });
-      
       const checkData = await checkResponse.json();
       
       if (checkData.uploaded > 0) {
-        addLog(`${checkData.uploaded} regelingen al geüpload, worden overgeslagen`);
-        regulationIdsToProcess = checkData.statuses
+        // Store both uploaded IDs and new IDs
+        const uploadedIds = checkData.statuses
+          .filter((s: any) => s.isUploaded)
+          .map((s: any) => s.regulationId);
+        const newIds = checkData.statuses
           .filter((s: any) => !s.isUploaded)
           .map((s: any) => s.regulationId);
-        
-        if (regulationIdsToProcess.length === 0) {
-          toast({
-            title: 'Alle regelingen al geüpload',
-            description: `${checkData.uploaded} regelingen zijn al in Pinecone aanwezig`,
-          });
-          setIsDownloading(false);
-          return;
-        }
+        setUploadedIdsInSelection(uploadedIds);
+        setNewIdsInSelection(newIds);
+        setShowReuploadDialog(true);
+        return;
       }
     } catch (error: any) {
       console.error('Duplicate check error:', error);
-      addLog(`Waarschuwing: duplicate check mislukt, alle IDs worden verwerkt`);
     }
     
-    addLog(`Download gestart voor ${regulationIdsToProcess.length} nieuwe regelingen...`);
+    // No duplicates found, proceed with download
+    await executeDownload(selectedRegulationIds, false);
+  };
+
+  const executeDownload = async (regulationIdsToProcess: string[], forceReupload: boolean) => {
+    setIsDownloading(true);
+    setDownloadLogs([]);
+    setDownloadProgress(null);
+    
+    addLog(`Download gestart voor ${regulationIdsToProcess.length} regelingen${forceReupload ? ' (inclusief her-upload)' : ''}...`);
 
     const regulationDataToSend = regulations
       .filter(reg => regulationIdsToProcess.includes(reg.regulationId))
@@ -258,6 +267,7 @@ export default function LokaleRegelgeving() {
           regulationIds: regulationIdsToProcess,
           regulationData: regulationDataToSend,
           currentOnly,
+          forceReupload,
         }),
       });
 
@@ -651,6 +661,42 @@ export default function LokaleRegelgeving() {
           </Card>
         )}
       </main>
+
+      <AlertDialog open={showReuploadDialog} onOpenChange={setShowReuploadDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regelingen opnieuw uploaden?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {uploadedIdsInSelection.length} van de geselecteerde regelingen zijn al eerder geüpload naar Pinecone.
+              {newIdsInSelection.length > 0 && ` Er zijn ook ${newIdsInSelection.length} nieuwe regelingen geselecteerd.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel data-testid="button-cancel-reupload">Annuleren</AlertDialogCancel>
+            {newIdsInSelection.length > 0 && (
+              <AlertDialogAction 
+                data-testid="button-new-only"
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                onClick={() => {
+                  setShowReuploadDialog(false);
+                  executeDownload(newIdsInSelection, false);
+                }}
+              >
+                Alleen nieuwe ({newIdsInSelection.length})
+              </AlertDialogAction>
+            )}
+            <AlertDialogAction 
+              data-testid="button-confirm-reupload"
+              onClick={() => {
+                setShowReuploadDialog(false);
+                executeDownload(Array.from(selectedIds), true);
+              }}
+            >
+              Alles uploaden ({selectedIds.size})
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
