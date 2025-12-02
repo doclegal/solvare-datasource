@@ -161,7 +161,7 @@ export async function searchRegelingen(options: {
       identificatie: item.identificatie || '',
       officieleTitel: item.officieleTitel || item.citeertitel || 'Onbekende titel',
       citeerTitel: item.citeertitel,
-      type: item.type || 'onbekend',
+      type: typeof item.type === 'object' ? (item.type?.waarde || item.type?.code || 'onbekend') : (item.type || 'onbekend'),
       bevoegdGezag: {
         code: item.bevoegdGezag?.code || '',
         naam: item.bevoegdGezag?.naam || item.bevoegdGezag?.bestuurslaag || 'Onbekend',
@@ -268,7 +268,7 @@ export async function searchRegelingenByLocation(options: {
       identificatie: item.identificatie || '',
       officieleTitel: item.officieleTitel || item.citeertitel || 'Onbekende titel',
       citeerTitel: item.citeertitel,
-      type: item.type || 'onbekend',
+      type: typeof item.type === 'object' ? (item.type?.waarde || item.type?.code || 'onbekend') : (item.type || 'onbekend'),
       bevoegdGezag: {
         code: item.bevoegdGezag?.code || '',
         naam: item.bevoegdGezag?.naam || 'Onbekend',
