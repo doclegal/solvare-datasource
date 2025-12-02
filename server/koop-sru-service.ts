@@ -19,11 +19,13 @@ const SRU_BASE_URL = 'https://zoekservice.overheid.nl/sru/Search';
 const BWB_CONNECTION = 'BWB';
 
 // XML Parser configuration for SRU responses
+// IMPORTANT: parseAttributeValue must be false to preserve article numbers like "2.20"
+// (otherwise they get converted to number 2.2 and lose trailing zeros)
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '_text',
-  parseAttributeValue: true,
+  parseAttributeValue: false,
   trimValues: true,
 });
 

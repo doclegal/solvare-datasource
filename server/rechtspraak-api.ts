@@ -5,11 +5,13 @@ import civilSubcategories from './data/civil-subcategories.json';
 import instanties from './data/instanties.json';
 
 const RECHTSPRAAK_BASE_URL = 'https://data.rechtspraak.nl/uitspraken';
+// IMPORTANT: parseAttributeValue must be false to preserve numeric strings as-is
+// (prevents "2.20" from becoming 2.2)
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '#text',
-  parseAttributeValue: true,
+  parseAttributeValue: false,
 });
 
 interface RechtspraakSearchResponse {

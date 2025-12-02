@@ -87,3 +87,17 @@ The application follows a client-server architecture with a React-based frontend
 
 - **Serper.dev API**:
     - Used for web search ECLI discovery.
+
+## Recent Changes
+
+### 2025-12-02: Fixed article number truncation bug
+**Problem**: Article numbers like "2.20", "3.20" were being stored as "2.2", "3.2" in Pinecone, losing trailing zeros.
+
+**Cause**: The `fast-xml-parser` library was configured with `parseAttributeValue: true`, which automatically converts numeric-looking strings to JavaScript numbers. Since `2.20` as a number equals `2.2`, the trailing zero was lost.
+
+**Solution**: Changed `parseAttributeValue: false` in all three XML parser configurations:
+- `server/koop-sru-service.ts` - BWB national legislation
+- `server/drp-service.ts` - CVDR local regulations  
+- `server/rechtspraak-api.ts` - Court decisions
+
+This ensures all attribute values remain as strings, preserving the original formatting of article numbers.
