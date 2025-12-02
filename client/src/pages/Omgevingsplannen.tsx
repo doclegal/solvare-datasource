@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { 
   Select,
   SelectContent,
@@ -25,7 +26,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Info,
-  MapPin
+  Upload,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Database
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -75,12 +80,43 @@ interface StatusResponse {
   message: string;
 }
 
+interface UploadProgress {
+  type: 'start' | 'processing' | 'chunked' | 'uploaded' | 'skipped' | 'error' | 'complete';
+  message: string;
+  current?: number;
+  total?: number;
+  regelingId?: string;
+  chunkCount?: number;
+  results?: Array<{
+    regelingId: string;
+    title: string;
+    chunkCount: number;
+  }>;
+  errors?: Array<{
+    regelingId: string;
+    error: string;
+  }>;
+  totalChunks?: number;
+}
+
+interface UploadStatus {
+  regelingId: string;
+  isUploaded: boolean;
+  uploadedAt?: string;
+  chunkCount?: number;
+}
+
 export default function Omgevingsplannen() {
   const [selectedMunicipality, setSelectedMunicipality] = useState<string>("");
   const [selectedDocumentType, setSelectedDocumentType] = useState<string>("all");
   const [selectedAuthorityType, setSelectedAuthorityType] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedRegelingen, setSelectedRegelingen] = useState<Set<string>>(new Set());
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
+  const [uploadStats, setUploadStats] = useState<{ processed: number; total: number } | null>(null);
+  const [duplicateStatus, setDuplicateStatus] = useState<Map<string, UploadStatus>>(new Map());
   const { toast } = useToast();
   
   const pageSize = 50;
@@ -134,13 +170,148 @@ export default function Omgevingsplannen() {
   const totalRecords = searchData?.totalRecords || 0;
   const totalPages = Math.ceil(totalRecords / pageSize);
 
+  const checkDuplicates = useCallback(async (regelingIds: string[]) => {
+    if (regelingIds.length === 0) return;
+    
+    try {
+      const response = await fetch('/api/omgevingsplannen/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ regelingIds }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const statusMap = new Map<string, UploadStatus>();
+        data.statuses.forEach((status: UploadStatus) => {
+          statusMap.set(status.regelingId, status);
+        });
+        setDuplicateStatus(statusMap);
+      }
+    } catch (error) {
+      console.error('Error checking duplicates:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (regelingen.length > 0) {
+      const ids = regelingen.map(r => r.identificatie);
+      checkDuplicates(ids);
+    }
+  }, [regelingen, checkDuplicates]);
+
   const handleSearch = () => {
     setCurrentPage(0);
     setHasSearched(true);
+    setSelectedRegelingen(new Set());
+    setDuplicateStatus(new Map());
   };
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+    setSelectedRegelingen(new Set());
+  };
+
+  const toggleSelection = (id: string) => {
+    setSelectedRegelingen(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    const newSelected = new Set(regelingen.map(r => r.identificatie));
+    setSelectedRegelingen(newSelected);
+  };
+
+  const deselectAll = () => {
+    setSelectedRegelingen(new Set());
+  };
+
+  const handleUpload = async () => {
+    if (selectedRegelingen.size === 0) return;
+    
+    setIsUploading(true);
+    setUploadProgress([]);
+    setUploadStats({ processed: 0, total: selectedRegelingen.size });
+    
+    const selectedIds = Array.from(selectedRegelingen);
+    const selectedData = regelingen.filter(r => selectedRegelingen.has(r.identificatie));
+    
+    try {
+      const response = await fetch('/api/omgevingsplannen/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          regelingIds: selectedIds,
+          regelingData: selectedData,
+          forceReupload: false,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (!reader) {
+        throw new Error('No response body');
+      }
+      
+      let buffer = '';
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data: UploadProgress = JSON.parse(line.slice(6));
+              setUploadProgress(prev => [...prev, data]);
+              
+              if (data.current && data.total) {
+                setUploadStats({ processed: data.current, total: data.total });
+              }
+              
+              if (data.type === 'complete') {
+                toast({
+                  title: "Upload voltooid",
+                  description: `${data.results?.length || 0} documenten geüpload met ${data.totalChunks || 0} chunks`,
+                });
+                
+                if (regelingen.length > 0) {
+                  checkDuplicates(regelingen.map(r => r.identificatie));
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing SSE:', e);
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      toast({
+        title: "Upload mislukt",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setSelectedRegelingen(new Set());
+    }
   };
 
   const getDocumentTypeLabel = (type: string): string => {
@@ -158,6 +329,10 @@ export default function Omgevingsplannen() {
       'projectbesluit': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
     };
     return colors[type] || 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
+  };
+
+  const getUploadStatus = (id: string) => {
+    return duplicateStatus.get(id);
   };
 
   if (!isConfigured) {
@@ -359,6 +534,84 @@ export default function Omgevingsplannen() {
               </CardContent>
             </Card>
 
+            {selectedRegelingen.size > 0 && (
+              <Card className="border-primary">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Upload className="h-5 w-5" />
+                    Upload naar Pinecone
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-sm">
+                    <span className="font-medium">{selectedRegelingen.size}</span> document(en) geselecteerd
+                  </div>
+                  
+                  <Button 
+                    onClick={handleUpload}
+                    className="w-full"
+                    disabled={isUploading}
+                    data-testid="button-upload-pinecone"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Uploaden...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-4 w-4 mr-2" />
+                        Upload naar Pinecone
+                      </>
+                    )}
+                  </Button>
+                  
+                  {uploadStats && isUploading && (
+                    <div className="space-y-2">
+                      <Progress 
+                        value={(uploadStats.processed / uploadStats.total) * 100} 
+                        className="h-2"
+                      />
+                      <p className="text-xs text-muted-foreground text-center">
+                        {uploadStats.processed} / {uploadStats.total} verwerkt
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {uploadProgress.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Upload Log</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-48">
+                    <div className="space-y-1 text-xs">
+                      {uploadProgress.slice(-20).map((prog, i) => (
+                        <div 
+                          key={i} 
+                          className={`flex items-start gap-2 py-1 ${
+                            prog.type === 'error' ? 'text-red-600' :
+                            prog.type === 'uploaded' ? 'text-green-600' :
+                            prog.type === 'skipped' ? 'text-yellow-600' :
+                            'text-muted-foreground'
+                          }`}
+                        >
+                          {prog.type === 'uploaded' && <CheckCircle2 className="h-3 w-3 mt-0.5 flex-shrink-0" />}
+                          {prog.type === 'error' && <XCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />}
+                          {prog.type === 'skipped' && <Clock className="h-3 w-3 mt-0.5 flex-shrink-0" />}
+                          {prog.type === 'processing' && <Loader2 className="h-3 w-3 mt-0.5 flex-shrink-0 animate-spin" />}
+                          <span className="break-all">{prog.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -383,7 +636,7 @@ export default function Omgevingsplannen() {
           <div className="lg:col-span-3">
             <Card>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="text-lg">
                     {hasSearched ? (
                       <>Resultaten ({totalRecords.toLocaleString('nl-NL')})</>
@@ -391,31 +644,55 @@ export default function Omgevingsplannen() {
                       'Omgevingsdocumenten'
                     )}
                   </CardTitle>
-                  {totalPages > 1 && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 0}
-                        data-testid="button-prev-page"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm text-muted-foreground">
-                        Pagina {currentPage + 1} van {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage >= totalPages - 1}
-                        data-testid="button-next-page"
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {regelingen.length > 0 && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={selectAll}
+                          data-testid="button-select-all"
+                        >
+                          Selecteer alle
+                        </Button>
+                        {selectedRegelingen.size > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={deselectAll}
+                            data-testid="button-deselect-all"
+                          >
+                            Deselecteer ({selectedRegelingen.size})
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 0}
+                          data-testid="button-prev-page"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <span className="text-sm text-muted-foreground">
+                          Pagina {currentPage + 1} van {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage >= totalPages - 1}
+                          data-testid="button-next-page"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -451,57 +728,62 @@ export default function Omgevingsplannen() {
                 ) : (
                   <ScrollArea className="h-[600px]">
                     <div className="space-y-3">
-                      {regelingen.map((regeling) => (
-                        <div
-                          key={regeling.identificatie}
-                          className="p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-                          data-testid={`regeling-${regeling.identificatie}`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-medium text-foreground line-clamp-2">
-                                {regeling.officieleTitel || regeling.citeerTitel || 'Onbekende titel'}
-                              </h3>
-                              <div className="flex flex-wrap items-center gap-2 mt-2">
-                                <Badge 
-                                  variant="secondary"
-                                  className={getDocumentTypeColor(regeling.type)}
-                                >
-                                  {getDocumentTypeLabel(regeling.type)}
-                                </Badge>
-                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                  <Building2 className="h-3 w-3" />
-                                  {regeling.bevoegdGezag.naam}
+                      {regelingen.map((regeling) => {
+                        const status = getUploadStatus(regeling.identificatie);
+                        const isSelected = selectedRegelingen.has(regeling.identificatie);
+                        
+                        return (
+                          <div
+                            key={regeling.identificatie}
+                            className={`p-4 border rounded-lg transition-colors ${
+                              isSelected 
+                                ? 'bg-primary/10 border-primary' 
+                                : 'hover:bg-muted/50'
+                            }`}
+                            data-testid={`regeling-${regeling.identificatie}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleSelection(regeling.identificatie)}
+                                data-testid={`checkbox-${regeling.identificatie}`}
+                                className="mt-1"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-medium text-foreground line-clamp-2">
+                                  {regeling.officieleTitel || regeling.citeerTitel || 'Onbekende titel'}
+                                </h3>
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  <Badge 
+                                    variant="secondary"
+                                    className={getDocumentTypeColor(regeling.type)}
+                                  >
+                                    {getDocumentTypeLabel(regeling.type)}
+                                  </Badge>
+                                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                    <Building2 className="h-3 w-3" />
+                                    {regeling.bevoegdGezag.naam}
+                                  </div>
+                                  {regeling.inwerkingtreding && (
+                                    <span className="text-xs text-muted-foreground">
+                                      In werking: {new Date(regeling.inwerkingtreding).toLocaleDateString('nl-NL')}
+                                    </span>
+                                  )}
+                                  {status?.isUploaded && (
+                                    <Badge variant="outline" className="text-green-600 border-green-600">
+                                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                                      In Pinecone ({status.chunkCount} chunks)
+                                    </Badge>
+                                  )}
                                 </div>
-                                {regeling.inwerkingtreding && (
-                                  <span className="text-xs text-muted-foreground">
-                                    In werking: {new Date(regeling.inwerkingtreding).toLocaleDateString('nl-NL')}
-                                  </span>
-                                )}
+                                <p className="text-xs text-muted-foreground mt-1 font-mono">
+                                  {regeling.identificatie}
+                                </p>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1 font-mono">
-                                {regeling.identificatie}
-                              </p>
                             </div>
-                            {regeling.documentUrl && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                data-testid={`button-view-${regeling.identificatie}`}
-                              >
-                                <a 
-                                  href={regeling.documentUrl} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </Button>
-                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 )}

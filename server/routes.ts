@@ -2281,6 +2281,214 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check duplicate status for DSO regeling IDs
+  app.post('/api/omgevingsplannen/check-duplicates', async (req: Request, res: Response) => {
+    try {
+      const { regelingIds } = req.body;
+      
+      if (!Array.isArray(regelingIds)) {
+        return res.status(400).json({ error: 'Regeling IDs array is vereist' });
+      }
+      
+      const statuses = await storage.checkDsoRegelingDuplicates(regelingIds);
+      
+      const uploaded = statuses.filter(s => s.isUploaded).length;
+      
+      res.json({
+        total: regelingIds.length,
+        uploaded,
+        new: regelingIds.length - uploaded,
+        statuses,
+      });
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/check-duplicates:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Download and upload DSO regelingen to Pinecone
+  app.post('/api/omgevingsplannen/download', async (req: Request, res: Response) => {
+    try {
+      const { 
+        getRegelingTextContent, 
+        parseDsoRegelingToChunks,
+        isDsoApiKeyConfigured 
+      } = await import('./dso-service');
+      const { upsertDsoRegelingChunksToPinecone } = await import('./pinecone-client');
+      
+      if (!isDsoApiKeyConfigured()) {
+        return res.status(503).json({ 
+          error: 'DSO API-key is niet geconfigureerd',
+          configured: false,
+        });
+      }
+      
+      const { regelingIds, regelingData, forceReupload = false } = req.body;
+      
+      if (!Array.isArray(regelingIds) || regelingIds.length === 0) {
+        return res.status(400).json({ error: 'Regeling IDs zijn vereist' });
+      }
+      
+      // regelingData is a map of regelingId -> metadata
+      const regelingMap = new Map<string, any>();
+      if (Array.isArray(regelingData)) {
+        regelingData.forEach((reg: any) => {
+          regelingMap.set(reg.identificatie, reg);
+        });
+      }
+      
+      // Set up SSE for progress streaming
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      const sendProgress = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+      
+      sendProgress({
+        type: 'start',
+        message: `Upload gestart voor ${regelingIds.length} omgevingsdocumenten...`,
+        total: regelingIds.length,
+      });
+      
+      const today = new Date().toISOString().split('T')[0];
+      const results: any[] = [];
+      const errors: any[] = [];
+      let processedCount = 0;
+      let totalChunks = 0;
+      
+      for (const regelingId of regelingIds) {
+        try {
+          const regData = regelingMap.get(regelingId) || {};
+          
+          sendProgress({
+            type: 'processing',
+            message: `Verwerken: ${regelingId}`,
+            current: processedCount + 1,
+            total: regelingIds.length,
+          });
+          
+          // Get text content from DSO API
+          const { content: textContent, hash: contentHash, metadata } = await getRegelingTextContent(regelingId);
+          
+          // Check if already uploaded with same hash (skip check if forceReupload is true)
+          if (!forceReupload) {
+            const isAlreadyUploaded = await storage.isDsoRegelingVersionUploaded(regelingId, contentHash);
+            if (isAlreadyUploaded) {
+              sendProgress({
+                type: 'skipped',
+                message: `${regelingId} is al geüpload (ongewijzigd)`,
+                regelingId,
+              });
+              processedCount++;
+              continue;
+            }
+          }
+          
+          const title = metadata.officieleTitel || regData.officieleTitel || `Regeling ${regelingId}`;
+          const type = metadata.type || regData.type || 'onbekend';
+          const bevoegdGezag = metadata.bevoegdGezag?.naam || regData.bevoegdGezag?.naam || 'Onbekend';
+          const bevoegdGezagType = regData.bevoegdGezagType || 'onbekend';
+          
+          // Parse text into chunks
+          const chunks = parseDsoRegelingToChunks(
+            textContent,
+            regelingId,
+            title,
+            type,
+            bevoegdGezag,
+            bevoegdGezagType,
+            today,
+            true // isCurrentVersion
+          );
+          
+          if (chunks.length === 0) {
+            errors.push({ regelingId, error: 'Geen chunks kunnen extraheren' });
+            processedCount++;
+            continue;
+          }
+          
+          sendProgress({
+            type: 'chunked',
+            message: `${regelingId}: ${chunks.length} chunks geëxtraheerd`,
+            regelingId,
+            chunkCount: chunks.length,
+          });
+          
+          // Upload to Pinecone
+          const namespace = 'laws-dso';
+          await upsertDsoRegelingChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
+          
+          // Track in database
+          await storage.trackUploadedDsoRegeling({
+            regelingId,
+            title,
+            type,
+            bevoegdGezag,
+            bevoegdGezagType,
+            versionDate: today,
+            contentHash,
+            chunkCount: chunks.length,
+            namespace,
+          });
+          
+          totalChunks += chunks.length;
+          results.push({
+            regelingId,
+            title,
+            type,
+            bevoegdGezag,
+            chunkCount: chunks.length,
+          });
+          
+          sendProgress({
+            type: 'uploaded',
+            message: `${regelingId}: ${chunks.length} chunks geüpload naar Pinecone`,
+            regelingId,
+            chunkCount: chunks.length,
+          });
+          
+        } catch (error: any) {
+          console.error(`Error processing ${regelingId}:`, error);
+          errors.push({ regelingId, error: error.message });
+          
+          sendProgress({
+            type: 'error',
+            message: `Fout bij ${regelingId}: ${error.message}`,
+            regelingId,
+          });
+        }
+        
+        processedCount++;
+        
+        // Rate limiting delay
+        if (processedCount < regelingIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      sendProgress({
+        type: 'complete',
+        message: `Upload voltooid: ${results.length} regelingen, ${totalChunks} chunks`,
+        results,
+        errors,
+        totalChunks,
+      });
+      
+      res.end();
+    } catch (error: any) {
+      console.error('Error in /api/omgevingsplannen/download:', error);
+      
+      const errorData = `data: ${JSON.stringify({
+        type: 'error',
+        message: error.message || 'Download failed',
+      })}\n\n`;
+      res.write(errorData);
+      res.end();
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ 

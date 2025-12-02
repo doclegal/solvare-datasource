@@ -1,5 +1,5 @@
-import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus, LawUploadStatus, InsertUploadedLaw, LocalRegulationUploadStatus, InsertUploadedLocalRegulation } from '@shared/schema';
-import { enrichedBatches, enrichedBatchRecords, processedEclis, uploadedLaws, uploadedLocalRegulations } from '@shared/schema';
+import type { PreparedRecord, PreparedBatch, CheckDuplicatesResponse, EcliStatus, LawUploadStatus, InsertUploadedLaw, LocalRegulationUploadStatus, InsertUploadedLocalRegulation, InsertUploadedDsoRegeling } from '@shared/schema';
+import { enrichedBatches, enrichedBatchRecords, processedEclis, uploadedLaws, uploadedLocalRegulations, uploadedDsoRegelingen } from '@shared/schema';
 import { randomUUID } from 'crypto';
 import { db } from './db';
 import { eq, and, sql, inArray, or } from 'drizzle-orm';
@@ -508,6 +508,112 @@ export class PgStorage implements IStorage {
     await db
       .delete(uploadedLocalRegulations)
       .where(eq(uploadedLocalRegulations.regulationId, regulationId));
+  }
+
+  // ============================================================================
+  // DSO OMGEVINGSPLANNEN - Storage Functions
+  // ============================================================================
+
+  /**
+   * Check if a DSO regeling version has been uploaded to Pinecone
+   */
+  async isDsoRegelingVersionUploaded(regelingId: string, contentHash: string): Promise<boolean> {
+    const existing = await db
+      .select()
+      .from(uploadedDsoRegelingen)
+      .where(
+        and(
+          eq(uploadedDsoRegelingen.regelingId, regelingId),
+          eq(uploadedDsoRegelingen.contentHash, contentHash)
+        )
+      )
+      .limit(1);
+
+    return existing.length > 0;
+  }
+
+  /**
+   * Track an uploaded DSO regeling in the database
+   */
+  async trackUploadedDsoRegeling(regeling: InsertUploadedDsoRegeling): Promise<void> {
+    await db
+      .insert(uploadedDsoRegelingen)
+      .values(regeling)
+      .onConflictDoUpdate({
+        target: [uploadedDsoRegelingen.regelingId, uploadedDsoRegelingen.versionDate],
+        set: {
+          title: regeling.title,
+          type: regeling.type,
+          bevoegdGezag: regeling.bevoegdGezag,
+          bevoegdGezagType: regeling.bevoegdGezagType,
+          contentHash: regeling.contentHash,
+          chunkCount: regeling.chunkCount,
+          namespace: regeling.namespace,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
+  /**
+   * Check duplicate status for DSO regeling IDs
+   */
+  async checkDsoRegelingDuplicates(regelingIds: string[]): Promise<Array<{
+    regelingId: string;
+    isUploaded: boolean;
+    uploadedAt?: string;
+    chunkCount?: number;
+  }>> {
+    const existing = await db
+      .select({
+        regelingId: uploadedDsoRegelingen.regelingId,
+        uploadedAt: uploadedDsoRegelingen.uploadedAt,
+        chunkCount: uploadedDsoRegelingen.chunkCount,
+      })
+      .from(uploadedDsoRegelingen)
+      .where(inArray(uploadedDsoRegelingen.regelingId, regelingIds));
+
+    const existingMap = new Map(
+      existing.map(e => [e.regelingId, e])
+    );
+
+    return regelingIds.map(regelingId => {
+      const found = existingMap.get(regelingId);
+      return {
+        regelingId,
+        isUploaded: !!found,
+        uploadedAt: found?.uploadedAt?.toISOString(),
+        chunkCount: found?.chunkCount,
+      };
+    });
+  }
+
+  /**
+   * Get all uploaded DSO regelingen for display
+   */
+  async getUploadedDsoRegelingen(limit: number = 100): Promise<Array<{
+    regelingId: string;
+    title: string;
+    type: string;
+    bevoegdGezag: string;
+    bevoegdGezagType: string;
+    chunkCount: number;
+    uploadedAt: Date;
+  }>> {
+    const regelingen = await db
+      .select({
+        regelingId: uploadedDsoRegelingen.regelingId,
+        title: uploadedDsoRegelingen.title,
+        type: uploadedDsoRegelingen.type,
+        bevoegdGezag: uploadedDsoRegelingen.bevoegdGezag,
+        bevoegdGezagType: uploadedDsoRegelingen.bevoegdGezagType,
+        chunkCount: uploadedDsoRegelingen.chunkCount,
+        uploadedAt: uploadedDsoRegelingen.uploadedAt,
+      })
+      .from(uploadedDsoRegelingen)
+      .orderBy(sql`${uploadedDsoRegelingen.uploadedAt} DESC`)
+      .limit(limit);
+
+    return regelingen;
   }
 }
 

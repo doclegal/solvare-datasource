@@ -487,3 +487,47 @@ export const localRegulationUploadStatusSchema = z.object({
 });
 
 export type LocalRegulationUploadStatus = z.infer<typeof localRegulationUploadStatusSchema>;
+
+// ============================================================================
+// DSO OMGEVINGSPLANNEN (Environmental Plans) - Tracking Tables
+// ============================================================================
+
+// Database table: Track uploaded DSO regulations to Pinecone
+export const uploadedDsoRegelingen = pgTable("uploaded_dso_regelingen", {
+  id: serial("id").primaryKey(),
+  regelingId: varchar("regeling_id", { length: 255 }).notNull(), // AKN identificatie (e.g., /akn/nl/act/...)
+  title: text("title").notNull(),
+  type: varchar("type", { length: 100 }).notNull(), // omgevingsplan, omgevingsverordening, etc.
+  bevoegdGezag: varchar("bevoegd_gezag", { length: 255 }).notNull(), // Naam van bevoegd gezag
+  bevoegdGezagType: varchar("bevoegd_gezag_type", { length: 50 }).notNull(), // gemeente, provincie, waterschap, ministerie
+  versionDate: varchar("version_date", { length: 20 }),
+  contentHash: varchar("content_hash", { length: 64 }).notNull(),
+  chunkCount: integer("chunk_count").notNull().default(0),
+  namespace: varchar("namespace", { length: 100 }).notNull().default("laws-dso"),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueDsoRegelingVersion: uniqueIndex("unique_dso_regeling_version").on(table.regelingId, table.versionDate),
+  dsoRegelingIdIdx: index("dso_regeling_id_idx").on(table.regelingId),
+  dsoBevoegdGezagIdx: index("dso_bevoegd_gezag_idx").on(table.bevoegdGezag),
+  dsoNamespaceIdx: index("dso_namespace_idx").on(table.namespace),
+}));
+
+export const insertUploadedDsoRegelingSchema = createInsertSchema(uploadedDsoRegelingen).omit({
+  id: true,
+  uploadedAt: true,
+  updatedAt: true,
+});
+
+export type InsertUploadedDsoRegeling = z.infer<typeof insertUploadedDsoRegelingSchema>;
+export type UploadedDsoRegeling = typeof uploadedDsoRegelingen.$inferSelect;
+
+// DSO Regeling upload status response
+export const dsoRegelingUploadStatusSchema = z.object({
+  regelingId: z.string(),
+  isUploaded: z.boolean(),
+  uploadedAt: z.string().optional(),
+  chunkCount: z.number().optional(),
+});
+
+export type DsoRegelingUploadStatus = z.infer<typeof dsoRegelingUploadStatusSchema>;

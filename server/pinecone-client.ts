@@ -747,3 +747,118 @@ export async function upsertLocalRegulationChunksToPinecone(
     errors,
   };
 }
+
+// ============================================================================
+// OMGEVINGSPLANNEN (DSO) - Pinecone Upload Functions
+// ============================================================================
+
+import type { DsoRegelingChunk } from './dso-service';
+
+/**
+ * Upsert DSO regeling chunks to Pinecone with hybrid vectors (dense + sparse)
+ * Uses the same embedding model (multilingual-e5-large) for consistency
+ * 
+ * Namespace: 'laws-dso' for environmental plans and regulations (Omgevingswet)
+ */
+export async function upsertDsoRegelingChunksToPinecone(
+  chunks: DsoRegelingChunk[],
+  indexHost: string,
+  namespace: string = 'laws-dso',
+  batchSize: number = 50
+): Promise<{ success: number; errors: string[] }> {
+  const client = initializePinecone();
+  
+  const indexName = indexHost.split('.')[0];
+  const index = client.index(indexName, indexHost);
+  
+  console.log(`[Pinecone DSO] Upserting ${chunks.length} chunks to namespace: ${namespace}`);
+  
+  const errors: string[] = [];
+  let successCount = 0;
+  
+  // Enforce Pinecone Inference API limit (max 96 per batch)
+  const safeBatchSize = Math.min(batchSize, 96);
+  
+  for (let i = 0; i < chunks.length; i += safeBatchSize) {
+    const batch = chunks.slice(i, i + safeBatchSize);
+    
+    try {
+      // Generate embeddings using Pinecone's Inference API
+      const textsToEmbed = batch.map(chunk => chunk.text);
+      
+      const embeddingResponse = await client.inference.embed(
+        'multilingual-e5-large',
+        textsToEmbed,
+        { inputType: 'passage' }
+      );
+      
+      // Build vectors with metadata
+      const vectors = batch.map((chunk, idx) => {
+        const embedding = embeddingResponse.data[idx];
+        
+        if (!embedding || !('values' in embedding) || !Array.isArray(embedding.values)) {
+          throw new Error(`Failed to generate embedding for DSO regeling: ${chunk.regeling_id}`);
+        }
+        
+        const sparseVector = generateSparseVector(chunk.text);
+        
+        // Build metadata for DSO documents
+        const metadata: Record<string, any> = {
+          text: chunk.text.substring(0, 30000), // Truncate for metadata limit
+          regeling_id: chunk.regeling_id,
+          regeling_title: chunk.regeling_title,
+          type: chunk.type,
+          bevoegd_gezag: chunk.bevoegd_gezag,
+          bevoegd_gezag_type: chunk.bevoegd_gezag_type,
+          source: chunk.source,
+          is_current_version: chunk.is_current_version,
+        };
+        
+        // Optional fields
+        if (chunk.article_number) {
+          metadata.article_number = chunk.article_number;
+        }
+        if (chunk.seq_in_article !== undefined) {
+          metadata.seq_in_article = chunk.seq_in_article;
+        }
+        if (chunk.structure_path) {
+          metadata.structure_path = chunk.structure_path;
+        }
+        if (chunk.version_date) {
+          metadata.version_date = chunk.version_date;
+        }
+        
+        return {
+          id: chunk.id,
+          values: embedding.values,
+          sparseValues: sparseVector,
+          metadata,
+        };
+      });
+      
+      // Upsert to Pinecone
+      await index.namespace(namespace).upsert(vectors);
+      
+      successCount += batch.length;
+      console.log(`[Pinecone DSO] Uploaded batch ${Math.floor(i / safeBatchSize) + 1}: ${batch.length} chunks`);
+      
+    } catch (error: any) {
+      console.error(`[Pinecone DSO] Error upserting batch at index ${i}:`, error);
+      batch.forEach(chunk => {
+        errors.push(`${chunk.id}: ${error.message}`);
+      });
+    }
+    
+    // Rate limiting delay between batches
+    if (i + safeBatchSize < chunks.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+  
+  console.log(`[Pinecone DSO] Upload complete: ${successCount} success, ${errors.length} errors`);
+  
+  return {
+    success: successCount,
+    errors,
+  };
+}

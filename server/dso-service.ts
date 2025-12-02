@@ -17,6 +17,16 @@
 
 import axios from 'axios';
 import crypto from 'crypto';
+import { XMLParser } from 'fast-xml-parser';
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  textNodeName: '_text',
+  parseAttributeValue: false,
+  parseTagValue: false,
+  trimValues: true,
+});
 
 const DSO_BASE_URL = 'https://service.pre.omgevingswet.overheid.nl/publiek/omgevingsdocumenten/api/presenteren/v7';
 
@@ -440,4 +450,465 @@ export function getProvinces(): Array<{ code: string; name: string }> {
     { code: 'pv30', name: 'Noord-Brabant' },
     { code: 'pv31', name: 'Limburg' },
   ];
+}
+
+// ============================================================================
+// DSO REGELING CHUNKING - For Pinecone Upload
+// ============================================================================
+
+export interface DsoRegelingChunk {
+  id: string;
+  text: string;
+  regeling_id: string;
+  regeling_title: string;
+  type: string;
+  bevoegd_gezag: string;
+  bevoegd_gezag_type: string;
+  source: 'omgevingswet';
+  article_number?: string;
+  seq_in_article: number;
+  structure_path?: string;
+  version_date?: string;
+  is_current_version: boolean;
+  chunkIndex: number;
+}
+
+/**
+ * Get the text content of a regeling from the DSO Presenteren API
+ * Uses the /regelingen/{identificatie}/tekst endpoint
+ */
+export async function getRegelingTextContent(identificatie: string): Promise<{
+  content: string;
+  hash: string;
+  metadata: any;
+}> {
+  try {
+    const apiKey = getApiKey();
+    
+    // Get the full regeling with its text content
+    // The Presenteren API v7 returns text in the regeling response
+    const url = `${DSO_BASE_URL}/regelingen/${encodeURIComponent(identificatie)}`;
+    console.log(`[DSO Service] Getting text content: ${url}`);
+    
+    const response = await axios.get(url, {
+      timeout: 60000,
+      headers: {
+        'Accept': 'application/hal+json',
+        'X-Api-Key': apiKey,
+      },
+    });
+
+    const data = response.data;
+    
+    // Extract text from the regeling response
+    // DSO v7 format includes embedded tekst or inhoud
+    let textContent = '';
+    
+    // Try to extract text from various possible locations in the response
+    if (data.tekst) {
+      textContent = typeof data.tekst === 'string' ? data.tekst : JSON.stringify(data.tekst);
+    } else if (data.inhoud) {
+      textContent = typeof data.inhoud === 'string' ? data.inhoud : extractTextFromHtml(data.inhoud);
+    } else if (data._embedded?.tekst) {
+      textContent = extractTextFromEmbedded(data._embedded.tekst);
+    } else if (data._embedded?.inhoud) {
+      textContent = extractTextFromEmbedded(data._embedded.inhoud);
+    } else {
+      // Fallback: use the official title and any available description
+      textContent = `${data.officieleTitel || ''}\n\n${data.citeertitel || ''}\n\n${data.omschrijving || ''}`;
+    }
+    
+    // If still no content, try to get the document structure
+    if (!textContent.trim() && data._links?.documentstructuur?.href) {
+      const structureContent = await fetchDocumentStructure(data._links.documentstructuur.href, apiKey);
+      textContent = structureContent;
+    }
+    
+    const hash = crypto.createHash('sha256').update(textContent).digest('hex');
+    
+    return {
+      content: textContent,
+      hash,
+      metadata: {
+        identificatie,
+        officieleTitel: data.officieleTitel,
+        citeertitel: data.citeertitel,
+        type: typeof data.type === 'object' ? (data.type?.waarde || data.type?.code) : data.type,
+        bevoegdGezag: data.bevoegdGezag,
+        contentLength: textContent.length,
+      },
+    };
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      console.error('[DSO Service] Text content error:', error.response?.data || error.message);
+      throw new Error(`Fout bij ophalen tekst ${identificatie}: ${error.response?.status} - ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Fetch document structure and extract text content
+ */
+async function fetchDocumentStructure(url: string, apiKey: string): Promise<string> {
+  try {
+    const response = await axios.get(url, {
+      timeout: 60000,
+      headers: {
+        'Accept': 'application/hal+json',
+        'X-Api-Key': apiKey,
+      },
+    });
+    
+    const data = response.data;
+    return extractTextFromStructure(data);
+  } catch (error) {
+    console.error('[DSO Service] Document structure fetch error:', error);
+    return '';
+  }
+}
+
+/**
+ * Extract text from document structure response
+ */
+function extractTextFromStructure(structure: any): string {
+  if (!structure) return '';
+  
+  const parts: string[] = [];
+  
+  // Handle embedded items
+  if (structure._embedded) {
+    const items = structure._embedded.items || structure._embedded.artikelen || 
+                  structure._embedded.divisies || structure._embedded.inhoud || [];
+    
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        const itemText = extractTextFromStructureItem(item);
+        if (itemText) parts.push(itemText);
+      }
+    }
+  }
+  
+  // Handle direct text content
+  if (structure.tekst) {
+    parts.push(extractTextValue(structure.tekst));
+  }
+  if (structure.inhoud) {
+    parts.push(extractTextValue(structure.inhoud));
+  }
+  
+  return parts.filter(p => p.trim()).join('\n\n');
+}
+
+/**
+ * Extract text from a structure item (article, division, etc.)
+ */
+function extractTextFromStructureItem(item: any): string {
+  if (!item) return '';
+  
+  const parts: string[] = [];
+  
+  // Get title/label
+  if (item.label) parts.push(`## ${item.label}`);
+  if (item.titel) parts.push(`## ${item.titel}`);
+  if (item.nummer) parts.push(`Artikel ${item.nummer}`);
+  
+  // Get content
+  if (item.tekst) parts.push(extractTextValue(item.tekst));
+  if (item.inhoud) parts.push(extractTextValue(item.inhoud));
+  
+  // Recursively handle nested items
+  if (item._embedded) {
+    const nestedText = extractTextFromStructure(item);
+    if (nestedText) parts.push(nestedText);
+  }
+  
+  return parts.filter(p => p.trim()).join('\n');
+}
+
+/**
+ * Extract text value from various formats
+ */
+function extractTextValue(value: any): string {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    return extractTextFromHtml(value);
+  }
+  if (value._text) return extractTextFromHtml(value._text);
+  if (value['#text']) return extractTextFromHtml(value['#text']);
+  if (Array.isArray(value)) {
+    return value.map(v => extractTextValue(v)).join('\n');
+  }
+  return '';
+}
+
+/**
+ * Extract plain text from HTML content
+ */
+function extractTextFromHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Extract text from embedded content array
+ */
+function extractTextFromEmbedded(embedded: any): string {
+  if (!embedded) return '';
+  if (typeof embedded === 'string') return embedded;
+  if (Array.isArray(embedded)) {
+    return embedded.map(item => extractTextFromEmbedded(item)).join('\n\n');
+  }
+  if (embedded.tekst) return extractTextValue(embedded.tekst);
+  if (embedded.inhoud) return extractTextValue(embedded.inhoud);
+  return '';
+}
+
+/**
+ * Parse DSO regeling text into chunks for Pinecone
+ */
+export function parseDsoRegelingToChunks(
+  textContent: string,
+  regelingId: string,
+  title: string,
+  type: string,
+  bevoegdGezag: string,
+  bevoegdGezagType: string,
+  versionDate?: string,
+  isCurrentVersion: boolean = true
+): DsoRegelingChunk[] {
+  const chunks: DsoRegelingChunk[] = [];
+  
+  if (!textContent || !textContent.trim()) {
+    console.warn(`[DSO Service] No content to chunk for ${regelingId}`);
+    return chunks;
+  }
+  
+  // Split content into logical sections
+  const sections = splitIntoSections(textContent);
+  let chunkIndex = 0;
+  
+  for (const section of sections) {
+    const { title: sectionTitle, content: sectionContent, path: structurePath } = section;
+    
+    if (!sectionContent.trim()) continue;
+    
+    // Check if section is small enough for one chunk (< 500 words)
+    const wordCount = sectionContent.split(/\s+/).length;
+    
+    if (wordCount <= 500) {
+      chunks.push(createDsoChunk({
+        regelingId,
+        title,
+        type,
+        bevoegdGezag,
+        bevoegdGezagType,
+        sectionTitle,
+        sectionContent,
+        structurePath,
+        versionDate,
+        isCurrentVersion,
+        chunkIndex,
+        seqInArticle: 0,
+      }));
+      chunkIndex++;
+    } else {
+      // Split into smaller chunks
+      const subChunks = splitTextBySize(sectionContent, 400, 50);
+      
+      for (let i = 0; i < subChunks.length; i++) {
+        chunks.push(createDsoChunk({
+          regelingId,
+          title,
+          type,
+          bevoegdGezag,
+          bevoegdGezagType,
+          sectionTitle: sectionTitle ? `${sectionTitle} (deel ${i + 1})` : undefined,
+          sectionContent: subChunks[i],
+          structurePath,
+          versionDate,
+          isCurrentVersion,
+          chunkIndex,
+          seqInArticle: i,
+        }));
+        chunkIndex++;
+      }
+    }
+  }
+  
+  console.log(`[DSO Service] Created ${chunks.length} chunks for ${regelingId}`);
+  return chunks;
+}
+
+/**
+ * Create a DSO chunk object
+ */
+function createDsoChunk(options: {
+  regelingId: string;
+  title: string;
+  type: string;
+  bevoegdGezag: string;
+  bevoegdGezagType: string;
+  sectionTitle?: string;
+  sectionContent: string;
+  structurePath?: string;
+  versionDate?: string;
+  isCurrentVersion: boolean;
+  chunkIndex: number;
+  seqInArticle: number;
+}): DsoRegelingChunk {
+  const {
+    regelingId, title, type, bevoegdGezag, bevoegdGezagType,
+    sectionTitle, sectionContent, structurePath, versionDate,
+    isCurrentVersion, chunkIndex, seqInArticle
+  } = options;
+  
+  const formattedText = formatDsoChunkText(
+    title, type, bevoegdGezag, sectionTitle, sectionContent, structurePath
+  );
+  
+  return {
+    id: `${regelingId}#${chunkIndex}#${seqInArticle}#${versionDate || 'current'}`,
+    text: formattedText,
+    regeling_id: regelingId,
+    regeling_title: title,
+    type,
+    bevoegd_gezag: bevoegdGezag,
+    bevoegd_gezag_type: bevoegdGezagType,
+    source: 'omgevingswet',
+    article_number: sectionTitle,
+    seq_in_article: seqInArticle,
+    structure_path: structurePath,
+    version_date: versionDate,
+    is_current_version: isCurrentVersion,
+    chunkIndex,
+  };
+}
+
+/**
+ * Format chunk text for embedding - includes context
+ */
+function formatDsoChunkText(
+  title: string,
+  type: string,
+  bevoegdGezag: string,
+  sectionTitle: string | undefined,
+  content: string,
+  structurePath: string | undefined
+): string {
+  const parts: string[] = [];
+  
+  // Add context header
+  parts.push(`[OMGEVINGSWET DOCUMENT]`);
+  parts.push(`Type: ${type}`);
+  parts.push(`Bevoegd gezag: ${bevoegdGezag}`);
+  parts.push(`Titel: ${title}`);
+  
+  if (structurePath) {
+    parts.push(`Locatie: ${structurePath}`);
+  }
+  
+  if (sectionTitle) {
+    parts.push(`\n## ${sectionTitle}`);
+  }
+  
+  parts.push(`\n${content}`);
+  
+  return parts.join('\n');
+}
+
+/**
+ * Split text content into logical sections based on headers and structure
+ */
+function splitIntoSections(text: string): Array<{ title?: string; content: string; path?: string }> {
+  const sections: Array<{ title?: string; content: string; path?: string }> = [];
+  
+  // Split by common section markers
+  const sectionRegex = /(?:^|\n)((?:#{1,3}|Artikel|Hoofdstuk|Afdeling|Paragraaf|Titel)\s+[\d.]*[^\n]*)/gi;
+  
+  const parts = text.split(sectionRegex);
+  
+  if (parts.length <= 1) {
+    // No clear sections found, treat as one section
+    sections.push({ content: text.trim() });
+    return sections;
+  }
+  
+  let currentTitle: string | undefined;
+  let currentContent: string[] = [];
+  
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim();
+    if (!part) continue;
+    
+    // Check if this is a section header
+    if (/^(#{1,3}|Artikel|Hoofdstuk|Afdeling|Paragraaf|Titel)\s/i.test(part)) {
+      // Save previous section if exists
+      if (currentContent.length > 0) {
+        sections.push({
+          title: currentTitle,
+          content: currentContent.join('\n').trim(),
+        });
+        currentContent = [];
+      }
+      currentTitle = part.replace(/^#+\s*/, '');
+    } else {
+      currentContent.push(part);
+    }
+  }
+  
+  // Add last section
+  if (currentContent.length > 0) {
+    sections.push({
+      title: currentTitle,
+      content: currentContent.join('\n').trim(),
+    });
+  }
+  
+  // If no sections were created with titles, create one big section
+  if (sections.length === 0) {
+    sections.push({ content: text.trim() });
+  }
+  
+  return sections;
+}
+
+/**
+ * Split text into chunks of specified size with overlap
+ */
+function splitTextBySize(text: string, targetWords: number = 400, overlapWords: number = 50): string[] {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  
+  if (words.length === 0) return [];
+  if (words.length <= targetWords) return [text.trim()];
+  
+  const chunks: string[] = [];
+  let start = 0;
+  
+  while (start < words.length) {
+    const end = Math.min(start + targetWords, words.length);
+    const chunk = words.slice(start, end).join(' ');
+    
+    if (chunk.trim().length > 0) {
+      chunks.push(chunk);
+    }
+    
+    if (end >= words.length) break;
+    
+    start += targetWords - overlapWords;
+    if (start >= words.length) break;
+  }
+  
+  return chunks;
 }
