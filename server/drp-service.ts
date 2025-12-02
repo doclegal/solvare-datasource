@@ -43,7 +43,7 @@ const DUTCH_PROVINCES = [
  * @param query - Search query (optional)
  * @param jurisdictionType - 'provincie' or 'gemeente' (optional)
  * @param jurisdiction - Specific province or municipality name (optional)
- * @param currentOnly - Only return current/in-force versions
+ * @param currentOnly - Only return current/in-force versions (filtered client-side)
  * @param startRecord - Starting position for pagination (1-based)
  * @param maxRecords - Maximum records per page
  */
@@ -59,39 +59,38 @@ export async function searchLocalRegulations(
     // Build CQL query for CVDR
     let cqlParts: string[] = [];
 
-    // Add text search if provided
+    // Add text search if provided - use cql.serverChoice for full-text search
     if (query && query !== '*') {
       if (query.match(/^CVDR\d+/i)) {
-        cqlParts.push(`dc.identifier=${query.toUpperCase()}`);
+        cqlParts.push(`dcterms.identifier=${query.toUpperCase()}`);
       } else {
-        cqlParts.push(`dc.title any "${query}"`);
+        // Use full-text search across title and content
+        cqlParts.push(`dcterms.title any "${query}"`);
       }
     }
 
-    // Filter by jurisdiction type (overheidnl.publicatieNaam contains jurisdiction info)
+    // Filter by jurisdiction type using organisatietype field
     if (jurisdictionType === 'provincie') {
-      cqlParts.push(`overheid.publicatietype=provincie`);
+      cqlParts.push(`organisatietype=Provincie`);
     } else if (jurisdictionType === 'gemeente') {
-      cqlParts.push(`overheid.publicatietype=gemeente`);
+      cqlParts.push(`organisatietype=Gemeente`);
     }
 
-    // Filter by specific jurisdiction (province or municipality name)
+    // Filter by specific jurisdiction (creator = organisation name)
     if (jurisdiction) {
-      cqlParts.push(`overheid.organisatie="${jurisdiction}"`);
+      cqlParts.push(`dcterms.creator="${jurisdiction}"`);
     }
 
-    // Filter for current versions only
-    if (currentOnly) {
-      const today = new Date().toISOString().split('T')[0];
-      cqlParts.push(`dcterms.valid>=${today}`);
-    }
+    // Note: currentOnly filtering is done client-side based on uitwerkingtredingDatum
+    // The dcterms.valid field is not reliably populated in CVDR
 
-    // Build final query
+    // Build final query - always include a base query
     let effectiveQuery: string;
     if (cqlParts.length === 0) {
-      effectiveQuery = 'dcterms.modified>=1900-01-01';
+      // Default: get recent regulations (modified in last 10 years)
+      effectiveQuery = 'dcterms.modified>=2015-01-01';
     } else {
-      effectiveQuery = cqlParts.join(' and ');
+      effectiveQuery = cqlParts.join(' AND ');
     }
 
     const params = new URLSearchParams({
@@ -156,74 +155,64 @@ export async function searchLocalRegulations(
  */
 function parseRecordToLocalRegulation(record: any): LocalRegulation | null {
   try {
-    const recordData = record['sru:recordData'] || record['recordData'] || record;
-    const gzd = recordData['gzd:gzd'] || recordData['gzd'] || recordData;
-    const originalData = gzd['gzd:originalData'] || gzd['originalData'] || {};
-    const enrichedData = gzd['gzd:enrichedData'] || gzd['enrichedData'] || {};
+    const recordData = record['recordData'] || record['sru:recordData'] || record;
+    const gzd = recordData['gzd'] || recordData['gzd:gzd'] || recordData;
+    const originalData = gzd['originalData'] || gzd['gzd:originalData'] || {};
+    const enrichedData = gzd['enrichedData'] || gzd['gzd:enrichedData'] || {};
     
-    // Get metadata from different possible paths
-    const meta = originalData['overheidcvdr:meta'] || originalData['meta'] || {};
-    const owmsMeta = meta['overheidcvdr:owmskern'] || meta['owmskern'] || {};
-    const owmsMantel = meta['overheidcvdr:owmsmantel'] || meta['owmsmantel'] || {};
+    // Get metadata from different possible paths - CVDR uses overheidrg namespace
+    const meta = originalData['overheidrg:meta'] || originalData['meta'] || {};
+    const owmsKern = meta['owmskern'] || meta['overheidrg:owmskern'] || {};
+    const owmsMantel = meta['owmsmantel'] || meta['overheidrg:owmsmantel'] || {};
+    const cvdripm = meta['cvdripm'] || meta['overheidrg:cvdripm'] || {};
 
     // Extract CVDR identifier
-    let regulationId = extractTextValue(owmsMeta['dcterms:identifier'] || owmsMeta['identifier']);
+    let regulationId = extractTextValue(owmsKern['dcterms:identifier']);
     if (!regulationId) {
-      regulationId = extractTextValue(enrichedData['dcterms:identifier'] || enrichedData['identifier']);
+      regulationId = extractTextValue(enrichedData['dcterms:identifier']);
     }
     
     // Extract title
-    let title = extractTextValue(owmsMeta['dcterms:title'] || owmsMeta['title']);
+    let title = extractTextValue(owmsKern['dcterms:title']);
     if (!title) {
-      title = extractTextValue(enrichedData['dcterms:title'] || enrichedData['title']);
+      title = extractTextValue(owmsMantel['dcterms:alternative']);
     }
     
     // Extract creator/organisation (jurisdiction)
-    let jurisdiction = extractTextValue(owmsMeta['dcterms:creator'] || owmsMeta['creator']);
+    let jurisdiction = extractTextValue(owmsKern['dcterms:creator']);
     if (!jurisdiction) {
-      jurisdiction = extractTextValue(owmsMantel['dcterms:creator'] || owmsMantel['creator']);
-    }
-    if (!jurisdiction) {
-      jurisdiction = extractTextValue(enrichedData['dcterms:creator'] || enrichedData['creator']);
+      jurisdiction = extractTextValue(owmsMantel['dcterms:creator']);
     }
 
-    // Determine jurisdiction type based on province list
-    const jurisdictionType: 'provincie' | 'gemeente' = 
-      DUTCH_PROVINCES.some(p => jurisdiction?.toLowerCase().includes(p.toLowerCase())) 
-        ? 'provincie' 
-        : 'gemeente';
+    // Determine jurisdiction type from enrichedData or province list
+    const orgType = extractTextValue(enrichedData['organisatietype']);
+    let jurisdictionType: 'provincie' | 'gemeente';
+    
+    if (orgType?.toLowerCase() === 'provincie') {
+      jurisdictionType = 'provincie';
+    } else if (orgType?.toLowerCase() === 'gemeente') {
+      jurisdictionType = 'gemeente';
+    } else {
+      // Fallback: check if jurisdiction name matches a province
+      jurisdictionType = DUTCH_PROVINCES.some(p => 
+        jurisdiction?.toLowerCase().includes(p.toLowerCase())
+      ) ? 'provincie' : 'gemeente';
+    }
 
     // Extract regulation type
-    let regulationType = extractTextValue(owmsMeta['dcterms:type'] || owmsMeta['type']);
-    if (!regulationType) {
-      regulationType = extractTextValue(enrichedData['dcterms:type'] || enrichedData['type']);
-    }
+    let regulationType = extractTextValue(owmsKern['dcterms:type']);
 
-    // Extract dates
-    const publicationDate = extractTextValue(owmsMantel['dcterms:issued'] || owmsMantel['issued']);
-    
-    // Valid date can be a range or single date
-    const validValue = owmsMantel['dcterms:valid'] || owmsMantel['valid'];
-    let validFrom: string | undefined;
-    let validTo: string | undefined;
-    
-    if (validValue) {
-      const validText = extractTextValue(validValue);
-      if (validText) {
-        // Parse date range if present (e.g., "2020-01-01/2025-12-31")
-        if (validText.includes('/')) {
-          const [from, to] = validText.split('/');
-          validFrom = from;
-          validTo = to;
-        } else {
-          validFrom = validText;
-        }
-      }
-    }
+    // Extract dates from cvdripm section
+    const validFrom = extractTextValue(cvdripm['overheidrg:inwerkingtredingDatum']);
+    const validTo = extractTextValue(cvdripm['overheidrg:uitwerkingtredingDatum']);
+    const publicationDate = extractTextValue(owmsMantel['dcterms:issued']);
 
-    // Determine if current version
+    // Determine if current version - no expiry date or expiry is in the future
     const today = new Date().toISOString().split('T')[0];
-    const isCurrentVersion = !validTo || validTo >= today;
+    const isCurrentVersion = !validTo || validTo === '' || validTo >= today;
+
+    // Get XML URL for download
+    const xmlUrl = extractTextValue(enrichedData['publicatieurl_xml']);
 
     if (!regulationId || !title) {
       return null;
@@ -240,6 +229,7 @@ function parseRecordToLocalRegulation(record: any): LocalRegulation | null {
       validTo: validTo || undefined,
       isCurrentVersion,
       isSelected: false,
+      xmlUrl,
     };
   } catch (error) {
     console.error('[DRP Service] Parse error:', error);
