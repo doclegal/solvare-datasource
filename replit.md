@@ -2,7 +2,13 @@
 
 ## Overview
 
-This project is a web application designed to retrieve and process Dutch judicial rulings from the Rechtspraak.nl Open Data API. Its primary purpose is to extract full-text content, apply quality filters, and prepare this data for storage as vector records in Pinecone, enabling semantic search capabilities. The application focuses on ingesting cases with valid "Inhoudsindicatie" (official summaries) and uses a PostgreSQL database for duplicate tracking, ensuring data quality and preventing redundant processing across different namespaces. Key features include an AI enrichment pipeline with real-time Pinecone uploads, automatic saving and restoration of fetched records, and advanced ECLI discovery mechanisms.
+This project is a web application designed to retrieve and process Dutch legal documents from multiple sources into a Pinecone vector database for semantic search. It supports three main data sources:
+
+1. **Rechtspraak.nl** - Court decisions with AI enrichment and quality filtering
+2. **BWB (Basis Wetten Bestand)** - National legislation via KOOP SRU API
+3. **CVDR (Decentrale Regelgeving)** - Provincial and municipal regulations via DRP API
+
+The application uses PostgreSQL for duplicate tracking and ensures data quality by preventing redundant processing across different namespaces.
 
 ## User Preferences
 
@@ -55,7 +61,17 @@ The application follows a client-server architecture with a React-based frontend
     - **SDK**: `@pinecone-database/pinecone` (Node.js).
     - **Embedding Model**: `multilingual-e5-large`.
     - **Index Host**: `rechtstreeks-dmacda9.svc.aped-4627-b74a.pinecone.io`.
-    - **Namespaces**: `WEB_ECLI`, `ECLI_NL`.
+    - **Namespaces**: 
+        - `WEB_ECLI` - Court decisions from web search
+        - `ECLI_NL` - Court decisions from API search
+        - `laws-current` - Currently valid national legislation
+        - `laws-local` - Provincial and municipal regulations
+
+- **CVDR/DRP API**:
+    - **Base URL**: `https://zoekservice.overheid.nl/sru/Search`
+    - **Collection**: CVDR (Centrale Voorziening Decentrale Regelgeving)
+    - **Format**: XML via SRU protocol
+    - Used for provincial and municipal legislation discovery and download.
 
 - **PostgreSQL (Neon)**:
     - Used for duplicate tracking and batch management.
