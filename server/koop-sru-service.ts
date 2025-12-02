@@ -458,13 +458,102 @@ export function parseLegislationToChunks(
     const parsed = xmlParser.parse(xmlContent);
     
     // Find the main legislation content
-    // BWB XML structure: wetgeving > wet-besluit > wettekst > artikel
-    const wetgeving = parsed['wetgeving'] || parsed['wet'] || parsed;
-    const wetBesluit = wetgeving['wet-besluit'] || wetgeving['regeling'] || wetgeving;
-    const wettekst = wetBesluit['wettekst'] || wetBesluit['regeling-tekst'] || wetBesluit;
-
-    // Find all articles WITH their hierarchical context
-    const articles = findAllArticlesWithHierarchy(wettekst);
+    // BWB XML has different structures for different document types:
+    // - Wetten: wetgeving > wet-besluit > wettekst > artikel
+    // - Verdragen: toestand > wetgeving > verdrag > verdragtekst[] > wettekst > artikel
+    // - Regelingen: wetgeving > regeling > regeling-tekst > artikel
+    
+    // Handle 'toestand' wrapper (used by verdragen/treaties)
+    let root = parsed['toestand'] || parsed;
+    const wetgeving = root['wetgeving'] || root['wet'] || root;
+    
+    // Handle verdrag (treaty) structure - may have multiple verdragtekst elements
+    // These contain: Verdrag, Uitvoeringsreglement, Protocol, etc.
+    const verdrag = wetgeving['verdrag'];
+    
+    let articles: ArticleWithHierarchy[] = [];
+    
+    if (verdrag) {
+      // This is a treaty - parse all verdragtekst sections
+      console.log(`[KOOP Parse] ${bwbId}: Detected treaty structure (verdrag)`);
+      
+      const verdragteksten = verdrag['verdragtekst'];
+      const verdragtekstArray = Array.isArray(verdragteksten) ? verdragteksten : (verdragteksten ? [verdragteksten] : []);
+      
+      for (let i = 0; i < verdragtekstArray.length; i++) {
+        const verdragtekst = verdragtekstArray[i];
+        const wettekst = verdragtekst['wettekst'] || verdragtekst['regeling-tekst'] || verdragtekst;
+        
+        // Get the name of this treaty part (e.g., "Verdrag", "Uitvoeringsreglement", "Protocol")
+        const kop = verdragtekst['kop'] || {};
+        const partLabel = kop['label'] || kop['titel'] || `Deel ${i + 1}`;
+        const partLabelStr = typeof partLabel === 'object' ? (partLabel['#text'] || partLabel['_text'] || JSON.stringify(partLabel)) : String(partLabel);
+        
+        console.log(`[KOOP Parse] Processing treaty part ${i + 1}: ${partLabelStr}`);
+        
+        // Create a context with the treaty part information
+        const partContext: HierarchyContext = {
+          // Use boekNummer/Titel to store the treaty part for structure path
+          boekNummer: `verdragtekst${i + 1}`,
+          boekTitel: partLabelStr,
+        };
+        
+        // Find articles in this treaty part
+        const partArticles = findAllArticlesWithHierarchy(wettekst, partContext);
+        console.log(`[KOOP Parse] Found ${partArticles.length} articles in ${partLabelStr}`);
+        articles.push(...partArticles);
+      }
+      
+      // Also check for bijlagen (annexes) in verdrag
+      if (verdrag['bijlage']) {
+        const bijlagen = Array.isArray(verdrag['bijlage']) ? verdrag['bijlage'] : [verdrag['bijlage']];
+        for (let i = 0; i < bijlagen.length; i++) {
+          const bijlage = bijlagen[i];
+          const kop = bijlage['kop'] || {};
+          const bijlageLabel = kop['label'] || kop['titel'] || `Bijlage ${i + 1}`;
+          const bijlageLabelStr = typeof bijlageLabel === 'object' ? (bijlageLabel['#text'] || bijlageLabel['_text'] || JSON.stringify(bijlageLabel)) : String(bijlageLabel);
+          
+          console.log(`[KOOP Parse] Processing bijlage: ${bijlageLabelStr}`);
+          
+          const bijlageContext: HierarchyContext = {
+            boekNummer: `bijlage${i + 1}`,
+            boekTitel: bijlageLabelStr,
+          };
+          
+          const wettekst = bijlage['wettekst'] || bijlage['regeling-tekst'] || bijlage;
+          const bijlageArticles = findAllArticlesWithHierarchy(wettekst, bijlageContext);
+          console.log(`[KOOP Parse] Found ${bijlageArticles.length} articles in ${bijlageLabelStr}`);
+          articles.push(...bijlageArticles);
+        }
+      }
+    } else {
+      // Standard wet-besluit structure
+      const wetBesluit = wetgeving['wet-besluit'] || wetgeving['regeling'] || wetgeving;
+      const wettekst = wetBesluit['wettekst'] || wetBesluit['regeling-tekst'] || wetBesluit;
+      
+      // Find all articles WITH their hierarchical context
+      articles = findAllArticlesWithHierarchy(wettekst);
+      
+      // Also check for bijlagen in wet-besluit
+      if (wetBesluit['bijlage']) {
+        const bijlagen = Array.isArray(wetBesluit['bijlage']) ? wetBesluit['bijlage'] : [wetBesluit['bijlage']];
+        for (let i = 0; i < bijlagen.length; i++) {
+          const bijlage = bijlagen[i];
+          const kop = bijlage['kop'] || {};
+          const bijlageLabel = kop['label'] || kop['titel'] || `Bijlage ${i + 1}`;
+          const bijlageLabelStr = typeof bijlageLabel === 'object' ? (bijlageLabel['#text'] || bijlageLabel['_text'] || JSON.stringify(bijlageLabel)) : String(bijlageLabel);
+          
+          const bijlageContext: HierarchyContext = {
+            boekNummer: `bijlage${i + 1}`,
+            boekTitel: bijlageLabelStr,
+          };
+          
+          const bijlageWettekst = bijlage['wettekst'] || bijlage['regeling-tekst'] || bijlage;
+          const bijlageArticles = findAllArticlesWithHierarchy(bijlageWettekst, bijlageContext);
+          articles.push(...bijlageArticles);
+        }
+      }
+    }
     
     let chunkIndex = 0;
     
@@ -499,11 +588,16 @@ export function parseLegislationToChunks(
       // Check if article is small enough for one chunk (< 500 words)
       const wordCount = articleContent.split(/\s+/).length;
       
+      // Build unique ID suffix from structure path to handle documents with multiple
+      // sections containing the same article number (e.g., Verdrag + Uitvoeringsreglement)
+      // This prevents duplicate articles from overwriting each other in Pinecone
+      const structureIdSuffix = structurePath ? `@${structurePath.replace(/\|/g, '_')}` : '';
+      
       if (wordCount <= 500) {
         // Single chunk for this article
         chunks.push({
           ...baseChunkData,
-          id: `${bwbId}#art${articleNumber}#${validFrom}`,
+          id: `${bwbId}#art${articleNumber}${structureIdSuffix}#${validFrom}`,
           text: formatChunkTextWithHierarchy(articleNumber, articleTitle, articleContent, hierarchy),
           chunkIndex,
         });
@@ -517,7 +611,7 @@ export function parseLegislationToChunks(
             const para = paragraphs[i];
             chunks.push({
               ...baseChunkData,
-              id: `${bwbId}#art${articleNumber}#lid${para.number || i + 1}#${validFrom}`,
+              id: `${bwbId}#art${articleNumber}#lid${para.number || i + 1}${structureIdSuffix}#${validFrom}`,
               text: formatChunkTextWithHierarchy(articleNumber, articleTitle, para.content, hierarchy, para.number),
               paragraphNumber: para.number?.toString() || (i + 1).toString(),
               chunkIndex,
@@ -530,7 +624,7 @@ export function parseLegislationToChunks(
           for (let i = 0; i < textChunks.length; i++) {
             chunks.push({
               ...baseChunkData,
-              id: `${bwbId}#art${articleNumber}#chunk${i + 1}#${validFrom}`,
+              id: `${bwbId}#art${articleNumber}#chunk${i + 1}${structureIdSuffix}#${validFrom}`,
               text: formatChunkTextWithHierarchy(articleNumber, articleTitle, textChunks[i], hierarchy),
               paragraphNumber: textChunks.length > 1 ? `deel${i + 1}` : undefined,
               chunkIndex,
