@@ -523,7 +523,7 @@ export function generateSourceUrl(identificatie: string): string {
 
 /**
  * Get the text content of a regeling from the DSO Presenteren API
- * Uses the /regelingen/{identificatie}/tekst endpoint
+ * Uses the /regelingen/{identificatie}/tekst endpoint for full text
  */
 export async function getRegelingTextContent(identificatie: string): Promise<{
   content: string;
@@ -532,46 +532,60 @@ export async function getRegelingTextContent(identificatie: string): Promise<{
 }> {
   try {
     const apiKey = getApiKey();
-    
-    // Get the full regeling with its text content
-    // The Presenteren API v7 expects identificatie with underscores instead of slashes
     const urlIdentificatie = formatIdentificatieForUrl(identificatie);
-    const url = `${DSO_BASE_URL}/regelingen/${urlIdentificatie}`;
-    console.log(`[DSO Service] Getting text content: ${url}`);
     
-    const response = await axios.get(url, {
+    // First get metadata from the main regeling endpoint
+    const metaUrl = `${DSO_BASE_URL}/regelingen/${urlIdentificatie}`;
+    console.log(`[DSO Service] Getting metadata: ${metaUrl}`);
+    
+    const metaResponse = await axios.get(metaUrl, {
       timeout: 60000,
       headers: {
         'Accept': 'application/hal+json',
         'X-Api-Key': apiKey,
       },
     });
-
-    const data = response.data;
+    const metaData = metaResponse.data;
     
-    // Extract text from the regeling response
-    // DSO v7 format includes embedded tekst or inhoud
+    // Get the full text content from the /tekststructuur endpoint
     let textContent = '';
     
-    // Try to extract text from various possible locations in the response
-    if (data.tekst) {
-      textContent = typeof data.tekst === 'string' ? data.tekst : JSON.stringify(data.tekst);
-    } else if (data.inhoud) {
-      textContent = typeof data.inhoud === 'string' ? data.inhoud : extractTextFromHtml(data.inhoud);
-    } else if (data._embedded?.tekst) {
-      textContent = extractTextFromEmbedded(data._embedded.tekst);
-    } else if (data._embedded?.inhoud) {
-      textContent = extractTextFromEmbedded(data._embedded.inhoud);
-    } else {
-      // Fallback: use the official title and any available description
-      textContent = `${data.officieleTitel || ''}\n\n${data.citeertitel || ''}\n\n${data.omschrijving || ''}`;
+    // First try the tekststructuur link from the metadata response
+    if (metaData._links?.tekststructuur?.href) {
+      try {
+        console.log(`[DSO Service] Getting tekststructuur: ${metaData._links.tekststructuur.href}`);
+        const tekstResponse = await axios.get(metaData._links.tekststructuur.href, {
+          timeout: 120000,
+          headers: {
+            'Accept': 'application/hal+json',
+            'X-Api-Key': apiKey,
+          },
+        });
+        
+        const tekstData = tekstResponse.data;
+        textContent = extractTextFromTekststructuur(tekstData);
+        console.log(`[DSO Service] Tekststructuur extracted ${textContent.length} chars`);
+      } catch (tekstError: any) {
+        console.log(`[DSO Service] tekststructuur failed (${tekstError.response?.status}), trying alternatives...`);
+      }
     }
     
-    // If still no content, try to get the document structure
-    if (!textContent.trim() && data._links?.documentstructuur?.href) {
-      const structureContent = await fetchDocumentStructure(data._links.documentstructuur.href, apiKey);
-      textContent = structureContent;
+    // Fallback to documentstructuur if tekststructuur failed
+    if (!textContent.trim() || textContent.length < 100) {
+      if (metaData._links?.documentstructuur?.href) {
+        console.log(`[DSO Service] Trying documentstructuur...`);
+        textContent = await fetchDocumentStructure(metaData._links.documentstructuur.href, apiKey);
+        console.log(`[DSO Service] Documentstructuur extracted ${textContent.length} chars`);
+      }
     }
+    
+    // Final fallback: use metadata
+    if (!textContent.trim() || textContent.length < 100) {
+      console.log(`[DSO Service] Using metadata fallback for ${identificatie}`);
+      textContent = `${metaData.officieleTitel || ''}\n\n${metaData.citeertitel || ''}\n\n${metaData.omschrijving || ''}`;
+    }
+    
+    console.log(`[DSO Service] Final content length for ${identificatie}: ${textContent.length} chars`);
     
     const hash = crypto.createHash('sha256').update(textContent).digest('hex');
     
@@ -580,10 +594,10 @@ export async function getRegelingTextContent(identificatie: string): Promise<{
       hash,
       metadata: {
         identificatie,
-        officieleTitel: data.officieleTitel,
-        citeertitel: data.citeertitel,
-        type: typeof data.type === 'object' ? (data.type?.waarde || data.type?.code) : data.type,
-        bevoegdGezag: data.bevoegdGezag,
+        officieleTitel: metaData.officieleTitel,
+        citeertitel: metaData.citeertitel,
+        type: typeof metaData.type === 'object' ? (metaData.type?.waarde || metaData.type?.code) : metaData.type,
+        bevoegdGezag: metaData.bevoegdGezag,
         contentLength: textContent.length,
       },
     };
@@ -615,6 +629,62 @@ async function fetchDocumentStructure(url: string, apiKey: string): Promise<stri
     console.error('[DSO Service] Document structure fetch error:', error);
     return '';
   }
+}
+
+/**
+ * Extract text from DSO tekststructuur response
+ * The response has nested tekststructuurDocumentComponenten with inhoud fields containing XML text
+ */
+function extractTextFromTekststructuur(data: any): string {
+  if (!data) return '';
+  
+  const parts: string[] = [];
+  
+  function processComponent(component: any, depth: number = 0): void {
+    if (!component) return;
+    
+    // Build section header from label, nummer, and opschrift
+    const headerParts: string[] = [];
+    if (component.label) {
+      headerParts.push(extractTextFromHtml(component.label));
+    }
+    if (component.nummer) {
+      headerParts.push(extractTextFromHtml(component.nummer));
+    }
+    if (component.opschrift) {
+      const opschriftText = extractTextFromHtml(component.opschrift);
+      if (opschriftText) headerParts.push(opschriftText);
+    }
+    
+    if (headerParts.length > 0) {
+      const prefix = '#'.repeat(Math.min(depth + 1, 4));
+      parts.push(`${prefix} ${headerParts.join(' ')}`);
+    }
+    
+    // Extract content from inhoud field (contains XML text)
+    if (component.inhoud) {
+      const inhoudText = extractTextFromHtml(component.inhoud);
+      if (inhoudText.trim()) {
+        parts.push(inhoudText);
+      }
+    }
+    
+    // Recursively process nested components
+    if (component._embedded?.tekststructuurDocumentComponenten) {
+      for (const child of component._embedded.tekststructuurDocumentComponenten) {
+        processComponent(child, depth + 1);
+      }
+    }
+  }
+  
+  // Start processing from the root embedded components
+  if (data._embedded?.tekststructuurDocumentComponenten) {
+    for (const component of data._embedded.tekststructuurDocumentComponenten) {
+      processComponent(component, 0);
+    }
+  }
+  
+  return parts.filter(p => p.trim()).join('\n\n');
 }
 
 /**
