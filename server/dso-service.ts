@@ -479,12 +479,46 @@ export interface DsoRegelingChunk {
   bevoegd_gezag: string;
   bevoegd_gezag_type: string;
   source: 'omgevingswet';
+  source_url: string;
   article_number?: string;
   seq_in_article: number;
   structure_path?: string;
   version_date?: string;
   is_current_version: boolean;
   chunkIndex: number;
+}
+
+/**
+ * Determine the type of bevoegd gezag (authority type) from the identificatie
+ * Format: /akn/nl/act/{authority_code}/{year}/{type}
+ * Authority codes: gm = gemeente, pv = provincie, ws = waterschap, mn = ministerie
+ */
+export function determineBevoegdGezagType(identificatie: string): string {
+  // Extract authority code from identificatie
+  // Example: /akn/nl/act/gm0047/2020/omgevingsplan -> gm
+  const match = identificatie.match(/\/akn\/nl\/act\/([a-z]+)\d+\//i);
+  if (match) {
+    const prefix = match[1].toLowerCase();
+    switch (prefix) {
+      case 'gm': return 'gemeente';
+      case 'pv': return 'provincie';
+      case 'ws': return 'waterschap';
+      case 'mn': return 'ministerie';
+      case 'mnre': return 'ministerie';
+      default: return 'onbekend';
+    }
+  }
+  return 'onbekend';
+}
+
+/**
+ * Generate source URL for a regeling
+ * Returns the URL to view this document in the DSO viewer
+ */
+export function generateSourceUrl(identificatie: string): string {
+  // DSO viewer URL format - uses the identificatie with underscores
+  const urlIdentificatie = formatIdentificatieForUrl(identificatie);
+  return `https://omgevingswet.overheid.nl/regels-op-de-kaart/viewer/regeling/${urlIdentificatie}`;
 }
 
 /**
@@ -793,6 +827,9 @@ function createDsoChunk(options: {
     title, type, bevoegdGezag, sectionTitle, sectionContent, structurePath
   );
   
+  // Generate source URL for this regeling
+  const sourceUrl = generateSourceUrl(regelingId);
+  
   return {
     id: `${regelingId}#${chunkIndex}#${seqInArticle}#${versionDate || 'current'}`,
     text: formattedText,
@@ -802,6 +839,7 @@ function createDsoChunk(options: {
     bevoegd_gezag: bevoegdGezag,
     bevoegd_gezag_type: bevoegdGezagType,
     source: 'omgevingswet',
+    source_url: sourceUrl,
     article_number: sectionTitle,
     seq_in_article: seqInArticle,
     structure_path: structurePath,

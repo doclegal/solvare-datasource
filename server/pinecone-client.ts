@@ -811,6 +811,7 @@ export async function upsertDsoRegelingChunksToPinecone(
           bevoegd_gezag: chunk.bevoegd_gezag,
           bevoegd_gezag_type: chunk.bevoegd_gezag_type,
           source: chunk.source,
+          source_url: chunk.source_url,
           is_current_version: chunk.is_current_version,
         };
         

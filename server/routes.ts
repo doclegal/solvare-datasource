@@ -2312,7 +2312,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { 
         getRegelingTextContent, 
         parseDsoRegelingToChunks,
-        isDsoApiKeyConfigured 
+        isDsoApiKeyConfigured,
+        determineBevoegdGezagType
       } = await import('./dso-service');
       const { upsertDsoRegelingChunksToPinecone } = await import('./pinecone-client');
       
@@ -2388,8 +2389,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           const title = metadata.officieleTitel || regData.officieleTitel || `Regeling ${regelingId}`;
           const type = metadata.type || regData.type || 'onbekend';
-          const bevoegdGezag = metadata.bevoegdGezag?.naam || regData.bevoegdGezag?.naam || 'Onbekend';
-          const bevoegdGezagType = regData.bevoegdGezagType || 'onbekend';
+          
+          // Get bevoegdGezag from metadata or regData
+          // Also try to extract from the title if not available (e.g., "Omgevingsplan gemeente Veendam")
+          let bevoegdGezag = metadata.bevoegdGezag?.naam || regData.bevoegdGezag?.naam;
+          if (!bevoegdGezag || bevoegdGezag === 'Onbekend') {
+            // Try to extract from title
+            const titleMatch = title.match(/(?:gemeente|provincie|waterschap)\s+([A-Za-z\s\-']+)/i);
+            if (titleMatch) {
+              bevoegdGezag = titleMatch[0]; // e.g., "gemeente Veendam"
+            } else {
+              bevoegdGezag = 'Onbekend';
+            }
+          }
+          
+          // Determine bevoegdGezagType from the identificatie code
+          const bevoegdGezagType = determineBevoegdGezagType(regelingId);
           
           // Parse text into chunks
           const chunks = parseDsoRegelingToChunks(
