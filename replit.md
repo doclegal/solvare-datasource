@@ -90,14 +90,24 @@ The application follows a client-server architecture with a React-based frontend
 
 ## Recent Changes
 
-### 2025-12-02: Fixed article number truncation bug
-**Problem**: Article numbers like "2.20", "3.20" were being stored as "2.2", "3.2" in Pinecone, losing trailing zeros.
+### 2025-12-02: Fixed article number truncation bug (COMPLETE FIX)
+**Problem**: Article numbers like "2.20", "3.20" were being stored as "2.2", "3.2" in Pinecone, losing trailing zeros. This caused articles like "Artikel 2.20 - Rechten verbonden aan het merk" from the Benelux IP treaty (BWBV0001716) to be missing from the database.
 
-**Cause**: The `fast-xml-parser` library was configured with `parseAttributeValue: true`, which automatically converts numeric-looking strings to JavaScript numbers. Since `2.20` as a number equals `2.2`, the trailing zero was lost.
+**Root Cause**: The `fast-xml-parser` library has TWO settings that affect numeric conversion:
+1. `parseAttributeValue` - Controls conversion of attribute values (e.g., `status="2.20"`)
+2. `parseTagValue` - Controls conversion of text content (e.g., `<nr>2.20</nr>`)
 
-**Solution**: Changed `parseAttributeValue: false` in all three XML parser configurations:
-- `server/koop-sru-service.ts` - BWB national legislation
-- `server/drp-service.ts` - CVDR local regulations  
-- `server/rechtspraak-api.ts` - Court decisions
+The initial fix only set `parseAttributeValue: false`, but the article numbers in XML are stored as text content (`<nr>2.20</nr>`), not attributes. This meant the text "2.20" was still being converted to the JavaScript number `2.2`.
 
-This ensures all attribute values remain as strings, preserving the original formatting of article numbers.
+**Complete Solution**: Added `parseTagValue: false` to all three XML parser configurations:
+- `server/koop-sru-service.ts` - BWB national legislation (lines 28-35)
+- `server/drp-service.ts` - CVDR local regulations (lines 26-33)
+- `server/rechtspraak-api.ts` - Court decisions (lines 14-20)
+
+**Verification**: After this fix, article numbers are correctly preserved as strings:
+```
+Before: kop.nr._text = 2.2 (number)
+After:  kop.nr._text = "2.20" (string)
+```
+
+**Action Required**: Re-download and re-upload affected laws (like BWBV0001716) to Pinecone to get the missing articles with correct numbering.
