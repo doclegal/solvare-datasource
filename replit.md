@@ -67,6 +67,7 @@ The application follows a client-server architecture with a React-based frontend
         - `ECLI_NL` - Court decisions from API search
         - `laws-current` - Currently valid national legislation
         - `laws-local` - Provincial and municipal regulations
+        - `laws-dso` - Environmental regulations under the Omgevingswet (DSO)
 
 - **CVDR/DRP API**:
     - **Base URL**: `https://zoekservice.overheid.nl/sru/Search`
@@ -92,6 +93,21 @@ The application follows a client-server architecture with a React-based frontend
     - Used for web search ECLI discovery.
 
 ## Recent Changes
+
+### 2025-12-02: DSO Omgevingsplannen Chunking & Pinecone Upload
+**Feature**: Complete implementation of DSO document processing pipeline for uploading Omgevingswet documents to Pinecone.
+
+**Components Added**:
+1. **Database Tracking**: New `uploaded_dso_regelingen` table for duplicate prevention with content hash
+2. **Storage Functions**: `trackUploadedDsoRegeling`, `isDsoRegelingVersionUploaded`, `checkDsoRegelingDuplicates`
+3. **API Routes**: 
+   - POST `/api/omgevingsplannen/check-duplicates` - Check if documents are already in Pinecone
+   - POST `/api/omgevingsplannen/download` - Download, chunk and upload selected documents (SSE progress)
+4. **Frontend**: Updated Omgevingsplannen.tsx with document selection checkboxes, upload button, and real-time progress display
+
+**Workflow**: Search documents → Select documents → Click "Upload naar Pinecone" → Documents are chunked and uploaded to `laws-dso` namespace
+
+**Namespace**: `laws-dso` in Pinecone for all DSO/Omgevingswet documents
 
 ### 2025-12-02: Fixed article number truncation bug (COMPLETE FIX)
 **Problem**: Article numbers like "2.20", "3.20" were being stored as "2.2", "3.2" in Pinecone, losing trailing zeros. This caused articles like "Artikel 2.20 - Rechten verbonden aan het merk" from the Benelux IP treaty (BWBV0001716) to be missing from the database.
