@@ -390,3 +390,100 @@ export const lawUploadStatusSchema = z.object({
 });
 
 export type LawUploadStatus = z.infer<typeof lawUploadStatusSchema>;
+
+// ============================================================================
+// LOKALE REGELGEVING (Local Regulations) - Provincial/Municipal from DRP API
+// ============================================================================
+
+// Database table: Track uploaded local regulations to Pinecone
+export const uploadedLocalRegulations = pgTable("uploaded_local_regulations", {
+  id: serial("id").primaryKey(),
+  regulationId: varchar("regulation_id", { length: 100 }).notNull(), // CVDR ID (e.g., CVDR123456)
+  title: text("title").notNull(),
+  jurisdiction: varchar("jurisdiction", { length: 255 }).notNull(), // Province or municipality name
+  jurisdictionType: varchar("jurisdiction_type", { length: 50 }).notNull(), // 'provincie' or 'gemeente'
+  regulationType: varchar("regulation_type", { length: 100 }), // omgevingsverordening, verordening, etc.
+  validFrom: varchar("valid_from", { length: 20 }),
+  validTo: varchar("valid_to", { length: 20 }),
+  versionDate: varchar("version_date", { length: 20 }),
+  xmlHash: varchar("xml_hash", { length: 64 }).notNull(),
+  chunkCount: integer("chunk_count").notNull().default(0),
+  namespace: varchar("namespace", { length: 100 }).notNull().default("laws-local"),
+  uploadedAt: timestamp("uploaded_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniqueRegulationValidity: uniqueIndex("unique_regulation_validity").on(table.regulationId, table.versionDate),
+  regulationIdIdx: index("regulation_id_idx").on(table.regulationId),
+  jurisdictionIdx: index("jurisdiction_idx").on(table.jurisdiction),
+  localNamespaceIdx: index("local_namespace_idx").on(table.namespace),
+}));
+
+export const insertUploadedLocalRegulationSchema = createInsertSchema(uploadedLocalRegulations).omit({
+  id: true,
+  uploadedAt: true,
+  updatedAt: true,
+});
+
+export type InsertUploadedLocalRegulation = z.infer<typeof insertUploadedLocalRegulationSchema>;
+export type UploadedLocalRegulation = typeof uploadedLocalRegulations.$inferSelect;
+
+// Local Regulation record from DRP API search
+export const localRegulationSchema = z.object({
+  regulationId: z.string(), // CVDR ID (e.g., CVDR123456_1)
+  title: z.string(),
+  jurisdiction: z.string(), // Province or municipality name
+  jurisdictionType: z.enum(['provincie', 'gemeente']),
+  regulationType: z.string().optional(), // omgevingsverordening, verordening, etc.
+  publicationDate: z.string().optional(),
+  validFrom: z.string().optional(),
+  validTo: z.string().optional(),
+  isCurrentVersion: z.boolean().default(true),
+  xmlUrl: z.string().optional(),
+  isSelected: z.boolean().optional().default(false),
+});
+
+export type LocalRegulation = z.infer<typeof localRegulationSchema>;
+
+// Local Regulation chunk for Pinecone with required metadata
+export const localRegulationChunkSchema = z.object({
+  id: z.string(), // <CVDR-ID>#<article>#<seq>#<version-date>
+  text: z.string(),
+  
+  // Required metadata as per spec
+  regulation_id: z.string(), // CVDR ID
+  regulation_title: z.string(),
+  jurisdiction: z.string(), // Province or municipality
+  type: z.string().default("omgevingsverordening"), // regulation type
+  source: z.string().default("decentrale_regelgeving"),
+  article_number: z.string().optional(),
+  paragraph_number: z.string().optional(),
+  seq_in_article: z.number().default(0), // For reconstruction order
+  structure_path: z.string().optional(), // chapter/section/article hierarchy
+  version_date: z.string().optional(),
+  is_current_version: z.boolean().default(true),
+  
+  // Additional useful fields
+  jurisdictionType: z.string().optional(), // 'provincie' or 'gemeente'
+  chunkIndex: z.number().optional(),
+  totalChunks: z.number().optional(),
+});
+
+export type LocalRegulationChunk = z.infer<typeof localRegulationChunkSchema>;
+
+// Request to check duplicate local regulations
+export const checkDuplicateLocalRegulationsRequestSchema = z.object({
+  regulationIds: z.array(z.string()),
+  versionDate: z.string().optional(),
+});
+
+export type CheckDuplicateLocalRegulationsRequest = z.infer<typeof checkDuplicateLocalRegulationsRequestSchema>;
+
+// Response for duplicate local regulation check
+export const localRegulationUploadStatusSchema = z.object({
+  regulationId: z.string(),
+  isUploaded: z.boolean(),
+  uploadedAt: z.string().optional(),
+  chunkCount: z.number().optional(),
+});
+
+export type LocalRegulationUploadStatus = z.infer<typeof localRegulationUploadStatusSchema>;
