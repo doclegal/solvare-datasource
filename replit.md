@@ -94,6 +94,24 @@ The application follows a client-server architecture with a React-based frontend
 
 ## Recent Changes
 
+### 2025-12-03: Upload Verificatie Systeem
+**Feature**: Alle uploads naar Pinecone worden nu geverifieerd na voltooiing. Dit voorkomt stille fouten waarbij uploads onvolledig zijn maar als succes worden gerapporteerd.
+
+**Probleem opgelost**: Bij grote wetten (zoals de Awb met 801 chunks) kon het voorkomen dat slechts een deel van de chunks daadwerkelijk in Pinecone terechtkwam (bijv. 200 van 801), terwijl de UI meldde dat de upload succesvol was.
+
+**Oplossing**:
+1. **Verificatiefunctie**: `verifyLawUploadInPinecone()` telt het daadwerkelijke aantal vectoren in Pinecone na upload
+2. **Return type aangepast**: Upload functies retourneren nu `{ verified, expected, isComplete }`
+3. **Route logica**: Uploads worden alleen als succes gemarkeerd wanneer verificatie bevestigt dat ALLE chunks aanwezig zijn
+4. **UI feedback**: Toont "geüpload en geverifieerd ✓" met exacte tellingen (bijv. "177/177")
+
+**Scope**: Verificatie is toegepast op:
+- Nationale wetgeving (BWB) → `laws-current` namespace
+- Lokale regelgeving (CVDR) → `laws-local` namespace  
+- DSO/Omgevingswet → `laws-dso` namespace
+
+**Techniek**: Gebruikt Pinecone's `listPaginated()` met BWB-ID prefix om alle vectoren te enumereren.
+
 ### 2025-12-02: DSO Omgevingsplannen Chunking & Pinecone Upload
 **Feature**: Complete implementation of DSO document processing pipeline for uploading Omgevingswet documents to Pinecone.
 
