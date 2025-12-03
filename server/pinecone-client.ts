@@ -482,7 +482,7 @@ export async function upsertLawChunksToPinecone(
   indexHost: string,
   namespace: string = 'laws-current',
   batchSize: number = 50
-): Promise<{ success: number; errors: string[] }> {
+): Promise<{ success: number; errors: string[]; verified: number; expected: number; isComplete: boolean }> {
   const client = initializePinecone();
   
   // Extract index name from host for index access
@@ -618,10 +618,130 @@ export async function upsertLawChunksToPinecone(
   
   console.log(`[Pinecone Laws] Upload complete: ${successCount} success, ${errors.length} errors`);
   
+  // Step 4: Verify upload by counting vectors in Pinecone
+  console.log(`[Pinecone Laws] Verifying upload...`);
+  const bwbId = chunks[0]?.bwbId;
+  let verifiedCount = 0;
+  
+  if (bwbId) {
+    try {
+      // Wait a moment for Pinecone to index
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Count vectors with this BWB ID prefix
+      const ns = index.namespace(namespace);
+      let allIds: string[] = [];
+      let paginationToken: string | undefined;
+      
+      do {
+        const listResponse = await ns.listPaginated({
+          prefix: bwbId,
+          limit: 100,
+          paginationToken,
+        });
+        
+        if (listResponse.vectors) {
+          allIds.push(...listResponse.vectors.map(v => v.id));
+        }
+        paginationToken = listResponse.pagination?.next;
+      } while (paginationToken);
+      
+      verifiedCount = allIds.length;
+      console.log(`[Pinecone Laws] Verification: ${verifiedCount} vectors found in Pinecone for ${bwbId}`);
+      
+      // Check if verified count matches expected
+      if (verifiedCount < chunks.length) {
+        const missing = chunks.length - verifiedCount;
+        console.warn(`[Pinecone Laws] WARNING: ${missing} chunks may be missing! Expected ${chunks.length}, found ${verifiedCount}`);
+        errors.push(`Verificatie: ${missing} chunks ontbreken (verwacht: ${chunks.length}, gevonden: ${verifiedCount})`);
+      } else if (verifiedCount === chunks.length) {
+        console.log(`[Pinecone Laws] SUCCESS: All ${chunks.length} chunks verified in Pinecone`);
+      } else {
+        // More vectors than expected (could be from previous upload)
+        console.log(`[Pinecone Laws] Found ${verifiedCount} vectors (expected ${chunks.length}) - includes previous versions`);
+      }
+    } catch (verifyError: any) {
+      console.error(`[Pinecone Laws] Verification failed:`, verifyError.message);
+      errors.push(`Verificatie mislukt: ${verifyError.message}`);
+    }
+  }
+  
   return {
     success: successCount,
     errors,
+    verified: verifiedCount,
+    expected: chunks.length,
+    isComplete: verifiedCount >= chunks.length,
   };
+}
+
+/**
+ * Verify that a law is completely uploaded to Pinecone
+ * Returns detailed verification results
+ */
+export async function verifyLawUpload(
+  bwbId: string,
+  indexHost: string,
+  expectedChunkCount: number,
+  namespace: string = 'laws-current'
+): Promise<{
+  verified: boolean;
+  vectorCount: number;
+  expected: number;
+  missing: number;
+  message: string;
+}> {
+  const client = initializePinecone();
+  const indexName = indexHost.split('.')[0];
+  const index = client.index(indexName, indexHost);
+  const ns = index.namespace(namespace);
+  
+  console.log(`[Pinecone Verify] Checking ${bwbId} in namespace: ${namespace}`);
+  
+  try {
+    let allIds: string[] = [];
+    let paginationToken: string | undefined;
+    
+    do {
+      const listResponse = await ns.listPaginated({
+        prefix: bwbId,
+        limit: 100,
+        paginationToken,
+      });
+      
+      if (listResponse.vectors) {
+        allIds.push(...listResponse.vectors.map(v => v.id));
+      }
+      paginationToken = listResponse.pagination?.next;
+    } while (paginationToken);
+    
+    const vectorCount = allIds.length;
+    const missing = Math.max(0, expectedChunkCount - vectorCount);
+    const verified = vectorCount >= expectedChunkCount;
+    
+    const message = verified
+      ? `✅ Volledig: ${vectorCount} vectoren gevonden (verwacht: ${expectedChunkCount})`
+      : `❌ Onvolledig: ${vectorCount} vectoren gevonden, ${missing} ontbreken (verwacht: ${expectedChunkCount})`;
+    
+    console.log(`[Pinecone Verify] ${bwbId}: ${message}`);
+    
+    return {
+      verified,
+      vectorCount,
+      expected: expectedChunkCount,
+      missing,
+      message,
+    };
+  } catch (error: any) {
+    console.error(`[Pinecone Verify] Error verifying ${bwbId}:`, error.message);
+    return {
+      verified: false,
+      vectorCount: 0,
+      expected: expectedChunkCount,
+      missing: expectedChunkCount,
+      message: `Verificatie mislukt: ${error.message}`,
+    };
+  }
 }
 
 // ============================================================================
@@ -639,7 +759,7 @@ export async function upsertLocalRegulationChunksToPinecone(
   indexHost: string,
   namespace: string = 'laws-local',
   batchSize: number = 50
-): Promise<{ success: number; errors: string[] }> {
+): Promise<{ success: number; errors: string[]; verified: number; expected: number; isComplete: boolean }> {
   const client = initializePinecone();
   
   const indexName = indexHost.split('.')[0];
@@ -742,9 +862,52 @@ export async function upsertLocalRegulationChunksToPinecone(
   
   console.log(`[Pinecone Local] Upload complete: ${successCount} success, ${errors.length} errors`);
   
+  // Verify upload by counting vectors in Pinecone
+  console.log(`[Pinecone Local] Verifying upload...`);
+  const regulationId = chunks[0]?.regulation_id;
+  let verifiedCount = 0;
+  
+  if (regulationId) {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const ns = index.namespace(namespace);
+      let allIds: string[] = [];
+      let paginationToken: string | undefined;
+      
+      do {
+        const listResponse = await ns.listPaginated({
+          prefix: regulationId,
+          limit: 100,
+          paginationToken,
+        });
+        
+        if (listResponse.vectors) {
+          allIds.push(...listResponse.vectors.map(v => v.id));
+        }
+        paginationToken = listResponse.pagination?.next;
+      } while (paginationToken);
+      
+      verifiedCount = allIds.length;
+      console.log(`[Pinecone Local] Verification: ${verifiedCount} vectors found for ${regulationId}`);
+      
+      if (verifiedCount < chunks.length) {
+        const missing = chunks.length - verifiedCount;
+        console.warn(`[Pinecone Local] WARNING: ${missing} chunks may be missing!`);
+        errors.push(`Verificatie: ${missing} chunks ontbreken (verwacht: ${chunks.length}, gevonden: ${verifiedCount})`);
+      }
+    } catch (verifyError: any) {
+      console.error(`[Pinecone Local] Verification failed:`, verifyError.message);
+      errors.push(`Verificatie mislukt: ${verifyError.message}`);
+    }
+  }
+  
   return {
     success: successCount,
     errors,
+    verified: verifiedCount,
+    expected: chunks.length,
+    isComplete: verifiedCount >= chunks.length,
   };
 }
 
@@ -765,7 +928,7 @@ export async function upsertDsoRegelingChunksToPinecone(
   indexHost: string,
   namespace: string = 'laws-dso',
   batchSize: number = 50
-): Promise<{ success: number; errors: string[] }> {
+): Promise<{ success: number; errors: string[]; verified: number; expected: number; isComplete: boolean }> {
   const client = initializePinecone();
   
   const indexName = indexHost.split('.')[0];
@@ -858,8 +1021,51 @@ export async function upsertDsoRegelingChunksToPinecone(
   
   console.log(`[Pinecone DSO] Upload complete: ${successCount} success, ${errors.length} errors`);
   
+  // Verify upload by counting vectors in Pinecone
+  console.log(`[Pinecone DSO] Verifying upload...`);
+  const regelingId = chunks[0]?.regeling_id;
+  let verifiedCount = 0;
+  
+  if (regelingId) {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const ns = index.namespace(namespace);
+      let allIds: string[] = [];
+      let paginationToken: string | undefined;
+      
+      do {
+        const listResponse = await ns.listPaginated({
+          prefix: regelingId,
+          limit: 100,
+          paginationToken,
+        });
+        
+        if (listResponse.vectors) {
+          allIds.push(...listResponse.vectors.map(v => v.id));
+        }
+        paginationToken = listResponse.pagination?.next;
+      } while (paginationToken);
+      
+      verifiedCount = allIds.length;
+      console.log(`[Pinecone DSO] Verification: ${verifiedCount} vectors found for ${regelingId}`);
+      
+      if (verifiedCount < chunks.length) {
+        const missing = chunks.length - verifiedCount;
+        console.warn(`[Pinecone DSO] WARNING: ${missing} chunks may be missing!`);
+        errors.push(`Verificatie: ${missing} chunks ontbreken (verwacht: ${chunks.length}, gevonden: ${verifiedCount})`);
+      }
+    } catch (verifyError: any) {
+      console.error(`[Pinecone DSO] Verification failed:`, verifyError.message);
+      errors.push(`Verificatie mislukt: ${verifyError.message}`);
+    }
+  }
+  
   return {
     success: successCount,
     errors,
+    verified: verifiedCount,
+    expected: chunks.length,
+    isComplete: verifiedCount >= chunks.length,
   };
 }

@@ -1952,9 +1952,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Upload to Pinecone
           const namespace = currentOnly ? 'laws-current' : 'laws-historic';
-          await upsertLawChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
+          const uploadResult = await upsertLawChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
           
-          // Track in database
+          // Check if upload was complete
+          if (!uploadResult.isComplete) {
+            const errorMsg = `Upload onvolledig: ${uploadResult.verified} van ${uploadResult.expected} chunks geverifieerd`;
+            console.error(`[Upload] ${bwbId}: ${errorMsg}`);
+            
+            // Report detailed error to user
+            errors.push({ 
+              bwbId, 
+              error: errorMsg,
+              details: {
+                expected: uploadResult.expected,
+                verified: uploadResult.verified,
+                uploadErrors: uploadResult.errors,
+              }
+            });
+            
+            sendProgress({
+              type: 'error',
+              message: `${bwbId}: ${errorMsg}`,
+              bwbId,
+              expected: uploadResult.expected,
+              verified: uploadResult.verified,
+            });
+            
+            processedCount++;
+            continue;
+          }
+          
+          // Upload verified - track in database with verified count
           await storage.trackUploadedLaw({
             bwbId,
             title,
@@ -1962,24 +1990,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             validFrom: versionInfo.validFrom,
             validTo: versionInfo.validTo,
             xmlHash,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified, // Use verified count, not expected
             namespace,
           });
           
-          totalChunks += chunks.length;
+          totalChunks += uploadResult.verified;
           results.push({
             bwbId,
             title,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
             validFrom: versionInfo.validFrom,
             validTo: versionInfo.validTo,
+            verified: true,
           });
           
           sendProgress({
             type: 'uploaded',
-            message: `${bwbId}: ${chunks.length} chunks geüpload naar Pinecone`,
+            message: `${bwbId}: ${uploadResult.verified} chunks geüpload en geverifieerd ✓`,
             bwbId,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
+            verified: true,
           });
           
         } catch (error: any) {
@@ -2229,9 +2259,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Upload to Pinecone
           const namespace = 'laws-local';
-          await upsertLocalRegulationChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
+          const uploadResult = await upsertLocalRegulationChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
           
-          // Track in database
+          // Check if upload was complete
+          if (!uploadResult.isComplete) {
+            const errorMsg = `Upload onvolledig: ${uploadResult.verified} van ${uploadResult.expected} chunks geverifieerd`;
+            console.error(`[Upload Local] ${regulationId}: ${errorMsg}`);
+            
+            errors.push({ 
+              regulationId, 
+              error: errorMsg,
+              details: {
+                expected: uploadResult.expected,
+                verified: uploadResult.verified,
+              }
+            });
+            
+            sendProgress({
+              type: 'error',
+              message: `${regulationId}: ${errorMsg}`,
+              regulationId,
+              expected: uploadResult.expected,
+              verified: uploadResult.verified,
+            });
+            
+            processedCount++;
+            continue;
+          }
+          
+          // Track in database with verified count
           await storage.trackUploadedLocalRegulation({
             regulationId,
             title,
@@ -2242,23 +2298,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
             validTo: regData.validTo,
             versionDate,
             xmlHash,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
             namespace,
           });
           
-          totalChunks += chunks.length;
+          totalChunks += uploadResult.verified;
           results.push({
             regulationId,
             title,
             jurisdiction,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
+            verified: true,
           });
           
           sendProgress({
             type: 'uploaded',
-            message: `${regulationId}: ${chunks.length} chunks geüpload naar Pinecone`,
+            message: `${regulationId}: ${uploadResult.verified} chunks geüpload en geverifieerd ✓`,
             regulationId,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
+            verified: true,
           });
           
         } catch (error: any) {
@@ -2596,9 +2654,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Upload to Pinecone
           const namespace = 'laws-dso';
-          await upsertDsoRegelingChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
+          const uploadResult = await upsertDsoRegelingChunksToPinecone(chunks, PINECONE_INDEX_HOST, namespace);
           
-          // Track in database
+          // Check if upload was complete
+          if (!uploadResult.isComplete) {
+            const errorMsg = `Upload onvolledig: ${uploadResult.verified} van ${uploadResult.expected} chunks geverifieerd`;
+            console.error(`[Upload DSO] ${regelingId}: ${errorMsg}`);
+            
+            errors.push({ 
+              regelingId, 
+              error: errorMsg,
+              details: {
+                expected: uploadResult.expected,
+                verified: uploadResult.verified,
+              }
+            });
+            
+            sendProgress({
+              type: 'error',
+              message: `${regelingId}: ${errorMsg}`,
+              regelingId,
+              expected: uploadResult.expected,
+              verified: uploadResult.verified,
+            });
+            
+            processedCount++;
+            continue;
+          }
+          
+          // Track in database with verified count
           await storage.trackUploadedDsoRegeling({
             regelingId,
             title,
@@ -2607,24 +2691,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
             bevoegdGezagType,
             versionDate: today,
             contentHash,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
             namespace,
           });
           
-          totalChunks += chunks.length;
+          totalChunks += uploadResult.verified;
           results.push({
             regelingId,
             title,
             type,
             bevoegdGezag,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
+            verified: true,
           });
           
           sendProgress({
             type: 'uploaded',
-            message: `${regelingId}: ${chunks.length} chunks geüpload naar Pinecone`,
+            message: `${regelingId}: ${uploadResult.verified} chunks geüpload en geverifieerd ✓`,
             regelingId,
-            chunkCount: chunks.length,
+            chunkCount: uploadResult.verified,
+            verified: true,
           });
           
         } catch (error: any) {
