@@ -1622,6 +1622,169 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // ECLI EXTERNAL API - For cross-app integration
+  // ============================================================================
+
+  /**
+   * External API endpoint for searching ECLI documents and uploading to Pinecone
+   * Used by linked apps to trigger search → enrich → upload flow
+   * 
+   * POST /api/ecli/search-and-upload
+   * Body: { searchTerm: string, maxResults?: number, enrichWithAI?: boolean }
+   * 
+   * The searchTerm is automatically prefixed with "ECLI:NL:"
+   */
+  app.post('/api/ecli/search-and-upload', async (req: Request, res: Response) => {
+    try {
+      const { searchTerm, maxResults = 50, enrichWithAI = true } = req.body;
+      
+      if (!searchTerm || typeof searchTerm !== 'string') {
+        return res.status(400).json({ 
+          success: false,
+          error: 'searchTerm is vereist' 
+        });
+      }
+      
+      // Combine with ECLI:NL: prefix
+      const fullSearchTerm = `ECLI:NL: ${searchTerm}`;
+      const limitedResults = Math.min(maxResults, 50); // Cap at 50
+      
+      console.log(`[External API] Search and upload started: "${fullSearchTerm}" (max ${limitedResults})`);
+      
+      // Import discovery service
+      const { discoverEclisFromSearch } = await import('./discovery/discovery-service');
+      
+      // Step 1: Search and discover ECLIs
+      const { eclis, preparedRecords } = await discoverEclisFromSearch(fullSearchTerm, {
+        maxResults: limitedResults,
+      });
+      
+      console.log(`[External API] Found ${eclis.length} valid ECLIs`);
+      
+      if (eclis.length === 0) {
+        return res.json({
+          success: true,
+          searchTerm: fullSearchTerm,
+          found: 0,
+          enriched: 0,
+          uploaded: 0,
+          eclis: [],
+          message: 'Geen geldige ECLI\'s gevonden voor deze zoekopdracht',
+        });
+      }
+      
+      // Step 2: Check for duplicates
+      const duplicateCheck = await storage.checkDuplicates('WEB_ECLI', eclis);
+      const newEclis = eclis.filter(ecli => 
+        !duplicateCheck.statuses.find(s => s.ecli === ecli && s.isProcessed)
+      );
+      const newRecords = preparedRecords.filter(r => newEclis.includes(r.ecli));
+      
+      console.log(`[External API] ${newEclis.length} new ECLIs (${eclis.length - newEclis.length} duplicates)`);
+      
+      if (newRecords.length === 0) {
+        return res.json({
+          success: true,
+          searchTerm: fullSearchTerm,
+          found: eclis.length,
+          duplicates: eclis.length,
+          enriched: 0,
+          uploaded: 0,
+          eclis: eclis,
+          message: 'Alle gevonden ECLI\'s zijn al eerder geüpload',
+        });
+      }
+      
+      // Step 3: Enrich with AI (if enabled)
+      let enrichedRecords = newRecords;
+      let enrichedCount = 0;
+      
+      if (enrichWithAI) {
+        console.log(`[External API] Enriching ${newRecords.length} records with AI...`);
+        
+        enrichedRecords = [];
+        for (const record of newRecords) {
+          try {
+            // Fetch full text
+            const fullText = await fetchFullText(record.ecli);
+            
+            // Generate AI summary
+            const aiSummary = await generateAISummary(fullText, record.ecli);
+            
+            enrichedRecords.push({
+              ...record,
+              fullText,
+              ai_title: aiSummary.title,
+              ai_inhoudsindicatie: aiSummary.inhoudsindicatie,
+              ai_feiten: aiSummary.feiten,
+              ai_geschil: aiSummary.geschil,
+              ai_beslissing: aiSummary.beslissing,
+              ai_motivering: aiSummary.motivering,
+            });
+            enrichedCount++;
+            
+            console.log(`[External API] Enriched ${record.ecli}`);
+            
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (error: any) {
+            console.error(`[External API] Failed to enrich ${record.ecli}:`, error.message);
+            // Still include record without AI enrichment
+            enrichedRecords.push(record);
+          }
+        }
+      }
+      
+      // Step 4: Upload to Pinecone (WEB_ECLI namespace)
+      console.log(`[External API] Uploading ${enrichedRecords.length} records to Pinecone...`);
+      
+      const uploadResult = await upsertRecordsToPinecone(
+        PINECONE_INDEX_HOST,
+        enrichedRecords,
+        'WEB_ECLI',
+        10
+      );
+      
+      // Step 5: Mark as processed
+      if (uploadResult.successfulEclis && uploadResult.successfulEclis.length > 0) {
+        const markValues = uploadResult.successfulEclis.map(ecli => ({ 
+          ecli, 
+          namespace: 'WEB_ECLI' 
+        }));
+        
+        await db
+          .insert(processedEclis)
+          .values(markValues)
+          .onConflictDoNothing();
+          
+        console.log(`[External API] Marked ${uploadResult.successfulEclis.length} ECLIs as processed`);
+      }
+      
+      console.log(`[External API] Upload complete: ${uploadResult.successCount} successful`);
+      
+      return res.json({
+        success: true,
+        searchTerm: fullSearchTerm,
+        found: eclis.length,
+        duplicates: eclis.length - newEclis.length,
+        enriched: enrichedCount,
+        uploaded: uploadResult.successCount,
+        failed: uploadResult.errorCount,
+        eclis: uploadResult.successfulEclis || [],
+        errors: uploadResult.errors,
+        message: `${uploadResult.successCount} ECLI's succesvol verwerkt en geüpload naar Pinecone`,
+      });
+      
+    } catch (error: any) {
+      console.error('[External API] Error in search-and-upload:', error);
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Fout bij zoeken en uploaden',
+      });
+    }
+  });
+
+  // ============================================================================
   // WETGEVING (Legislation) API Routes
   // ============================================================================
 
